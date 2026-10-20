@@ -166,10 +166,16 @@ async function api(req, env, url) {
     });
     // เพิ่มชื่อลูกค้าใหม่เข้ารายการอัตโนมัติ
     const master = await getSetting(env, 'master');
-    if (!master.customers.includes(jobData.customer)) {
-      master.customers.push(jobData.customer);
-      stmts.push(env.DB.prepare("UPDATE settings SET value = ? WHERE key = 'master'").bind(JSON.stringify(master)));
+    let dirty = false;
+    if (!master.customers.includes(jobData.customer)) { master.customers.push(jobData.customer); dirty = true; }
+    // จำสเปคประจำของลูกค้าจากบล็อคแรก เมื่อผู้ใช้ติ๊ก (ลูกค้าใหม่ติ๊กไว้ให้เป็นค่าเริ่มต้น)
+    master.customerSpecs ||= {};
+    const s0 = b.screens[0];
+    if (s0 && b.saveSpec) {
+      master.customerSpecs[jobData.customer] = { frame: s0.frame || '', mesh: s0.mesh || '', emulsion: s0.emulsion || '', target: Number(s0.target) || '' };
+      dirty = true;
     }
+    if (dirty) stmts.push(env.DB.prepare("UPDATE settings SET value = ? WHERE key = 'master'").bind(JSON.stringify(master)));
     await env.DB.batch(stmts);
     return json({ id, no });
   }

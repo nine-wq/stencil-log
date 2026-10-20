@@ -367,7 +367,15 @@ function blockRow(j, s) {
     ${chip(s.status)}
   </button>`;
 }
-function blankScreen() { const m = db.master; return { key: Math.random().toString(36).slice(2), design: '', customerRef: '', originals: [], preview: null, mesh: m.mesh[1] || m.mesh[0] || '', frame: m.frames[1] || m.frames[0] || '', emulsion: m.emulsions[0] || '', target: defTarget() }; }
+function blankScreen() {
+  const m = db.master, cs = custSpec(ui.draft && ui.draft.customer) || {};
+  return { key: Math.random().toString(36).slice(2), design: '', customerRef: '', originals: [], preview: null,
+    mesh: cs.mesh || m.mesh[1] || m.mesh[0] || '', frame: cs.frame || m.frames[1] || m.frames[0] || '', emulsion: cs.emulsion || m.emulsions[0] || '', target: cs.target || defTarget() };
+}
+// สเปคประจำของลูกค้า (ขนาดเฟรม เบอร์ผ้า กาว ความหนา) เก็บใน master.customerSpecs
+const custSpec = name => { const k = String(name || '').trim(); return (k && db.master && (db.master.customerSpecs || {})[k]) || null; };
+const specText = c => [c.frame, c.mesh, c.emulsion, c.target && c.target + ' µm'].filter(Boolean).join(' · ');
+const sameSpec = (a, b) => ['mesh', 'frame', 'emulsion'].every(k => !b[k] || (a[k] || '') === b[k]) && (!b.target || Number(a.target) === Number(b.target));
 const opt = (arr, v) => (arr.includes(v) || !v ? arr : [v, ...arr]).map(x => `<option ${x === v ? 'selected' : ''}>${esc(x)}</option>`).join('');
 function newJobView() {
   const d = ui.draft, m = db.master;
@@ -379,6 +387,9 @@ function newJobView() {
       <div class="field"><label for="f-date">วันที่รับงาน</label><input id="f-date" type="date" value="${esc(d.date)}" data-d="date"></div>
       <div class="field"><label for="f-due">กำหนดส่ง</label><input id="f-due" type="date" value="${esc(d.due)}" data-d="due"></div>
     </div>
+    ${(() => { const cs = custSpec(d.customer), isNew = d.customer.trim() && !cs;
+      return `${cs ? `<div class="spechint"><span class="label">สเปคประจำลูกค้า</span><span>${esc(specText(cs))}</span><span class="muted small">ใส่ให้ทุกบล็อคอัตโนมัติ เปลี่ยนเฉพาะงานนี้ได้ที่แต่ละบล็อค</span></div>` : ''}
+      ${cs || isNew ? `<label class="check"><input type="checkbox" id="f-save" data-d="saveSpec" ${d.saveSpec ? 'checked' : ''}><span>${cs ? 'อัปเดตสเปคประจำตามบล็อคที่ 1 ของงานนี้' : 'บันทึกสเปคของบล็อคที่ 1 เป็นสเปคประจำของลูกค้าใหม่นี้'}</span></label>` : ''}`; })()}
     <div class="field"><label for="f-note">รายละเอียด / ข้อควรระวัง</label><textarea id="f-note" data-d="note" placeholder="เช่น ชนิดหมึก งานเส้นเล็ก ไฟล์ฟิล์มอยู่ที่ไหน">${esc(d.note)}</textarea></div>
   </div>
   ${db.features.files ? `<div class="card" style="display:flex;flex-direction:column;gap:10px">
@@ -389,7 +400,7 @@ function newJobView() {
   </div>` : `<div class="banner">แอปยังไม่ได้เชื่อมที่เก็บไฟล์ R2 จึงยังแนบไฟล์ลูกค้าและรูปตัวอย่างไม่ได้ ผู้ดูแลดูวิธีแก้ได้ใน README หัวข้อ "แก้ปัญหา" ระหว่างนี้สร้างใบงานโดยพิมพ์ข้อมูลเองได้ตามปกติ</div>`}
   <h3>บล็อคที่ต้องขึ้น (${d.screens.length} ลาย)</h3>
   ${d.screens.map((s, i) => `<div class="screenrow">
-    <div class="spread"><b>บล็อคที่ ${i + 1}</b><span class="row"><button class="btn sm" data-a="dupscreen" data-v="${i}" title="ลายเดียวกันแต่ต่างสี/ต่างบล็อค">ทำซ้ำ</button>${d.screens.length > 1 ? `<button class="btn sm bad" data-a="delscreen" data-v="${i}">ลบ</button>` : ''}</span></div>
+    <div class="spread"><b>บล็อคที่ ${i + 1}${custSpec(d.customer) && !sameSpec(s, custSpec(d.customer)) ? ' <span class="fstate">ต่างจากสเปคประจำ</span>' : ''}</b><span class="row"><button class="btn sm" data-a="dupscreen" data-v="${i}" title="ลายเดียวกันแต่ต่างสี/ต่างบล็อค">ทำซ้ำ</button>${d.screens.length > 1 ? `<button class="btn sm bad" data-a="delscreen" data-v="${i}">ลบ</button>` : ''}</span></div>
     <div class="${db.features.files ? 'idrow' : 'idfields'}">
       ${db.features.files ? previewZone('d:' + i, s, true) : ''}
       <div class="idfields">
@@ -548,6 +559,12 @@ function settingsView() {
     </div>
     <div class="row" style="justify-content:flex-end"><button class="btn primary" data-a="msave">บันทึกรายการ</button></div>
   </div>
+  <div class="card" style="display:flex;flex-direction:column;gap:12px">
+    <div><h3>สเปคประจำลูกค้า</h3><div class="muted small">ใส่ให้อัตโนมัติเมื่อสร้างใบงานของลูกค้านั้น ระบบจำให้เองจากใบงานแรกของลูกค้าใหม่ แก้ที่นี่ได้</div></div>
+    ${m.customers.length ? m.customers.map((c, i) => { const cs = (m.customerSpecs || {})[c] || {}, sel = (arr, v, k) => `<select data-cs="${i}" data-k="${k}" aria-label="${k}"><option value="">-</option>${(v && !arr.includes(v) ? [v, ...arr] : arr).map(x => `<option ${x === v ? 'selected' : ''}>${esc(x)}</option>`).join('')}</select>`;
+      return `<div class="csrow"><b>${esc(c)}</b><div class="csgrid">${sel(m.frames, cs.frame, 'frame')}${sel(m.mesh, cs.mesh, 'mesh')}${sel(m.emulsions, cs.emulsion, 'emulsion')}<div class="unit"><input type="number" data-cs="${i}" data-k="target" value="${esc(cs.target || '')}" placeholder="ความหนา" aria-label="ความหนา"><span>µm</span></div></div></div>`; }).join('') : '<div class="muted small">ยังไม่มีลูกค้า</div>'}
+    <div class="row" style="justify-content:flex-end"><button class="btn primary" data-a="msave">บันทึกสเปคประจำ</button></div>
+  </div>
   <div class="card spread"><div><h3>สำรองข้อมูล</h3><div class="muted small">ไฟล์ CSV เปิดด้วย Excel ได้ ทุกบล็อคทุกใบงาน</div></div>
     <a class="btn" href="/api/export.csv?t=${encodeURIComponent(token)}">ดาวน์โหลด CSV</a></div>`;
 }
@@ -587,7 +604,7 @@ document.addEventListener('click', async e => {
     case 'settings': ui.admin = null; ui.editUser = null; go('settings'); break;
     case 'back': go(ui.view === 'screen' && ui.backTo === 'job' ? 'job' : 'list'); break;
     case 'newjob':
-      ui.draft = { customer: '', date: localDate(), due: localDate(Date.now() + 3 * 864e5), note: '', screens: [blankScreen()] };
+      ui.draft = { customer: '', saveSpec: false, specApplied: '', date: localDate(), due: localDate(Date.now() + 3 * 864e5), note: '', screens: [blankScreen()] };
       go('newjob'); break;
     case 'addscreen': ui.draft.screens.push(blankScreen()); render(); break;
     case 'dupscreen': { const src = ui.draft.screens[v]; ui.draft.screens.splice(+v + 1, 0, { ...src, originals: [...src.originals], key: Math.random().toString(36).slice(2) }); render(); break; }
@@ -599,7 +616,7 @@ document.addEventListener('click', async e => {
       if (d.screens.some(s => !s.design.trim() || !s.target)) return er.textContent = 'ใส่ชื่อลายและสเปคความหนาให้ครบทุกบล็อค';
       ui.busy = true; render();
       try {
-        const r = await api('POST', '/jobs', { customer: d.customer.trim(), date: d.date, due: d.due, note: d.note.trim(), screens: d.screens.map(({ key, ...s }) => s) });
+        const r = await api('POST', '/jobs', { customer: d.customer.trim(), saveSpec: !!d.saveSpec, date: d.date, due: d.due, note: d.note.trim(), screens: d.screens.map(({ key, ...s }) => s) });
         ui.busy = false; await loadData(); toast(`สร้าง ${r.no} แล้ว`); go('job', { jobId: r.id });
       } catch (x) { ui.busy = false; render(); toast('สร้างใบงานไม่สำเร็จ: ' + x.message); }
       break;
@@ -684,6 +701,14 @@ document.addEventListener('click', async e => {
       for (const k of ['mesh', 'frames', 'emulsions', 'customers']) m[k] = $('#ms-' + k).value.split('\n').map(x => x.trim()).filter(Boolean);
       m.tolerance = Number($('#ms-tol').value) || 10;
       m.defaultTarget = Number($('#ms-def').value) || 400;
+      // สเปคประจำลูกค้า: อ่านจากตาราง แล้วเก็บเฉพาะลูกค้าที่ยังอยู่ในรายการ
+      const specs = {};
+      db.master.customers.forEach((c, i) => {
+        const g = k => { const el = document.querySelector(`[data-cs="${i}"][data-k="${k}"]`); return el ? el.value.trim() : ''; };
+        const sp = { frame: g('frame'), mesh: g('mesh'), emulsion: g('emulsion'), target: Number(g('target')) || '' };
+        if (m.customers.includes(c) && (sp.frame || sp.mesh || sp.emulsion || sp.target)) specs[c] = sp;
+      });
+      m.customerSpecs = specs;
       try { await api('PUT', '/master', m); db.master = m; toast('บันทึกรายการแล้ว'); render(); } catch (x) { toast(x.message); }
       break;
     }
@@ -703,7 +728,17 @@ document.addEventListener('input', e => {
     clearTimeout(ui.qTimer); ui.qTimer = setTimeout(updateResults, 120);
     return;
   }
-  if (t.dataset.d) { ui.draft[t.dataset.d] = t.value; return; }
+  if (t.dataset.d) {
+    const k = t.dataset.d, d = ui.draft; d[k] = t.type === 'checkbox' ? t.checked : t.value;
+    if (k === 'customer') {
+      // เลือกลูกค้าที่มีสเปคประจำ: ใส่สเปคให้ทุกบล็อคทันที
+      const name = t.value.trim(), cs = custSpec(name);
+      if (cs && d.specApplied !== name) { d.screens.forEach(s => Object.assign(s, { mesh: cs.mesh || s.mesh, frame: cs.frame || s.frame, emulsion: cs.emulsion || s.emulsion, target: cs.target || s.target })); d.specApplied = name; d.saveSpec = false; render(); }
+      else if (!cs && name && d.specApplied !== '#new') { d.specApplied = '#new'; d.saveSpec = true; render(); }
+      else if (!name && d.specApplied) { d.specApplied = ''; render(); }
+    }
+    return;
+  }
   if (t.dataset.s) { ui.draft.screens[+t.dataset.s][t.dataset.k] = t.value; return; }
   if (t.dataset.u && ui.editUser) { ui.editUser[t.dataset.u] = t.type === 'checkbox' ? t.checked : t.value; return; }
   if (ui.view !== 'screen') return;
@@ -719,7 +754,7 @@ document.addEventListener('input', e => {
 document.addEventListener('change', async e => {
   const t = e.target;
   if (t.dataset.u && ui.editUser) { ui.editUser[t.dataset.u] = t.type === 'checkbox' ? t.checked : t.value; return; }
-  if (t.dataset.s) { ui.draft.screens[+t.dataset.s][t.dataset.k] = t.value; return; }
+  if (t.dataset.s) { ui.draft.screens[+t.dataset.s][t.dataset.k] = t.value; if (t.tagName === 'SELECT') render(); return; }
   if (t.dataset.jf) {
     const { j } = find(t.dataset.v); if (!j || !t.value) return;
     const k = t.dataset.jf, old = j[k]; j[k] = t.value;

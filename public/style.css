@@ -254,3 +254,8 @@ a.btn.primary{color:var(--on-emulsion)}
 .search .btn{position:absolute;right:4px}
 .search input::-webkit-search-cancel-button{display:none}
 #homeres{display:flex;flex-direction:column;gap:14px}
+.spechint{display:flex;flex-direction:column;gap:2px;padding:10px 12px;border-radius:8px;background:var(--emulsion-soft);border:1px solid color-mix(in srgb,var(--emulsion) 35%,transparent)}
+.spechint>span:nth-child(2){font-weight:600}
+.csrow{display:flex;flex-direction:column;gap:6px;padding-block:10px;border-top:1px solid var(--line)}
+.csgrid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+@media (max-width:560px){.csgrid{grid-template-columns:repeat(2,minmax(0,1fr))}}
