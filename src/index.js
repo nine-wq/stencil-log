@@ -135,9 +135,7 @@ async function api(req, env, url) {
     const screens = {};
     for (const s of screensR.results)
       (screens[s.job_id] ||= []).push({ ...JSON.parse(s.data), id: s.id, jobId: s.job_id, rev: s.rev, photos: photos[s.id] || [] });
-    const cutoff = Date.now() - 30 * 864e5; // ซ่อนงานที่ส่งครบแล้วเกิน 30 วัน
-    const jobs = jobsR.results.map(j => ({ ...JSON.parse(j.data), id: j.id, no: j.no, screens: screens[j.id] || [] }))
-      .filter(j => !(j.screens.length && j.screens.every(s => s.status === 'sent') && (j.sentAt || j.createdAt) < cutoff));
+    const jobs = jobsR.results.map(j => ({ ...JSON.parse(j.data), id: j.id, no: j.no, screens: screens[j.id] || [] }));
     const used = new Set(jobs.flatMap(j => j.screens.flatMap(fileIdsOf)));
     const fileMap = Object.fromEntries(Object.entries(files).filter(([k]) => used.has(k)));
     return json({ master, jobs, files: fileMap, features: { files: !!env.FILES, ai: !!env.AI }, me: { id: me.id, name: me.name, role: me.role } });

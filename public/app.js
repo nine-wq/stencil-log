@@ -284,29 +284,69 @@ function loginView() {
 
 /* --- หน้าแรก: ใบงานทั้งหมด กรองตามขั้นตอน --- */
 function homeView() {
-  const f = FILTERS.find(x => x[0] === ui.tab) || FILTERS[0], test = f[2];
   const canNew = ['artwork', 'admin'].includes(ui.user.role);
-  const count = t => allScreens().filter(x => t(x.s)).length;
-  const order = { rework: 0, coating: 1, ordered: 2, qc: 3, ready: 4, sent: 5 };
-  const jobs = db.jobs.map(j => ({ j, ss: j.screens.filter(test).sort((a, b) => order[a.status] - order[b.status]), t: jobTs(j) }))
-    .filter(x => x.ss.length)
-    .sort((a, b) => b.t - a.t || (b.j.createdAt || 0) - (a.j.createdAt || 0));
-  // แบ่ง "ล่าสุด" (รับงานภายใน RECENT_DAYS วัน นับวันนี้ด้วย) กับ "งานอื่น ๆ" เรียงตามวันที่รับงาน ใหม่ไปเก่า
-  const d0 = new Date(); d0.setHours(0, 0, 0, 0);
-  const cut = d0.getTime() - (RECENT_DAYS - 1) * 864e5;
-  const recent = jobs.filter(x => x.t >= cut), others = jobs.filter(x => x.t < cut);
-  const sec = (title, xs) => xs.length ? `<div class="sec-h"><h3>${title}</h3><span class="muted small num">${xs.length} ใบงาน</span></div>
-    <div class="list">${xs.map(({ j, ss, t }) => jobCard(j, ss, t)).join('')}</div>` : '';
   return `<div class="spread"><h2>ใบงาน</h2>${canNew ? '<button class="btn primary" data-a="newjob">+ สร้างใบงาน</button>' : ''}</div>
-  <div class="filters" role="tablist">${FILTERS.map(([k, label, t]) => { const n = count(t); return `<button role="tab" data-a="tab" data-v="${k}" aria-selected="${k === f[0]}">${label}${k !== 'sent' ? ` <span class="count">${n}</span>` : ''}</button>`; }).join('')}</div>
-  ${jobs.length ? sec('ล่าสุด', recent) + sec(recent.length ? 'งานอื่น ๆ' : 'ทั้งหมด', others) : `<div class="empty">ไม่มีงานในขั้นตอน "${f[1]}"</div>`}`;
+  <div class="search"><input id="q" type="search" data-search="1" value="${esc(ui.q || '')}" placeholder="ค้นหา ลูกค้า เลขใบงาน ชื่อลาย Customer ID เบอร์ผ้า ชื่อคน…" autocomplete="off" enterkeyhint="search">
+    <button class="btn sm ghost" data-a="clearq" aria-label="ล้างคำค้น" ${ui.q ? '' : 'hidden'}>✕</button></div>
+  <div id="homeres">${homeResults()}</div>`;
+}
+function homeResults() {
+  const f = FILTERS.find(x => x[0] === ui.tab) || FILTERS[0];
+  const q = searchTerms(ui.q);
+  // ตอนค้นหาด้วยตัวกรอง "ทั้งหมด" ให้ค้นรวมงานที่ส่งแล้วด้วย
+  const test = q.length && f[0] === 'all' ? () => true : f[2];
+  const order = { rework: 0, coating: 1, ordered: 2, qc: 3, ready: 4, sent: 5 };
+  const hits = db.jobs.map(j => {
+    let ss = j.screens.filter(test);
+    if (q.length) { const jt = jobText(j); ss = ss.filter(s => matches(jt + ' ' + screenText(s), q)); }
+    return { j, ss: ss.sort((a, b) => order[a.status] - order[b.status]), t: jobTs(j) };
+  }).filter(x => x.ss.length).sort((a, b) => b.t - a.t || (b.j.createdAt || 0) - (a.j.createdAt || 0));
+  const count = t => q.length ? hits.reduce((n, x) => n + x.j.screens.filter(t).filter(s => x.ss.includes(s) || matches(jobText(x.j) + ' ' + screenText(s), q)).length, 0) : allScreens().filter(x => t(x.s)).length;
+  // จัดกลุ่มตามวันที่รับงาน (กลุ่มแรกที่เข้าเงื่อนไข)
+  const groups = dateGroups().map(g => ({ ...g, xs: [] }));
+  for (const x of hits) (groups.find(g => x.t >= g.from) || groups[groups.length - 1]).xs.push(x);
+  const sec = g => g.xs.length ? `<div class="sec-h"><h3>${g.title}</h3><span class="muted small num">${g.xs.length} ใบงาน</span></div>
+    <div class="list">${g.xs.map(({ j, ss }) => jobCard(j, ss)).join('')}</div>` : '';
+  return `<div class="filters" role="tablist">${FILTERS.map(([k, label, t]) => { const n = count(t); return `<button role="tab" data-a="tab" data-v="${k}" aria-selected="${k === f[0]}">${label}${k !== 'sent' || q.length ? ` <span class="count">${n}</span>` : ''}</button>`; }).join('')}</div>
+  ${q.length ? `<div class="muted small">พบ <span class="num">${hits.reduce((n, x) => n + x.ss.length, 0)}</span> บล็อค ใน <span class="num">${hits.length}</span> ใบงาน${f[0] === 'all' ? ' (รวมงานที่ส่งแล้ว)' : ''}</div>` : ''}
+  ${hits.length ? groups.map(sec).join('') : `<div class="empty">${q.length ? `ไม่พบงานที่ตรงกับ "${esc(ui.q)}"` : `ไม่มีงานในขั้นตอน "${f[1]}"`}</div>`}`;
+}
+// ช่วงเวลา: ล่าสุด (3 วัน) → สัปดาห์นี้ (เริ่มวันจันทร์) → เดือนนี้ → 3 เดือนที่ผ่านมา → ปีนี้ → ก่อนหน้านี้
+function dateGroups() {
+  const d0 = new Date(); d0.setHours(0, 0, 0, 0);
+  const day = 864e5, t0 = d0.getTime();
+  const week = t0 - ((d0.getDay() + 6) % 7) * day;
+  const month = new Date(d0.getFullYear(), d0.getMonth(), 1).getTime();
+  const m3 = new Date(d0.getFullYear(), d0.getMonth() - 3, d0.getDate()).getTime();
+  const year = new Date(d0.getFullYear(), 0, 1).getTime();
+  return [
+    { title: 'ล่าสุด', from: t0 - (RECENT_DAYS - 1) * day },
+    { title: 'สัปดาห์นี้', from: week },
+    { title: 'เดือนนี้', from: month },
+    { title: '3 เดือนที่ผ่านมา', from: m3 },
+    { title: 'ปีนี้', from: year },
+    { title: 'ก่อนหน้านี้', from: -Infinity }
+  ];
+}
+/* ---- ค้นหา: หลายคำคั่นด้วยเว้นวรรค ต้องเจอครบทุกคำ ไม่สนตัวพิมพ์เล็กใหญ่ ---- */
+const norm = x => String(x ?? '').toLowerCase().normalize('NFC');
+const searchTerms = q => norm(q).split(/\s+/).filter(Boolean);
+const matches = (text, terms) => terms.every(t => text.includes(t) || text.replace(/[\s_\-.]/g, '').includes(t.replace(/[\s_\-.]/g, '')));
+function jobText(j) {
+  const d = jobDate(j);
+  return norm([j.no, j.customer, j.note, j.createdBy, d, d && fmtD(jobTs(j)), j.due, j.due && fmtD(dueTs(j))].join(' '));
+}
+function screenText(s) {
+  const files = [...(s.originals || []), ...(s.prepared || [])].map(id => (db.files[id] || {}).name);
+  const people = [...(s.coats || []).map(c => c.by), ...(s.log || []).map(l => l[1]), s.qc && s.qc.by];
+  return norm([s.design, s.customerRef, s.mesh, s.frame, s.emulsion, s.target && s.target + 'µm', STATUS[s.status], s.coatNote, s.qc && s.qc.note, ...files, ...people].join(' '));
 }
 const RECENT_DAYS = 3;
 const localDate = (t = Date.now()) => { const d = new Date(t); return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`; };
 // วันที่รับงาน: ใช้ช่อง "วันที่รับงาน" ถ้ามี ไม่งั้นใช้วันที่บันทึกเข้าระบบ
 const jobDate = j => j.date || (j.createdAt ? localDate(j.createdAt) : '');
 const jobTs = j => { const d = jobDate(j); return d ? new Date(d + 'T00:00').getTime() : 0; };
-function jobCard(j, ss, t) {
+function jobCard(j, ss) {
   const n = j.screens.length, done = j.screens.filter(s => s.status === 'ready' || s.status === 'sent').length;
   return `<div class="jobcard">
     <button class="jobhead" data-a="openjob" data-v="${j.id}">
@@ -543,6 +583,7 @@ document.addEventListener('click', async e => {
     case 'logout': try { await api('POST', '/logout'); } catch (x) {} signOutLocal(); break;
     case 'refresh': await loadData(); toast('อัปเดตแล้ว'); break;
     case 'tab': go('list', { tab: v }); break;
+    case 'clearq': ui.q = ''; render(); setTimeout(() => { const el = $('#q'); if (el) el.focus(); }); break;
     case 'settings': ui.admin = null; ui.editUser = null; go('settings'); break;
     case 'back': go(ui.view === 'screen' && ui.backTo === 'job' ? 'job' : 'list'); break;
     case 'newjob':
@@ -650,8 +691,16 @@ document.addEventListener('click', async e => {
 });
 $('#lb').addEventListener('click', () => $('#lb').hidden = true);
 
+document.addEventListener('compositionend', e => { if (e.target.dataset && e.target.dataset.search) e.target.dispatchEvent(new Event('input', { bubbles: true })); });
 document.addEventListener('input', e => {
   const t = e.target;
+  if (t.dataset.search) {
+    ui.q = t.value;
+    const x = t.parentNode.querySelector('[data-a="clearq"]'); if (x) x.hidden = !ui.q;
+    if (e.isComposing) return;
+    clearTimeout(ui.qTimer); ui.qTimer = setTimeout(() => { const r = $('#homeres'); if (r) r.innerHTML = homeResults(); }, 150);
+    return;
+  }
   if (t.dataset.d) { ui.draft[t.dataset.d] = t.value; return; }
   if (t.dataset.s) { ui.draft.screens[+t.dataset.s][t.dataset.k] = t.value; return; }
   if (t.dataset.u && ui.editUser) { ui.editUser[t.dataset.u] = t.type === 'checkbox' ? t.checked : t.value; return; }
