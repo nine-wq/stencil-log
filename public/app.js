@@ -204,6 +204,7 @@ function toast(m) { const t = $('#toast'); t.textContent = m; t.hidden = false; 
 const allScreens = () => db.jobs.flatMap(j => j.screens.map(s => ({ j, s })));
 const find = (jid, sid) => { const j = db.jobs.find(x => x.id === jid); return { j, s: j && sid ? j.screens.find(x => x.id === sid) : null }; };
 const tol = () => (db.master && db.master.tolerance) || 10;
+const defTarget = () => (db.master && db.master.defaultTarget) || 400;
 function dueCls(j) { const h = (dueTs(j) - Date.now()) / 3600e3; return h < 0 ? 'due-late' : h < 24 ? 'due-soon' : ''; }
 function dueText(j) { const h = (dueTs(j) - Date.now()) / 3600e3; if (h < 0) return 'เลยกำหนด ' + fmtD(dueTs(j)); if (h < 24) return 'ส่งภายในวันนี้/พรุ่งนี้'; return 'กำหนดส่ง ' + fmtD(dueTs(j)); }
 const chip = st => `<span class="chip st-${st}">${STATUS[st]}</span>`;
@@ -295,7 +296,7 @@ function artworkList() {
     <span class="s"><span class="${dueCls(j)}">${dueText(j)}</span> · ${[...new Set(j.screens.map(s => s.status))].map(chip).join(' ')}</span>
   </button>`; }).join('') || '<div class="empty">ยังไม่มีใบงาน กด "+ สร้างใบงาน" เพื่อเริ่ม</div>'}</div>`;
 }
-function blankScreen() { const m = db.master; return { key: Math.random().toString(36).slice(2), design: '', customerRef: '', originals: [], preview: null, mesh: m.mesh[1] || m.mesh[0] || '', frame: m.frames[1] || m.frames[0] || '', emulsion: m.emulsions[0] || '', target: '' }; }
+function blankScreen() { const m = db.master; return { key: Math.random().toString(36).slice(2), design: '', customerRef: '', originals: [], preview: null, mesh: m.mesh[1] || m.mesh[0] || '', frame: m.frames[1] || m.frames[0] || '', emulsion: m.emulsions[0] || '', target: defTarget() }; }
 const opt = (arr, v) => (arr.includes(v) || !v ? arr : [v, ...arr]).map(x => `<option ${x === v ? 'selected' : ''}>${esc(x)}</option>`).join('');
 function newJobView() {
   const d = ui.draft, m = db.master;
@@ -504,6 +505,7 @@ function settingsView() {
     <h3>รายการให้เลือก</h3><div class="muted small">พิมพ์บรรทัดละ 1 รายการ</div>
     <div class="grid2">
       ${[['mesh', 'เบอร์ผ้าสกรีน'], ['frames', 'ขนาดเฟรม'], ['emulsions', 'ชนิดกาว'], ['customers', 'ลูกค้า']].map(([k, l]) => `<div class="field"><label for="ms-${k}">${l}</label><textarea id="ms-${k}" data-m="${k}" rows="6">${esc(m[k].join('\n'))}</textarea></div>`).join('')}
+      <div class="field"><label for="ms-def">ความหนาเริ่มต้นของบล็อคใหม่</label><div class="unit"><input id="ms-def" type="number" data-m="defaultTarget" value="${esc(defTarget())}"><span>µm</span></div></div>
       <div class="field"><label for="ms-tol">ค่าความหนาที่ยอมรับได้ (±)</label><div class="unit"><input id="ms-tol" type="number" data-m="tolerance" value="${esc(tol())}"><span>µm</span></div></div>
     </div>
     <div class="row" style="justify-content:flex-end"><button class="btn primary" data-a="msave">บันทึกรายการ</button></div>
@@ -641,6 +643,7 @@ document.addEventListener('click', async e => {
       const m = { ...db.master };
       for (const k of ['mesh', 'frames', 'emulsions', 'customers']) m[k] = $('#ms-' + k).value.split('\n').map(x => x.trim()).filter(Boolean);
       m.tolerance = Number($('#ms-tol').value) || 10;
+      m.defaultTarget = Number($('#ms-def').value) || 400;
       try { await api('PUT', '/master', m); db.master = m; toast('บันทึกรายการแล้ว'); render(); } catch (x) { toast(x.message); }
       break;
     }
