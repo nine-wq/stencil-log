@@ -1,0 +1,21 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "stencil-log",
+  "main": "src/index.js",
+  "compatibility_date": "2025-09-01",
+  "assets": {
+    "directory": "./public",
+    "binding": "ASSETS"
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "stencil-db",
+      "database_id": "dfc43226-ad35-4696-8046-abe19b41f639"
+    }
+  ],
+  "r2_buckets": [
+    { "binding": "FILES", "bucket_name": "stencil-files" }
+  ],
+  "ai": { "binding": "AI" }
+}
