@@ -288,20 +288,43 @@ function homeView() {
   const canNew = ['artwork', 'admin'].includes(ui.user.role);
   const count = t => allScreens().filter(x => t(x.s)).length;
   const order = { rework: 0, coating: 1, ordered: 2, qc: 3, ready: 4, sent: 5 };
-  const jobs = db.jobs.map(j => ({ j, ss: j.screens.filter(test).sort((a, b) => order[a.status] - order[b.status]) }))
+  const jobs = db.jobs.map(j => ({ j, ss: j.screens.filter(test).sort((a, b) => order[a.status] - order[b.status]), t: lastActivity(j) }))
     .filter(x => x.ss.length)
-    .sort((a, b) => (a.ss.some(s => s.status === 'rework') ? 0 : 1) - (b.ss.some(s => s.status === 'rework') ? 0 : 1) || dueTs(a.j) - dueTs(b.j));
-  if (ui.tab === 'sent') jobs.reverse();
+    .sort((a, b) => b.t - a.t);
+  // แบ่ง "ล่าสุด" (มีการเคลื่อนไหวใน 24 ชม.) กับ "งานอื่น ๆ" เรียงจากใหม่ไปเก่า
+  const cut = Date.now() - RECENT_HOURS * 3600e3;
+  const recent = jobs.filter(x => x.t >= cut), others = jobs.filter(x => x.t < cut);
+  const sec = (title, xs) => xs.length ? `<div class="sec-h"><h3>${title}</h3><span class="muted small num">${xs.length} ใบงาน</span></div>
+    <div class="list">${xs.map(({ j, ss, t }) => jobCard(j, ss, t)).join('')}</div>` : '';
   return `<div class="spread"><h2>ใบงาน</h2>${canNew ? '<button class="btn primary" data-a="newjob">+ สร้างใบงาน</button>' : ''}</div>
   <div class="filters" role="tablist">${FILTERS.map(([k, label, t]) => { const n = count(t); return `<button role="tab" data-a="tab" data-v="${k}" aria-selected="${k === f[0]}">${label}${k !== 'sent' ? ` <span class="count">${n}</span>` : ''}</button>`; }).join('')}</div>
-  <div class="list">${jobs.map(({ j, ss }) => jobCard(j, ss)).join('') || `<div class="empty">ไม่มีงานในขั้นตอน "${f[1]}"</div>`}</div>`;
+  ${jobs.length ? sec('ล่าสุด', recent) + sec(recent.length ? 'งานอื่น ๆ' : 'ทั้งหมด', others) : `<div class="empty">ไม่มีงานในขั้นตอน "${f[1]}"</div>`}`;
 }
-function jobCard(j, ss) {
+const RECENT_HOURS = 24;
+// เวลาที่มีการเคลื่อนไหวล่าสุดของใบงาน: สร้างงาน, บันทึกประวัติ, รอบขึ้นกาว, รูปตรวจ, ไฟล์
+function lastActivity(j) {
+  let t = j.sentAt || j.createdAt || 0;
+  for (const s of j.screens) {
+    for (const l of s.log || []) if (l[0] > t) t = l[0];
+    for (const c of s.coats || []) if (c.t > t) t = c.t;
+    for (const p of s.photos || []) if (p.t > t) t = p.t;
+    for (const id of [...(s.originals || []), ...(s.prepared || [])]) { const f = db.files[id]; if (f && f.t > t) t = f.t; }
+  }
+  return t;
+}
+function ago(t) {
+  const m = Math.round((Date.now() - t) / 60000);
+  if (m < 1) return 'เมื่อสักครู่';
+  if (m < 60) return `${m} นาทีที่แล้ว`;
+  if (m < 24 * 60) return `${Math.floor(m / 60)} ชม.ที่แล้ว`;
+  return fmtT(t);
+}
+function jobCard(j, ss, t) {
   const n = j.screens.length, done = j.screens.filter(s => s.status === 'ready' || s.status === 'sent').length;
   return `<div class="jobcard">
     <button class="jobhead" data-a="openjob" data-v="${j.id}">
       <span class="t">${esc(j.customer)} <span class="jobno">${esc(j.no)}</span></span>
-      <span class="small"><span class="${dueCls(j)}">${dueText(j)}</span> · <span class="num">${done}/${n}</span> บล็อค</span>
+      <span class="small"><span class="${dueCls(j)}">${dueText(j)}</span> · <span class="num">${done}/${n}</span> บล็อค${t ? ` · <span class="muted">อัปเดต ${ago(t)}</span>` : ''}</span>
     </button>
     ${ss.map(s => blockRow(j, s)).join('')}
   </div>`;

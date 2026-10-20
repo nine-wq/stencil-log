@@ -236,13 +236,14 @@ a.btn.primary{color:var(--on-emulsion)}
 .jobhead{display:flex;justify-content:space-between;align-items:center;gap:6px 12px;flex-wrap:wrap;width:100%;border:0;background:var(--sunk);padding:10px 14px;text-align:left;cursor:pointer}
 .jobhead:hover{background:color-mix(in srgb,var(--emulsion-soft) 60%,var(--sunk))}
 .jobhead .t{font-weight:600;min-width:0}
-.brow{display:grid;grid-template-columns:68px minmax(0,1fr) auto;gap:12px;align-items:center;width:100%;border:0;border-top:1px solid var(--line);background:none;padding:10px 14px;text-align:left;cursor:pointer}
+.brow{display:grid;grid-template-columns:88px minmax(0,1fr) auto;gap:12px;align-items:center;width:100%;border:0;border-top:1px solid var(--line);background:none;padding:10px 14px;text-align:left;cursor:pointer}
 .jobhead+.brow,.jobcard>.brow:first-child{border-top:0}
 .brow:hover{background:var(--bg)}
-.brow .thumb{width:68px;height:68px;object-fit:contain;border-radius:8px;background:#fff;border:1px solid var(--line)}
+.brow .thumb{width:88px;height:88px;object-fit:contain;border-radius:8px;background:#fff;border:1px solid var(--line)}
 .brow .thumb.none{display:block;background:repeating-linear-gradient(45deg,var(--sunk) 0 6px,transparent 6px 12px);border-style:dashed}
 .brow .bt{display:flex;flex-direction:column;gap:2px;min-width:0;align-items:flex-start}
 .brow .bt b{overflow:hidden;text-overflow:ellipsis;max-width:100%}
 /* preview box 30% larger */
 .idrow{grid-template-columns:172px minmax(0,1fr)}
 @media (max-width:420px){.idrow{grid-template-columns:135px minmax(0,1fr)}}
+.sec-h{display:flex;justify-content:space-between;align-items:baseline;gap:8px;margin-top:4px}
