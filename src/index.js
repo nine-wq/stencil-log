@@ -153,7 +153,7 @@ async function api(req, env, url) {
     const d = new Date(Date.now() + 7 * 3600e3); // เวลาไทย
     const no = `JB-${String((d.getUTCFullYear() + 543) % 100).padStart(2, '0')}${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(n).padStart(3, '0')}`;
     const id = uid(), now = Date.now();
-    const jobData = { customer: String(b.customer).trim(), due: b.due, note: b.note || '', createdBy: me.name, createdAt: now };
+    const jobData = { customer: String(b.customer).trim(), date: /^\d{4}-\d{2}-\d{2}$/.test(b.date || '') ? b.date : new Date(now + 7 * 3600e3).toISOString().slice(0, 10), due: b.due, note: b.note || '', createdBy: me.name, createdAt: now };
     const stmts = [env.DB.prepare('INSERT INTO jobs (id, no, data, created) VALUES (?, ?, ?, ?)').bind(id, no, JSON.stringify(jobData), now)];
     b.screens.forEach((s, i) => {
       const sd = {
@@ -199,7 +199,7 @@ async function api(req, env, url) {
       const row = await env.DB.prepare('SELECT data FROM jobs WHERE id = ?').bind(id).first();
       if (!row) return err(404, 'ไม่พบใบงาน');
       const d = { ...JSON.parse(row.data) };
-      for (const k of ['customer', 'due', 'note', 'sentAt']) if (k in b) d[k] = b[k];
+      for (const k of ['customer', 'date', 'due', 'note', 'sentAt']) if (k in b) d[k] = b[k];
       await env.DB.prepare('UPDATE jobs SET data = ? WHERE id = ?').bind(JSON.stringify(d), id).run();
       return json({ ok: true });
     }
@@ -304,11 +304,11 @@ async function api(req, env, url) {
     const jobs = Object.fromEntries(jobsR.results.map(j => [j.id, { no: j.no, ...JSON.parse(j.data) }]));
     const fname = Object.fromEntries(filesR.results.map(f => [f.id, `${f.name} (${f.by_name})`]));
     const q = v => `"${String(v ?? '').replace(/"/g, '""')}"`;
-    const rows = [['เลขใบงาน', 'ลูกค้า', 'สั่งโดย', 'วันสั่ง', 'กำหนดส่ง', 'Customer ID', 'ไฟล์ต้นฉบับ', 'ไฟล์ที่เตรียม', 'ลาย', 'ผ้า', 'เฟรม', 'กาว', 'สเปค µm', 'จำนวนรอบกาว', 'รอบกาว (เวลา/ด้าน/คน)', 'ก่อนถ่าย µm', 'หลังถ่าย µm', 'สถานะ', 'หมายเหตุขึ้นบล็อค', 'หมายเหตุตรวจ', 'ผู้ตรวจ']];
+    const rows = [['เลขใบงาน', 'ลูกค้า', 'สั่งโดย', 'วันที่รับงาน', 'บันทึกเข้าระบบ', 'กำหนดส่ง', 'Customer ID', 'ไฟล์ต้นฉบับ', 'ไฟล์ที่เตรียม', 'ลาย', 'ผ้า', 'เฟรม', 'กาว', 'สเปค µm', 'จำนวนรอบกาว', 'รอบกาว (เวลา/ด้าน/คน)', 'ก่อนถ่าย µm', 'หลังถ่าย µm', 'สถานะ', 'หมายเหตุขึ้นบล็อค', 'หมายเหตุตรวจ', 'ผู้ตรวจ']];
     const th = t => new Date(t + 7 * 3600e3).toISOString().replace('T', ' ').slice(0, 16);
     for (const s of screensR.results) {
       const j = jobs[s.job_id] || {}, d = JSON.parse(s.data);
-      rows.push([j.no, j.customer, j.createdBy, j.createdAt ? th(j.createdAt) : '', j.due, d.customerRef,
+      rows.push([j.no, j.customer, j.createdBy, j.date || (j.createdAt ? th(j.createdAt).slice(0, 10) : ''), j.createdAt ? th(j.createdAt) : '', j.due, d.customerRef,
         (d.originals || []).map(f => fname[f] || f).join(' | '), (d.prepared || []).map(f => fname[f] || f).join(' | '), d.design, d.mesh, d.frame, d.emulsion, d.target,
         d.coats.length, d.coats.map(c => `${th(c.t)} ${c.side} ${c.by}`).join(' | '), d.thBefore, d.thAfter, d.status, d.coatNote, d.qc?.note, d.qc?.by]);
     }

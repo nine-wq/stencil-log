@@ -288,11 +288,12 @@ function homeView() {
   const canNew = ['artwork', 'admin'].includes(ui.user.role);
   const count = t => allScreens().filter(x => t(x.s)).length;
   const order = { rework: 0, coating: 1, ordered: 2, qc: 3, ready: 4, sent: 5 };
-  const jobs = db.jobs.map(j => ({ j, ss: j.screens.filter(test).sort((a, b) => order[a.status] - order[b.status]), t: lastActivity(j) }))
+  const jobs = db.jobs.map(j => ({ j, ss: j.screens.filter(test).sort((a, b) => order[a.status] - order[b.status]), t: jobTs(j) }))
     .filter(x => x.ss.length)
-    .sort((a, b) => b.t - a.t);
-  // แบ่ง "ล่าสุด" (มีการเคลื่อนไหวใน 24 ชม.) กับ "งานอื่น ๆ" เรียงจากใหม่ไปเก่า
-  const cut = Date.now() - RECENT_HOURS * 3600e3;
+    .sort((a, b) => b.t - a.t || (b.j.createdAt || 0) - (a.j.createdAt || 0));
+  // แบ่ง "ล่าสุด" (รับงานภายใน RECENT_DAYS วัน นับวันนี้ด้วย) กับ "งานอื่น ๆ" เรียงตามวันที่รับงาน ใหม่ไปเก่า
+  const d0 = new Date(); d0.setHours(0, 0, 0, 0);
+  const cut = d0.getTime() - (RECENT_DAYS - 1) * 864e5;
   const recent = jobs.filter(x => x.t >= cut), others = jobs.filter(x => x.t < cut);
   const sec = (title, xs) => xs.length ? `<div class="sec-h"><h3>${title}</h3><span class="muted small num">${xs.length} ใบงาน</span></div>
     <div class="list">${xs.map(({ j, ss, t }) => jobCard(j, ss, t)).join('')}</div>` : '';
@@ -300,31 +301,17 @@ function homeView() {
   <div class="filters" role="tablist">${FILTERS.map(([k, label, t]) => { const n = count(t); return `<button role="tab" data-a="tab" data-v="${k}" aria-selected="${k === f[0]}">${label}${k !== 'sent' ? ` <span class="count">${n}</span>` : ''}</button>`; }).join('')}</div>
   ${jobs.length ? sec('ล่าสุด', recent) + sec(recent.length ? 'งานอื่น ๆ' : 'ทั้งหมด', others) : `<div class="empty">ไม่มีงานในขั้นตอน "${f[1]}"</div>`}`;
 }
-const RECENT_HOURS = 24;
-// เวลาที่มีการเคลื่อนไหวล่าสุดของใบงาน: สร้างงาน, บันทึกประวัติ, รอบขึ้นกาว, รูปตรวจ, ไฟล์
-function lastActivity(j) {
-  let t = j.sentAt || j.createdAt || 0;
-  for (const s of j.screens) {
-    for (const l of s.log || []) if (l[0] > t) t = l[0];
-    for (const c of s.coats || []) if (c.t > t) t = c.t;
-    for (const p of s.photos || []) if (p.t > t) t = p.t;
-    for (const id of [...(s.originals || []), ...(s.prepared || [])]) { const f = db.files[id]; if (f && f.t > t) t = f.t; }
-  }
-  return t;
-}
-function ago(t) {
-  const m = Math.round((Date.now() - t) / 60000);
-  if (m < 1) return 'เมื่อสักครู่';
-  if (m < 60) return `${m} นาทีที่แล้ว`;
-  if (m < 24 * 60) return `${Math.floor(m / 60)} ชม.ที่แล้ว`;
-  return fmtT(t);
-}
+const RECENT_DAYS = 3;
+const localDate = (t = Date.now()) => { const d = new Date(t); return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`; };
+// วันที่รับงาน: ใช้ช่อง "วันที่รับงาน" ถ้ามี ไม่งั้นใช้วันที่บันทึกเข้าระบบ
+const jobDate = j => j.date || (j.createdAt ? localDate(j.createdAt) : '');
+const jobTs = j => { const d = jobDate(j); return d ? new Date(d + 'T00:00').getTime() : 0; };
 function jobCard(j, ss, t) {
   const n = j.screens.length, done = j.screens.filter(s => s.status === 'ready' || s.status === 'sent').length;
   return `<div class="jobcard">
     <button class="jobhead" data-a="openjob" data-v="${j.id}">
       <span class="t">${esc(j.customer)} <span class="jobno">${esc(j.no)}</span></span>
-      <span class="small"><span class="${dueCls(j)}">${dueText(j)}</span> · <span class="num">${done}/${n}</span> บล็อค${t ? ` · <span class="muted">อัปเดต ${ago(t)}</span>` : ''}</span>
+      <span class="small"><span class="muted">รับงาน ${fmtD(jobTs(j))}</span> · <span class="${dueCls(j)}">${dueText(j)}</span> · <span class="num">${done}/${n}</span> บล็อค</span>
     </button>
     ${ss.map(s => blockRow(j, s)).join('')}
   </div>`;
@@ -349,6 +336,7 @@ function newJobView() {
   <div class="card" style="display:flex;flex-direction:column;gap:12px">
     <div class="grid2">
       <div class="field"><label for="f-cust">ลูกค้า</label><input id="f-cust" list="custs" value="${esc(d.customer)}" data-d="customer" placeholder="พิมพ์หรือเลือก" autocomplete="off"><datalist id="custs">${m.customers.map(c => `<option value="${esc(c)}">`).join('')}</datalist></div>
+      <div class="field"><label for="f-date">วันที่รับงาน</label><input id="f-date" type="date" value="${esc(d.date)}" data-d="date"></div>
       <div class="field"><label for="f-due">กำหนดส่ง</label><input id="f-due" type="date" value="${esc(d.due)}" data-d="due"></div>
     </div>
     <div class="field"><label for="f-note">รายละเอียด / ข้อควรระวัง</label><textarea id="f-note" data-d="note" placeholder="เช่น ชนิดหมึก งานเส้นเล็ก ไฟล์ฟิล์มอยู่ที่ไหน">${esc(d.note)}</textarea></div>
@@ -385,6 +373,10 @@ function jobView() {
   const canDel = ['artwork', 'admin'].includes(ui.user.role);
   return `<button class="btn ghost back" data-a="back">← กลับ</button>
   <div class="spread"><div><div class="jobno">${esc(j.no)}</div><h2>${esc(j.customer)}</h2></div><span class="${dueCls(j)}">${dueText(j)}</span></div>
+  ${canDel ? `<div class="grid2">
+    <div class="field"><label for="j-date">วันที่รับงาน</label><input id="j-date" type="date" value="${esc(jobDate(j))}" data-jf="date" data-v="${j.id}"></div>
+    <div class="field"><label for="j-due">กำหนดส่ง</label><input id="j-due" type="date" value="${esc(j.due || '')}" data-jf="due" data-v="${j.id}"></div>
+  </div>` : `<div class="muted small">รับงาน ${fmtD(jobTs(j))}</div>`}
   ${j.note ? `<div class="card">${esc(j.note)}</div>` : ''}
   <div class="muted small">สั่งโดย ${esc(j.createdBy)} · ${fmtT(j.createdAt)}${j.sentAt ? ` · ส่งลูกค้า ${fmtT(j.sentAt)}` : ''}</div>
   <div class="jobcard">${j.screens.map(s => blockRow(j, s)).join('')}</div>
@@ -554,7 +546,7 @@ document.addEventListener('click', async e => {
     case 'settings': ui.admin = null; ui.editUser = null; go('settings'); break;
     case 'back': go(ui.view === 'screen' && ui.backTo === 'job' ? 'job' : 'list'); break;
     case 'newjob':
-      ui.draft = { customer: '', due: new Date(Date.now() + 3 * 864e5).toISOString().slice(0, 10), note: '', screens: [blankScreen()] };
+      ui.draft = { customer: '', date: localDate(), due: localDate(Date.now() + 3 * 864e5), note: '', screens: [blankScreen()] };
       go('newjob'); break;
     case 'addscreen': ui.draft.screens.push(blankScreen()); render(); break;
     case 'dupscreen': { const src = ui.draft.screens[v]; ui.draft.screens.splice(+v + 1, 0, { ...src, originals: [...src.originals], key: Math.random().toString(36).slice(2) }); render(); break; }
@@ -566,7 +558,7 @@ document.addEventListener('click', async e => {
       if (d.screens.some(s => !s.design.trim() || !s.target)) return er.textContent = 'ใส่ชื่อลายและสเปคความหนาให้ครบทุกบล็อค';
       ui.busy = true; render();
       try {
-        const r = await api('POST', '/jobs', { customer: d.customer.trim(), due: d.due, note: d.note.trim(), screens: d.screens.map(({ key, ...s }) => s) });
+        const r = await api('POST', '/jobs', { customer: d.customer.trim(), date: d.date, due: d.due, note: d.note.trim(), screens: d.screens.map(({ key, ...s }) => s) });
         ui.busy = false; await loadData(); toast(`สร้าง ${r.no} แล้ว`); go('job', { jobId: r.id });
       } catch (x) { ui.busy = false; render(); toast('สร้างใบงานไม่สำเร็จ: ' + x.message); }
       break;
@@ -677,6 +669,13 @@ document.addEventListener('change', async e => {
   const t = e.target;
   if (t.dataset.u && ui.editUser) { ui.editUser[t.dataset.u] = t.type === 'checkbox' ? t.checked : t.value; return; }
   if (t.dataset.s) { ui.draft.screens[+t.dataset.s][t.dataset.k] = t.value; return; }
+  if (t.dataset.jf) {
+    const { j } = find(t.dataset.v); if (!j || !t.value) return;
+    const k = t.dataset.jf, old = j[k]; j[k] = t.value;
+    try { await api('PATCH', '/jobs/' + j.id, { [k]: t.value }); toast('บันทึกแล้ว'); render(); }
+    catch (x) { j[k] = old; toast('บันทึกไม่สำเร็จ: ' + x.message); render(); }
+    return;
+  }
   if (t.dataset.chk) { const { s } = find(ui.jobId, ui.screenId); s.qc.checks[t.dataset.chk] = t.checked ? 1 : 0; saveScreen(s); return; }
   if (t.id === 'origin' && t.files.length) { const fs = [...t.files]; t.value = ''; addCustomerFiles(fs); return; }
   if (t.dataset.rowfile != null && t.files.length) { const fs = [...t.files]; t.value = ''; addCustomerFiles(fs, +t.dataset.rowfile); return; }
