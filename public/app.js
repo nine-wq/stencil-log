@@ -3,7 +3,15 @@
 const ROLES = { artwork: 'ฝ่ายอาร์ทเวิร์ค', coater: 'ฝ่ายขึ้นบล็อค', qc: 'ฝ่ายเก็บงาน/ตรวจ', admin: 'ผู้ดูแล' };
 const STATUS = { ordered: 'รอขึ้นบล็อค', coating: 'กำลังขึ้นกาว', qc: 'รอตรวจ', rework: 'ตีกลับแก้ไข', ready: 'พร้อมส่ง', sent: 'ส่งแล้ว' };
 const QC_CHECKS = [['pinhole', 'ไม่มีรูเข็ม / ฟองอากาศ'], ['detail', 'ลายคมชัด ครบทุกเส้น'], ['edge', 'ปิดเทปขอบเรียบร้อย'], ['label', 'ติดป้ายชื่อลูกค้า / ลาย ที่เฟรม']];
-const TABNAME = { artwork: 'ใบงาน', coater: 'คิวขึ้นบล็อค', qc: 'คิวตรวจ/เตรียมส่ง', overview: 'ภาพรวม', settings: 'ตั้งค่า' };
+// ตัวกรองหน้าแรก (แทนแท็บเดิม): แต่ละฝ่ายเปิดมาเจอตัวกรองของตัวเอง
+const FILTERS = [
+  ['all', 'ทั้งหมด', s => s.status !== 'sent'],
+  ['coat', 'ขึ้นบล็อค', s => ['ordered', 'coating', 'rework'].includes(s.status)],
+  ['qc', 'รอตรวจ', s => s.status === 'qc'],
+  ['ready', 'พร้อมส่ง', s => s.status === 'ready'],
+  ['sent', 'ส่งแล้ว', s => s.status === 'sent']
+];
+const DEFAULT_FILTER = { artwork: 'all', coater: 'coat', qc: 'qc', admin: 'all' };
 const TOKEN_KEY = 'stencil-token';
 
 const $ = s => document.querySelector(s);
@@ -215,15 +223,6 @@ function delta(v, target) {
   const word = a <= T ? 'ตามสเปค' : d > 0 ? 'หนาเกิน' : 'บางกว่าสเปค';
   return `<span class="${cls}">${d > 0 ? '+' : ''}${d} µm · ${word}</span>`;
 }
-function tabsFor(role) {
-  return { artwork: ['artwork', 'overview'], coater: ['coater', 'overview'], qc: ['qc', 'overview'], admin: ['artwork', 'coater', 'qc', 'overview', 'settings'] }[role] || ['overview'];
-}
-function countFor(tab) {
-  if (tab === 'coater') return allScreens().filter(x => ['ordered', 'coating', 'rework'].includes(x.s.status)).length;
-  if (tab === 'qc') return allScreens().filter(x => x.s.status === 'qc').length;
-  if (tab === 'artwork') return db.jobs.filter(j => j.screens.some(s => s.status !== 'sent')).length;
-  return null;
-}
 const logEv = (s, msg) => s.log.push([Date.now(), ui.user.name, msg]);
 
 /* ---------- render ---------- */
@@ -231,8 +230,7 @@ function render() {
   const app = $('#app');
   if (!ui.user) { app.innerHTML = loginView(); return; }
   if (!db.master) { app.innerHTML = '<div class="loading">กำลังโหลดข้อมูล…</div>'; return; }
-  const tabs = tabsFor(ui.user.role);
-  if (!ui.tab || !tabs.includes(ui.tab)) ui.tab = tabs[0];
+  if (!ui.tab || !FILTERS.some(f => f[0] === ui.tab)) ui.tab = DEFAULT_FILTER[ui.user.role] || 'all';
   const y = window.scrollY;
   // จำช่องที่กำลังพิมพ์ไว้ เพื่อไม่ให้หลุดโฟกัสเมื่อหน้าจอวาดใหม่
   const ae = document.activeElement, fid = ae && ae.id, sel = ae && 'selectionStart' in ae ? [ae.selectionStart, ae.selectionEnd] : null;
@@ -245,13 +243,12 @@ function render() {
   app.innerHTML = `
   <header class="top"><div class="wrap">
     <div class="brand"><div class="mark" aria-hidden="true"></div><h1>บันทึกขึ้นบล็อค</h1></div>
+    <button class="icon-btn" data-a="refresh" title="โหลดข้อมูลล่าสุด" aria-label="โหลดข้อมูลล่าสุด">⟳</button>
+    ${ui.user.role === 'admin' ? `<button class="icon-btn" data-a="settings" title="ตั้งค่า" aria-label="ตั้งค่า" aria-current="${ui.view === 'settings'}">⚙</button>` : ''}
     <div class="who"><span class="av ${ui.user.role}" style="width:30px;height:30px">${esc(ui.user.name[0])}</span>
-      <span><b>${esc(ui.user.name)}</b><br><span class="muted small">${ROLES[ui.user.role]}</span></span>
+      <span class="who-n"><b>${esc(ui.user.name)}</b><br><span class="muted small">${ROLES[ui.user.role]}</span></span>
       <button class="btn sm ghost" data-a="logout">ออก</button></div>
-  </div>
-  <div class="wrap"><nav class="tabs">${tabs.map(t => { const c = countFor(t); return `<button data-a="tab" data-v="${t}" aria-current="${ui.tab === t && ui.view === 'list'}">${TABNAME[t]}${c != null ? `<span class="count">${c}</span>` : ''}</button>`; }).join('')}
-    <button data-a="refresh" title="โหลดข้อมูลล่าสุด" aria-label="โหลดข้อมูลล่าสุด">⟳</button></nav></div>
-  </header>
+  </div></header>
   <main class="wrap">${body()}</main>`;
   window.scrollTo(0, y);
 }
@@ -259,7 +256,8 @@ function body() {
   if (ui.view === 'newjob') return newJobView();
   if (ui.view === 'job') return jobView();
   if (ui.view === 'screen') return screenView();
-  return { artwork: artworkList, coater: coaterList, qc: qcList, overview, settings: settingsView }[ui.tab]();
+  if (ui.view === 'settings') return settingsView();
+  return homeView();
 }
 
 function loginView() {
@@ -284,17 +282,40 @@ function loginView() {
   </div>`;
 }
 
-/* --- artwork --- */
-function artworkList() {
-  const jobs = [...db.jobs].sort((a, b) => dueTs(a) - dueTs(b));
-  return `<div class="spread"><h2>ใบงานขึ้นบล็อค</h2><button class="btn primary" data-a="newjob">+ สร้างใบงาน</button></div>
-  <div class="list">${jobs.map(j => {
-    const n = j.screens.length, done = j.screens.filter(s => s.status === 'ready' || s.status === 'sent').length;
-    return `<button class="item" data-a="openjob" data-v="${j.id}">
-    <span class="t">${esc(j.customer)} <span class="jobno">${esc(j.no)}</span></span>
-    <span class="num small">${done}/${n} บล็อค</span>
-    <span class="s"><span class="${dueCls(j)}">${dueText(j)}</span> · ${[...new Set(j.screens.map(s => s.status))].map(chip).join(' ')}</span>
-  </button>`; }).join('') || '<div class="empty">ยังไม่มีใบงาน กด "+ สร้างใบงาน" เพื่อเริ่ม</div>'}</div>`;
+/* --- หน้าแรก: ใบงานทั้งหมด กรองตามขั้นตอน --- */
+function homeView() {
+  const f = FILTERS.find(x => x[0] === ui.tab) || FILTERS[0], test = f[2];
+  const canNew = ['artwork', 'admin'].includes(ui.user.role);
+  const count = t => allScreens().filter(x => t(x.s)).length;
+  const order = { rework: 0, coating: 1, ordered: 2, qc: 3, ready: 4, sent: 5 };
+  const jobs = db.jobs.map(j => ({ j, ss: j.screens.filter(test).sort((a, b) => order[a.status] - order[b.status]) }))
+    .filter(x => x.ss.length)
+    .sort((a, b) => (a.ss.some(s => s.status === 'rework') ? 0 : 1) - (b.ss.some(s => s.status === 'rework') ? 0 : 1) || dueTs(a.j) - dueTs(b.j));
+  if (ui.tab === 'sent') jobs.reverse();
+  return `<div class="spread"><h2>ใบงาน</h2>${canNew ? '<button class="btn primary" data-a="newjob">+ สร้างใบงาน</button>' : ''}</div>
+  <div class="filters" role="tablist">${FILTERS.map(([k, label, t]) => { const n = count(t); return `<button role="tab" data-a="tab" data-v="${k}" aria-selected="${k === f[0]}">${label}${k !== 'sent' ? ` <span class="count">${n}</span>` : ''}</button>`; }).join('')}</div>
+  <div class="list">${jobs.map(({ j, ss }) => jobCard(j, ss)).join('') || `<div class="empty">ไม่มีงานในขั้นตอน "${f[1]}"</div>`}</div>`;
+}
+function jobCard(j, ss) {
+  const n = j.screens.length, done = j.screens.filter(s => s.status === 'ready' || s.status === 'sent').length;
+  return `<div class="jobcard">
+    <button class="jobhead" data-a="openjob" data-v="${j.id}">
+      <span class="t">${esc(j.customer)} <span class="jobno">${esc(j.no)}</span></span>
+      <span class="small"><span class="${dueCls(j)}">${dueText(j)}</span> · <span class="num">${done}/${n}</span> บล็อค</span>
+    </button>
+    ${ss.map(s => blockRow(j, s)).join('')}
+  </div>`;
+}
+function blockRow(j, s) {
+  const prep = (s.prepared || []).length;
+  const th = s.thAfter !== '' ? ` · หลังถ่าย <span class="num">${s.thAfter}</span>` : '';
+  return `<button class="brow" data-a="openscreen" data-j="${j.id}" data-v="${s.id}">
+    ${s.preview ? `<img class="thumb" src="${fileUrl(s.preview, true)}" alt="" loading="lazy">` : '<span class="thumb none" aria-hidden="true"></span>'}
+    <span class="bt"><b>${esc(s.design || '(ยังไม่ตั้งชื่อ)')}</b>
+      <span class="muted small"><span class="num">${esc(s.mesh)}</span> · สเปค <span class="num">${esc(s.target)} µm</span>${s.coats.length ? ` · กาว ${s.coats.length} รอบ` : ''}${th}</span>
+      ${db.features.files && !prep && ['ordered', 'coating'].includes(s.status) ? '<span class="fstate">ยังไม่มีไฟล์เตรียม</span>' : ''}</span>
+    ${chip(s.status)}
+  </button>`;
 }
 function blankScreen() { const m = db.master; return { key: Math.random().toString(36).slice(2), design: '', customerRef: '', originals: [], preview: null, mesh: m.mesh[1] || m.mesh[0] || '', frame: m.frames[1] || m.frames[0] || '', emulsion: m.emulsions[0] || '', target: defTarget() }; }
 const opt = (arr, v) => (arr.includes(v) || !v ? arr : [v, ...arr]).map(x => `<option ${x === v ? 'selected' : ''}>${esc(x)}</option>`).join('');
@@ -343,36 +364,11 @@ function jobView() {
   <div class="spread"><div><div class="jobno">${esc(j.no)}</div><h2>${esc(j.customer)}</h2></div><span class="${dueCls(j)}">${dueText(j)}</span></div>
   ${j.note ? `<div class="card">${esc(j.note)}</div>` : ''}
   <div class="muted small">สั่งโดย ${esc(j.createdBy)} · ${fmtT(j.createdAt)}${j.sentAt ? ` · ส่งลูกค้า ${fmtT(j.sentAt)}` : ''}</div>
-  <div class="list">${j.screens.map(s => screenItem(j, s)).join('')}</div>
+  <div class="jobcard">${j.screens.map(s => blockRow(j, s)).join('')}</div>
   <div class="row" style="justify-content:space-between">
     ${canDel ? `<button class="btn bad" data-a="deljob" data-v="${j.id}">${ui.arm === 'deljob' ? 'กดอีกครั้งเพื่อลบใบงานนี้' : 'ลบใบงาน'}</button>` : '<span></span>'}
     ${j.screens.every(s => s.status === 'ready') ? `<button class="btn ok" data-a="sendjob" data-v="${j.id}">บันทึกว่าส่งลูกค้าแล้ว</button>` : ''}
   </div>`;
-}
-function screenItem(j, s, showCust) {
-  const last = s.thAfter !== '' ? `หลังถ่าย ${s.thAfter} µm` : s.thBefore !== '' ? `ก่อนถ่าย ${s.thBefore} µm` : '';
-  const prep = (s.prepared || []).length;
-  return `<button class="item${s.preview ? ' withthumb' : ''}" data-a="openscreen" data-j="${j.id}" data-v="${s.id}">
-    ${s.preview ? `<img class="thumb" src="${fileUrl(s.preview, true)}" alt="" loading="lazy">` : ''}
-    <span class="t">${esc(s.design || '(ยังไม่ตั้งชื่อ)')}${showCust ? ` <span class="jobno">${esc(j.customer)}</span>` : ''}${s.customerRef ? `<br><span class="jobno">ID: ${esc(s.customerRef)}</span>` : ''}</span>${chip(s.status)}
-    <span class="s">${db.features.files ? (prep ? '<span class="fstate ok">ไฟล์เตรียมแล้ว</span>' : '<span class="fstate">ยังไม่มีไฟล์เตรียม</span>') : ''}<span class="num">${esc(s.mesh)}</span>· ${esc(s.frame)} · ${esc(s.emulsion)} · สเปค <span class="num">${esc(s.target)} µm</span>
-    ${s.coats.length ? `· กาว ${s.coats.length} รอบ` : ''}${last ? ` · ${last}` : ''}${showCust ? ` · <span class="${dueCls(j)}">${dueText(j)}</span>` : ''}</span></button>`;
-}
-
-/* --- coater & qc lists --- */
-function coaterList() {
-  const o = { rework: 0, coating: 1, ordered: 2 };
-  const xs = allScreens().filter(x => x.s.status in o).sort((a, b) => o[a.s.status] - o[b.s.status] || dueTs(a.j) - dueTs(b.j));
-  return `<h2>คิวขึ้นบล็อค</h2><div class="muted small">งานตีกลับขึ้นก่อน ตามด้วยงานที่กำลังทำ และงานใหม่ เรียงตามกำหนดส่ง</div>
-  <div class="list">${xs.map(x => screenItem(x.j, x.s, true)).join('') || '<div class="empty">ไม่มีบล็อคค้างขึ้น</div>'}</div>`;
-}
-function qcList() {
-  const xs = allScreens().filter(x => x.s.status === 'qc').sort((a, b) => dueTs(a.j) - dueTs(b.j));
-  const ready = allScreens().filter(x => x.s.status === 'ready');
-  return `<h2>คิวตรวจ / เตรียมส่ง</h2>
-  <div class="list">${xs.map(x => screenItem(x.j, x.s, true)).join('') || '<div class="empty">ไม่มีบล็อครอตรวจ</div>'}</div>
-  <h3 style="margin-top:8px">พร้อมส่ง (${ready.length})</h3>
-  <div class="list">${ready.map(x => screenItem(x.j, x.s, true)).join('') || '<div class="empty">ยังไม่มี</div>'}</div>`;
 }
 
 /* --- screen detail --- */
@@ -457,20 +453,6 @@ function thickField(k, label, s, edit) {
     <div class="meter" id="m-${k}">${v !== '' ? delta(+v, +s.target) : ''}</div></div>`;
 }
 
-/* --- overview --- */
-function overview() {
-  const counts = {}; allScreens().forEach(x => counts[x.s.status] = (counts[x.s.status] || 0) + 1);
-  const rows = [...db.jobs].sort((a, b) => dueTs(a) - dueTs(b)).flatMap(j => j.screens.map(s => `<tr data-a="openscreen" data-j="${j.id}" data-v="${s.id}">
-    <td class="num small">${esc(j.no)}<br><span class="${dueCls(j)}">${fmtD(dueTs(j))}</span></td>
-    <td>${esc(j.customer)}<br><span class="muted small">${esc(s.design)}</span></td>
-    <td class="num">${esc(s.mesh)}</td><td class="num">${esc(s.target)}</td><td class="num">${s.coats.length || '-'}</td>
-    <td class="num">${s.thAfter === '' ? '-' : s.thAfter}<br>${s.thAfter !== '' ? delta(+s.thAfter, +s.target) : ''}</td><td>${chip(s.status)}</td></tr>`)).join('');
-  return `<h2>ภาพรวมทุกงาน</h2>
-  <div class="row">${Object.keys(STATUS).filter(k => counts[k]).map(k => `<span class="chip st-${k}">${STATUS[k]} <span class="num">${counts[k]}</span></span>`).join('')}</div>
-  ${rows ? `<div class="tablewrap"><table><thead><tr><th>ใบงาน</th><th>ลูกค้า / ลาย</th><th>ผ้า</th><th>สเปค</th><th>กาว</th><th>หลังถ่าย</th><th>สถานะ</th></tr></thead><tbody>${rows}</tbody></table></div>` : '<div class="empty">ยังไม่มีงาน</div>'}
-  <div class="muted small">งานที่ส่งลูกค้าครบแล้วเกิน 30 วันจะถูกซ่อนจากหน้านี้ แต่ยังอยู่ในไฟล์ CSV</div>`;
-}
-
 /* --- settings (admin) --- */
 function settingsView() {
   if (!ui.admin) { api('GET', '/admin/users').then(u => { ui.admin = u; render(); }).catch(e => toast(e.message)); return '<div class="loading">กำลังโหลด…</div>'; }
@@ -486,7 +468,8 @@ function settingsView() {
       <div class="row" style="justify-content:flex-end"><span class="err" id="uerr"></span><button class="btn ghost" data-a="ucancel">ยกเลิก</button><button class="btn primary" data-a="usave">บันทึก</button></div></div>`;
   const fx = db.features || {};
   const stat = (on, name, what) => `<div class="urow"><span class="fstate ${on ? 'ok' : ''}">${on ? 'เชื่อมแล้ว' : 'ยังไม่เชื่อม'}</span><span><b>${name}</b><br><span class="muted small">${what}</span></span><span></span></div>`;
-  return `<h2>ตั้งค่า</h2>
+  return `<button class="btn ghost back" data-a="back">← กลับ</button>
+  <h2>ตั้งค่า</h2>
   <div class="card">
     <h3>สถานะระบบ</h3>
     ${stat(true, 'ฐานข้อมูล D1', 'ใบงาน รอบขึ้นกาว รูปตรวจงาน')}
@@ -544,7 +527,8 @@ document.addEventListener('click', async e => {
     case 'pindel': ui.pin = ui.pin.slice(0, -1); render(); break;
     case 'logout': try { await api('POST', '/logout'); } catch (x) {} signOutLocal(); break;
     case 'refresh': await loadData(); toast('อัปเดตแล้ว'); break;
-    case 'tab': ui.admin = null; ui.editUser = null; go('list', { tab: v }); break;
+    case 'tab': go('list', { tab: v }); break;
+    case 'settings': ui.admin = null; ui.editUser = null; go('settings'); break;
     case 'back': go(ui.view === 'screen' && ui.backTo === 'job' ? 'job' : 'list'); break;
     case 'newjob':
       ui.draft = { customer: '', due: new Date(Date.now() + 3 * 864e5).toISOString().slice(0, 10), note: '', screens: [blankScreen()] };

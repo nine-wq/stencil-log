@@ -223,3 +223,26 @@ a.btn.primary{color:var(--on-emulsion)}
 .item .thumb{width:52px;height:52px;object-fit:contain;border-radius:6px;background:#fff;border:1px solid var(--line);grid-row:span 2}
 .fstate{font-size:.75rem;font-weight:600;padding:1px 8px;border-radius:99px;background:var(--warn-soft);color:var(--warn)}
 .fstate.ok{background:var(--ok-soft);color:var(--ok)}
+/* simplified home: one list + stage filters */
+.icon-btn{border:1px solid var(--line);background:var(--surface);border-radius:8px;width:38px;height:38px;font-size:1.1rem;cursor:pointer;flex:none;color:var(--fg)}
+.icon-btn[aria-current="true"]{border-color:var(--emulsion);color:var(--emulsion)}
+@media (max-width:480px){.who-n{display:none}}
+.filters{display:flex;gap:6px;overflow-x:auto;padding-bottom:2px;scrollbar-width:none}
+.filters::-webkit-scrollbar{display:none}
+.filters button{border:1px solid var(--line);background:var(--surface);border-radius:99px;padding:7px 14px;font-weight:600;white-space:nowrap;cursor:pointer;color:var(--muted)}
+.filters button[aria-selected="true"]{background:var(--emulsion);border-color:var(--emulsion);color:var(--on-emulsion)}
+.filters .count{font-family:var(--mono);font-size:.8rem;opacity:.85}
+.jobcard{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);overflow:hidden}
+.jobhead{display:flex;justify-content:space-between;align-items:center;gap:6px 12px;flex-wrap:wrap;width:100%;border:0;background:var(--sunk);padding:10px 14px;text-align:left;cursor:pointer}
+.jobhead:hover{background:color-mix(in srgb,var(--emulsion-soft) 60%,var(--sunk))}
+.jobhead .t{font-weight:600;min-width:0}
+.brow{display:grid;grid-template-columns:68px minmax(0,1fr) auto;gap:12px;align-items:center;width:100%;border:0;border-top:1px solid var(--line);background:none;padding:10px 14px;text-align:left;cursor:pointer}
+.jobhead+.brow,.jobcard>.brow:first-child{border-top:0}
+.brow:hover{background:var(--bg)}
+.brow .thumb{width:68px;height:68px;object-fit:contain;border-radius:8px;background:#fff;border:1px solid var(--line)}
+.brow .thumb.none{display:block;background:repeating-linear-gradient(45deg,var(--sunk) 0 6px,transparent 6px 12px);border-style:dashed}
+.brow .bt{display:flex;flex-direction:column;gap:2px;min-width:0;align-items:flex-start}
+.brow .bt b{overflow:hidden;text-overflow:ellipsis;max-width:100%}
+/* preview box 30% larger */
+.idrow{grid-template-columns:172px minmax(0,1fr)}
+@media (max-width:420px){.idrow{grid-template-columns:135px minmax(0,1fr)}}
