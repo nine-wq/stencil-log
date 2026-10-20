@@ -691,14 +691,16 @@ document.addEventListener('click', async e => {
 });
 $('#lb').addEventListener('click', () => $('#lb').hidden = true);
 
-document.addEventListener('compositionend', e => { if (e.target.dataset && e.target.dataset.search) e.target.dispatchEvent(new Event('input', { bubbles: true })); });
+function updateResults() { const el = $('#q'), r = $('#homeres'); if (el) ui.q = el.value; if (r) r.innerHTML = homeResults(); }
+// คีย์บอร์ดมือถือบางรุ่นส่งคำทีละช่วง: เช็กค่าซ้ำเมื่อพิมพ์จบคำหรือปล่อยปุ่ม
+for (const ev of ['compositionupdate', 'compositionend', 'keyup']) document.addEventListener(ev, e => { if (e.target && e.target.id === 'q') { clearTimeout(ui.qTimer); ui.qTimer = setTimeout(updateResults, 120); } });
 document.addEventListener('input', e => {
   const t = e.target;
   if (t.dataset.search) {
     ui.q = t.value;
     const x = t.parentNode.querySelector('[data-a="clearq"]'); if (x) x.hidden = !ui.q;
-    if (e.isComposing) return;
-    clearTimeout(ui.qTimer); ui.qTimer = setTimeout(() => { const r = $('#homeres'); if (r) r.innerHTML = homeResults(); }, 150);
+    // อัปเดตเฉพาะผลค้นหา (ไม่วาดช่องพิมพ์ใหม่) จึงทำได้แม้คีย์บอร์ดยังขีดเส้นใต้คำที่กำลังพิมพ์อยู่
+    clearTimeout(ui.qTimer); ui.qTimer = setTimeout(updateResults, 120);
     return;
   }
   if (t.dataset.d) { ui.draft[t.dataset.d] = t.value; return; }
