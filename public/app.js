@@ -404,9 +404,8 @@ function newJobView() {
       <div class="field"><label for="f-due">กำหนดส่ง</label><input id="f-due" type="date" value="${esc(d.due)}" data-d="due"></div>
     </div>
     ${(() => { const cs = custSpec(d.customer), isNew = cust && !cs;
-      // สเปคประจำแก้ได้ที่ ⚙ ตั้งค่า เท่านั้น; ลูกค้าใหม่จำสเปคของบล็อคที่ 1 ให้เอง
-      return cs ? `<div class="spechint"><span class="label">สเปคประจำลูกค้า</span><span>${esc(specText(cs))}</span><span class="muted small">ใส่ให้ทุกบล็อคอัตโนมัติ เปลี่ยนเฉพาะงานนี้ได้ที่แต่ละบล็อค · แก้สเปคประจำได้ที่ ⚙ ตั้งค่า</span></div>`
-        : isNew ? '<div class="muted small">ลูกค้าใหม่: ระบบจะจำสเปคของบล็อคที่ 1 เป็นสเปคประจำของลูกค้านี้ให้เอง</div>' : ''; })()}
+      // สเปคประจำแก้ได้ที่ ⚙ ตั้งค่า เท่านั้น
+      return cs ? `<div class="spechint"><span class="label">สเปคประจำลูกค้า</span><span>${esc(specText(cs))}</span><span class="muted small">ใส่ให้ทุกบล็อคอัตโนมัติ เปลี่ยนเฉพาะงานนี้ได้ที่แต่ละบล็อค · แก้สเปคประจำได้ที่ ⚙ ตั้งค่า</span></div>` : ''; })()}
     <div class="field"><label for="f-note">รายละเอียด / ข้อควรระวัง</label><textarea id="f-note" data-d="note" placeholder="เช่น ชนิดหมึก งานเส้นเล็ก">${esc(d.note)}</textarea></div>
   </div>
   ${cust ? `<div class="card" style="display:flex;flex-direction:column;gap:10px">
@@ -861,7 +860,7 @@ document.addEventListener('click', async e => {
     }
     case 'back': go(ui.view === 'screen' && ui.backTo === 'job' ? 'job' : 'list'); break;
     case 'newjob':
-      ui.draft = { customer: '', saveSpec: false, specApplied: '', date: localDate(), due: localDate(Date.now() + 3 * 864e5), note: '', screens: [] };
+      ui.draft = { customer: '', specApplied: '', date: localDate(), due: localDate(Date.now() + 3 * 864e5), note: '', screens: [] };
       go('newjob'); break;
     case 'addscreen': ui.draft.screens.push(blankScreen()); render(); break;
     case 'dupscreen': { const src = ui.draft.screens[v]; ui.draft.screens.splice(+v + 1, 0, { ...src, originals: [...(src.originals || [])], key: Math.random().toString(36).slice(2) }); render(); break; }
@@ -876,7 +875,7 @@ document.addEventListener('click', async e => {
       if (d.screens.some(s => !String(s.design || '').trim() || !s.target)) return er.textContent = 'ใส่ชื่อลายและสเปคความหนาให้ครบทุกบล็อค';
       ui.busy = true; render();
       try {
-        const r = await api('POST', '/jobs', { customer: d.customer.trim(), saveSpec: !!d.saveSpec, date: d.date, due: d.due, note: d.note.trim(), screens: d.screens.map(({ key, ...s }) => s) });
+        const r = await api('POST', '/jobs', { customer: d.customer.trim(), date: d.date, due: d.due, note: d.note.trim(), screens: d.screens.map(({ key, ...s }) => s) });
         ui.busy = false; await loadData(); toast(`สร้าง ${r.no} แล้ว`); go('job', { jobId: r.id });
       } catch (x) { ui.busy = false; render(); toast('สร้างใบงานไม่สำเร็จ: ' + x.message); }
       break;
@@ -999,8 +998,8 @@ document.addEventListener('input', e => {
       else if (d.libFor) { d.libFor = ''; render(); }
       // เลือกลูกค้าที่มีสเปคประจำ: ใส่สเปคให้ทุกบล็อคทันที
       const name = t.value.trim(), cs = custSpec(name);
-      if (cs && d.specApplied !== name) { d.screens.forEach(s => Object.assign(s, { mesh: cs.mesh || s.mesh, frame: cs.frame || s.frame, emulsion: cs.emulsion || s.emulsion, target: cs.target || s.target })); d.specApplied = name; d.saveSpec = false; render(); }
-      else if (!cs && name && d.specApplied !== '#new') { d.specApplied = '#new'; d.saveSpec = true; render(); }
+      if (cs && d.specApplied !== name) { d.screens.forEach(s => Object.assign(s, { mesh: cs.mesh || s.mesh, frame: cs.frame || s.frame, emulsion: cs.emulsion || s.emulsion, target: cs.target || s.target })); d.specApplied = name; render(); }
+      else if (!cs && name && d.specApplied) { d.specApplied = ''; render(); }
       else if (!name && d.specApplied) { d.specApplied = ''; render(); }
     }
     return;
