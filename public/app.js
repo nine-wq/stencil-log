@@ -404,8 +404,9 @@ function newJobView() {
       <div class="field"><label for="f-due">กำหนดส่ง</label><input id="f-due" type="date" value="${esc(d.due)}" data-d="due"></div>
     </div>
     ${(() => { const cs = custSpec(d.customer), isNew = cust && !cs;
-      return `${cs ? `<div class="spechint"><span class="label">สเปคประจำลูกค้า</span><span>${esc(specText(cs))}</span><span class="muted small">ใส่ให้ทุกบล็อคอัตโนมัติ เปลี่ยนเฉพาะงานนี้ได้ที่แต่ละบล็อค</span></div>` : ''}
-      ${cs || isNew ? `<label class="check"><input type="checkbox" id="f-save" data-d="saveSpec" ${d.saveSpec ? 'checked' : ''}><span>${cs ? 'อัปเดตสเปคประจำตามบล็อคที่ 1 ของงานนี้' : 'บันทึกสเปคของบล็อคที่ 1 เป็นสเปคประจำของลูกค้าใหม่นี้'}</span></label>` : ''}`; })()}
+      // สเปคประจำแก้ได้ที่ ⚙ ตั้งค่า เท่านั้น; ลูกค้าใหม่จำสเปคของบล็อคที่ 1 ให้เอง
+      return cs ? `<div class="spechint"><span class="label">สเปคประจำลูกค้า</span><span>${esc(specText(cs))}</span><span class="muted small">ใส่ให้ทุกบล็อคอัตโนมัติ เปลี่ยนเฉพาะงานนี้ได้ที่แต่ละบล็อค · แก้สเปคประจำได้ที่ ⚙ ตั้งค่า</span></div>`
+        : isNew ? '<div class="muted small">ลูกค้าใหม่: ระบบจะจำสเปคของบล็อคที่ 1 เป็นสเปคประจำของลูกค้านี้ให้เอง</div>' : ''; })()}
     <div class="field"><label for="f-note">รายละเอียด / ข้อควรระวัง</label><textarea id="f-note" data-d="note" placeholder="เช่น ชนิดหมึก งานเส้นเล็ก">${esc(d.note)}</textarea></div>
   </div>
   ${cust ? `<div class="card" style="display:flex;flex-direction:column;gap:10px">
