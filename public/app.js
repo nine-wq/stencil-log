@@ -416,7 +416,7 @@ function newJobView() {
     return `<div class="card" style="display:flex;flex-direction:column;gap:10px">
     <div class="spread"><div><h3>ลายของงานนี้</h3><div class="muted small">อัปโหลดไฟล์ลายของ ${esc(cust)} · 1 ลาย = 1 บล็อค · ลายที่อัปโหลดเก็บเข้าคลังลายของลูกค้าด้วย</div></div><span class="muted small"><span class="num">${picked.size}</span> ลายที่เลือก</span></div>
     ${db.features.files ? uploadZone('nj') : ''}
-    ${shown.length ? artGrid(shown, picked, 'pickart') : ''}
+    ${shown.length ? artGrid(shown, picked, 'pickart', fresh) : ''}
     ${old.length ? `<button class="btn sm ghost oldtoggle" data-a="toggleold" aria-expanded="${!!d.showOld}">${d.showOld ? '▾ ซ่อนลายเก่าในคลัง' : `▸ เลือกจากลายเก่าในคลัง (${old.length} ลาย)`}</button>
       ${d.showOld ? `<div class="search"><input id="oldq" type="search" data-oldq="1" value="${esc(d.oldQ || '')}" placeholder="ค้นหาลายเก่า: ชื่อลาย Customer ID ชื่อไฟล์" autocomplete="off"></div>
         <div id="oldgrid">${oldHit.length ? artGrid(oldHit, picked, 'pickart') : '<div class="muted small">ไม่พบลายที่ตรงกับคำค้น</div>'}</div>` : ''}` : ''}
@@ -460,14 +460,17 @@ function needsFilm(s) {
   const a = artOf(s.artworkId); return !!(a && a.filmable);
 }
 const screensUsing = id => allScreens().filter(x => x.s.artworkId === id);
-function artGrid(arts, picked, action) {
+// removable: ids that get a ✕ (artworks just uploaded in the new-job form)
+function artGrid(arts, picked, action, removable) {
   if (!arts.length) return '<div class="muted small">ยังไม่มีลายในคลังของลูกค้านี้ อัปโหลดไฟล์ลายด้านล่าง</div>';
   return `<div class="artgrid">${arts.map(a => { const on = picked ? picked.has(a.id) : ui.lib.edit === a.id;
-    return `<button class="arttile ${on ? 'on' : ''}" data-a="${action}" data-v="${a.id}" aria-pressed="${on}">
+    const rm = removable && removable.includes(a.id)
+      ? `<button class="artrm ${ui.arm === 'rmart:' + a.id ? 'armed' : ''}" data-a="rmart" data-v="${a.id}" title="เอาลายนี้ออก (ลบออกจากคลังด้วย)" aria-label="เอาลายนี้ออก">${ui.arm === 'rmart:' + a.id ? 'ลบ?' : '✕'}</button>` : '';
+    return `<div class="artcell">${rm}<button class="arttile ${on ? 'on' : ''}" data-a="${action}" data-v="${a.id}" aria-pressed="${on}">
       ${a.preview ? `<img src="${fileUrl(a.preview, true)}" alt="" loading="lazy">` : '<span class="noimg" aria-hidden="true"></span>'}
       <b>${esc(a.name || (ui.aiBusy['a:' + a.id] ? 'AI กำลังตั้งชื่อ…' : '(ยังไม่ตั้งชื่อ)'))}</b>
       <span class="muted small">${esc(a.customerRef || '')}</span>
-      ${a.filmable ? '' : '<span class="fstate">ทำฟิล์มในแอปไม่ได้</span>'}${picked && on ? '<span class="tick" aria-hidden="true">✓</span>' : ''}</button>`; }).join('')}</div>`;
+      ${a.filmable ? '' : '<span class="fstate">ทำฟิล์มในแอปไม่ได้</span>'}${picked && on ? '<span class="tick" aria-hidden="true">✓</span>' : ''}</button></div>`; }).join('')}</div>`;
 }
 function uploadZone(id) {
   return `<label class="drop" for="${id}-files" data-drop="lib">+ อัปโหลดไฟล์ลายใหม่ หรือลากไฟล์มาวางที่นี่<br><span class="small muted">AI (PDF-compatible), PDF, JPG, PNG · ไฟล์ที่มีหลายลายจะแยกเป็นลายละ 1 ชิ้นให้เอง</span></label>
@@ -801,7 +804,7 @@ function go(view, o = {}) { Object.assign(ui, { view, arm: null }, o); render();
 document.addEventListener('click', async e => {
   const el = e.target.closest('[data-a]'); if (!el || el.disabled) return;
   const a = el.dataset.a, v = el.dataset.v;
-  if (a !== 'deljob' && a !== 'delfile') ui.arm = null;
+  if (a !== 'deljob' && a !== 'delfile' && a !== 'rmart' && a !== 'artdel') ui.arm = null;
   const cur = () => find(ui.jobId, ui.screenId);
   switch (a) {
     case 'pick': ui.pickUser = v; ui.pin = ''; ui.pinErr = ''; render(); break;
@@ -843,6 +846,18 @@ document.addEventListener('click', async e => {
       try { const r = await api('DELETE', '/artworks/' + v); const a = artOf(v);
         if (r.hidden && a) a.hidden = true; else db.artworks = db.artworks.filter(x => x.id !== v);
         ui.lib.edit = null; toast(r.hidden ? 'ซ่อนลายจากคลังแล้ว (ใบงานเดิมยังเปิดได้)' : 'ลบลายแล้ว'); render(); } catch (x) { toast(x.message); }
+      break;
+    }
+    case 'rmart': {   // ลายที่เพิ่งอัปโหลดผิด: เอาออกจากใบงานและลบออกจากคลัง (ยังไม่มีใบงานไหนใช้)
+      if (ui.arm !== 'rmart:' + v) { ui.arm = 'rmart:' + v; render(); break; }
+      ui.arm = null;
+      try {
+        const r = await api('DELETE', '/artworks/' + v);
+        const a = artOf(v); if (r.hidden && a) a.hidden = true; else db.artworks = db.artworks.filter(x => x.id !== v);
+        const d = ui.draft;
+        if (d) { d.screens = d.screens.filter(x => x.artworkId !== v); d.newArts = (d.newArts || []).filter(x => x !== v); }
+        toast('เอาลายออกแล้ว'); render();
+      } catch (x) { toast('เอาลายออกไม่สำเร็จ: ' + x.message); }
       break;
     }
     case 'toggleold': ui.draft.showOld = !ui.draft.showOld; render(); break;
@@ -1011,8 +1026,9 @@ document.addEventListener('input', e => {
       // ลายที่เลือกไว้ของลูกค้าอื่นออกจากใบงาน
       const nm = t.value.trim(), before = d.screens.length;
       d.screens = d.screens.filter(x => !x.artworkId || (artOf(x.artworkId) || {}).customer === nm);
-      if (allCustomers().includes(nm) || before !== d.screens.length) { if (d.libFor !== nm) { d.libFor = nm; render(); } }
-      else if (d.libFor) { d.libFor = ''; render(); }
+      // วาดใหม่เมื่อเป็นลูกค้าที่รู้จัก (แสดงคลังของเขา) หรือเมื่อช่องว่าง/ไม่ว่างเปลี่ยน (แสดงช่องอัปโหลด)
+      const key = allCustomers().includes(nm) ? nm : nm ? '#typed' : '';
+      if (d.libFor !== key || before !== d.screens.length) { d.libFor = key; d.showOld = false; render(); }
       // เลือกลูกค้าที่มีสเปคประจำ: ใส่สเปคให้ทุกบล็อคทันที
       const name = t.value.trim(), cs = custSpec(name);
       if (cs && d.specApplied !== name) { d.screens.forEach(s => Object.assign(s, { mesh: cs.mesh || s.mesh, frame: cs.frame || s.frame, emulsion: cs.emulsion || s.emulsion, target: cs.target || s.target })); d.specApplied = name; render(); }
