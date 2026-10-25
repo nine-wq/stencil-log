@@ -1,0 +1,1433 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>ฟิล์ม · บันทึกขึ้นบล็อค</title>
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="manifest" href="/manifest.webmanifest">
+<meta name="theme-color" content="#4a3fb0" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#1d2027" media="(prefers-color-scheme: dark)">
+<script>if ('serviceWorker' in navigator) window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js').catch(() => {}));</script>
+<style>:root{color-scheme:light}body{margin:0;font:14px system-ui,sans-serif}img{max-width:100%}[hidden]{display:none!important}</style>
+<title>ฟิล์มบล็อคสกรีน</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: a light-table workbench. Left rail = job tray + settings; right = the film sheet on the light table. */
+:root {
+  --bg: #eef0f3;          /* light-table housing */
+  --panel: #f9fafb;
+  --line: #d5d9e0;
+  --fg: #1c2230;
+  --muted: #5d6576;
+  --accent: #3141B0;      /* diazo emulsion violet */
+  --accent-soft: #E4E7FA;
+  --table: #fdfdfb;       /* film on the glass */
+  --warn: #9a5b00;
+  --warn-soft: #fbefd9;
+  --bad: #b3261e;
+  --font-body: "IBM Plex Sans Thai", "Noto Sans Thai", "Leelawadee UI", Tahoma, sans-serif;
+  --font-data: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #15171c; --panel: #1d2027; --line: #333845; --fg: #e6e8ee; --muted: #9aa1b2;
+  --accent: #8D9BFF; --accent-soft: #262C52; --table: #2a2d35; --warn: #f0b860; --warn-soft: #3a2e17; --bad: #ff8a80; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #15171c; --panel: #1d2027; --line: #333845; --fg: #e6e8ee; --muted: #9aa1b2;
+  --accent: #8D9BFF; --accent-soft: #262C52; --table: #2a2d35; --warn: #f0b860; --warn-soft: #3a2e17; --bad: #ff8a80; color-scheme: dark }
+
+* { box-sizing: border-box }
+[hidden] { display: none !important }
+body { background: var(--bg); color: var(--fg); font-family: var(--font-body); font-size: 15px; line-height: 1.55;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 20px 40px }
+.wrap { max-width: 1240px; margin: 0 auto; display: grid; gap: 20px }
+header { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 8px 20px }
+h1 { font-size: 1.45rem; font-weight: 600; margin: 0; letter-spacing: .01em; text-wrap: balance }
+h1 small { font-weight: 400; color: var(--muted); font-size: .9rem; margin-left: 8px }
+h2 { font-size: .78rem; font-weight: 600; text-transform: uppercase; letter-spacing: .09em; color: var(--muted); margin: 0 }
+.mono { font-family: var(--font-data); font-variant-numeric: tabular-nums }
+.grid { display: grid; grid-template-columns: minmax(0, 420px) minmax(0, 1fr); gap: 20px; align-items: start }
+@media (max-width: 880px) { .grid { grid-template-columns: minmax(0, 1fr) } }
+.rail { display: grid; gap: 16px; min-width: 0 }
+.homelink { font-size: .9rem; font-weight: 600; color: var(--accent); text-decoration: none; margin-right: 10px; white-space: nowrap }
+.homelink:hover { text-decoration: underline }
+.queue { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px; display: grid; gap: 10px }
+.qhead { display: flex; align-items: baseline; justify-content: space-between; gap: 8px }
+.qhead h2 { margin: 0 }
+.qjob { display: grid; gap: 4px }
+.qjob > b { font-size: .85rem }
+.qjob > b span { font-weight: 400; color: var(--muted); font-family: var(--font-data); font-size: .78rem; margin-left: 6px }
+.qrow { display: grid; grid-template-columns: auto 44px minmax(0, 1fr); align-items: center; gap: 8px; padding: 4px; border-radius: 8px; cursor: pointer }
+.qrow:hover { background: var(--accent-soft) }
+.qrow img, .qrow .noimg { width: 44px; height: 44px; object-fit: contain; background: #fff; border: 1px solid var(--line); border-radius: 6px }
+.qrow .qt { min-width: 0; font-size: .85rem; line-height: 1.35 }
+.qrow .qt small { display: block; color: var(--muted); font-size: .76rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
+.qrow.in { opacity: .55 }
+.qbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center }
+.qempty { font-size: .85rem; color: var(--muted) }
+.jtag { display: inline-block; font-size: .72rem; font-weight: 600; color: var(--accent); background: var(--accent-soft); border-radius: 5px; padding: 1px 6px; margin-left: 6px; vertical-align: middle }
+
+.drop { border: 1.5px dashed var(--line); border-radius: 10px; padding: 18px; display: grid; gap: 6px; text-align: center;
+  background: var(--panel); cursor: pointer; transition: border-color .15s, background .15s }
+.drop:hover, .drop.over { border-color: var(--accent); background: var(--accent-soft) }
+.drop strong { font-weight: 600 }
+.drop span { color: var(--muted); font-size: .85rem }
+.drop input { display: none }
+
+.jobs { display: grid; gap: 10px }
+.job { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px; display: grid; grid-template-columns: 120px minmax(0, 1fr); gap: 12px }
+@media (max-width: 420px) { .job { grid-template-columns: minmax(0, 1fr) } .thumb { width: 100%; max-width: 240px } }
+.job.sample { border-style: dashed }
+.thumb { width: 120px; aspect-ratio: 1; max-width: 100%; background: #fff; border-radius: 6px; border: 1px solid var(--line); display: grid; place-items: center; overflow: hidden }
+.thumb canvas { max-width: 100%; max-height: 100%; display: block }
+.jhead { display: flex; justify-content: space-between; gap: 8px; align-items: start }
+.jname { font-weight: 600; word-break: break-all; font-size: .92rem; line-height: 1.35 }
+.tag { font-size: .7rem; letter-spacing: .06em; text-transform: uppercase; color: var(--accent); background: var(--accent-soft); border-radius: 4px; padding: 1px 6px; margin-left: 6px; white-space: nowrap }
+.meta { font-size: .8rem; color: var(--muted); margin-top: 2px }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px }
+.chip { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--line); border-radius: 999px; padding: 2px 9px 2px 3px;
+  font: 500 .74rem var(--font-data); background: transparent; color: var(--muted); cursor: pointer }
+.chip i { width: 16px; height: 16px; border-radius: 50%; border: 1px solid rgba(0,0,0,.15); display: block }
+.chip[aria-pressed="true"] { border-color: var(--accent); color: var(--fg); background: var(--accent-soft) }
+.chip[aria-pressed="true"]::after { content: "ลาย"; font-family: var(--font-body); font-size: .68rem; color: var(--accent); font-weight: 600 }
+.chip:disabled { cursor: default; opacity: .55 }
+.row { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; margin-top: 8px; font-size: .8rem; color: var(--muted) }
+select, input[type=number] { font: inherit; font-size: .85rem; color: var(--fg); background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 3px 6px }
+input[type=number] { width: 4.6em; font-family: var(--font-data) }
+.x { border: 0; background: transparent; color: var(--muted); font-size: 1.1rem; line-height: 1; cursor: pointer; padding: 2px 4px; border-radius: 4px }
+.x:hover { color: var(--bad) }
+.warns { margin: 8px 0 0; padding: 6px 9px; list-style: none; background: var(--warn-soft); color: var(--warn); border-radius: 6px; font-size: .78rem; display: grid; gap: 2px }
+.designs { display: grid; gap: 4px; margin-top: 8px }
+.design { display: flex; align-items: center; gap: 8px; font-size: .78rem; cursor: pointer }
+.design.off { color: var(--muted); text-decoration: line-through }
+.dnum { display: inline-grid; place-items: center; min-width: 18px; height: 18px; border-radius: 4px; background: var(--accent); color: var(--bg); font: 600 .72rem var(--font-data) }
+.design.off .dnum { background: var(--muted) }
+.dbox { display: grid; gap: 6px; padding: 8px 0; border-top: 1px solid var(--line) }
+.dbox:first-child { border-top: 0; padding-top: 2px }
+.dbox.off .spec { opacity: .5 }
+.spec { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px 8px; padding-left: 26px }
+.spec label { display: grid; gap: 2px; font-size: .72rem; color: var(--muted); min-width: 0 }
+.spec select, .spec input { width: 100%; min-width: 0 }
+.spec input:disabled { opacity: 1; color: var(--muted); background: transparent; border-style: dashed; cursor: not-allowed }
+.spec .result { grid-column: 1 / -1; font-size: .78rem; color: var(--accent); font-weight: 500 }
+@media (max-width: 520px) { .spec { padding-left: 0 } }
+.form textarea, .form input[type=text] { font: .85rem var(--font-data); color: var(--fg); background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; width: 100%; resize: vertical }
+.swatches { display: inline-flex; gap: 3px; margin-left: auto }
+.swatches i { width: 12px; height: 12px; border-radius: 50%; border: 1px solid rgba(0,0,0,.15); display: block }
+.design .mono { min-width: 0; flex: 1 1 auto }
+.design input, .design .dnum, .swatches { flex: none }
+.design { align-items: flex-start } .design .dnum { margin-top: 1px }
+.meta + .meta, .designs + .meta { margin-top: 6px }
+.err { color: var(--bad); font-size: .82rem; margin-top: 4px }
+
+section.settings, details.settings { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px }
+details.settings summary { cursor: pointer; font-weight: 600; font-size: .9rem }
+.tabs { display: inline-flex; gap: 4px; padding: 3px; background: var(--panel); border: 1px solid var(--line); border-radius: 9px }
+.tabs button { font: 600 .9rem var(--font-body); color: var(--muted); background: transparent; border: 0; border-radius: 7px; padding: 6px 16px; cursor: pointer }
+.tabs button[aria-selected="true"] { background: var(--accent); color: var(--bg) }
+.tabs button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px }
+.headr { display: flex; flex-wrap: wrap; align-items: center; gap: 8px }
+.install { font: 600 .85rem var(--font-body); color: var(--accent); background: transparent; border: 1px solid var(--accent); border-radius: 8px; padding: 6px 12px; cursor: pointer }
+.install:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px }
+.setup { display: grid; gap: 16px; max-width: 760px }
+.savebar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; padding: 14px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px }
+.ghost { font: 500 .85rem var(--font-body); color: var(--muted); background: transparent; border: 1px solid var(--line); border-radius: 8px; padding: 8px 14px; cursor: pointer }
+.ghost:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px }
+.savestate { font-size: .82rem }
+.saveside { display: flex; align-items: center; gap: 12px; flex-wrap: wrap }
+.keep { display: inline-flex; align-items: center; gap: 6px; font-size: .84rem; color: var(--muted); cursor: pointer }
+.hist { display: grid; gap: 12px; max-width: 900px }
+.histbar { display: flex; gap: 8px 10px; flex-wrap: wrap; align-items: flex-end; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px }
+.histbar label { display: grid; gap: 3px; font-size: .72rem; color: var(--muted); min-width: 0 }
+.histbar .hq { flex: 1 1 260px }
+.histbar .hd { flex: 0 1 150px }
+.histbar input { width: 100%; min-width: 0; font: inherit; font-size: .88rem; color: var(--fg); background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px }
+.histsum { font-size: .8rem; color: var(--muted); min-height: 1em }
+.histlist { display: grid; gap: 8px }
+.hday { font-size: .75rem; font-weight: 600; letter-spacing: .06em; color: var(--muted); margin: 8px 0 0 }
+.hitem { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; overflow: hidden }
+.hhead { display: flex; align-items: center; justify-content: space-between; gap: 8px 12px; flex-wrap: wrap; padding: 10px 12px }
+.htitle { display: grid; gap: 1px; min-width: 0; flex: 1 1 260px }
+.hline { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap }
+.hfile { font-size: .95rem; font-weight: 600; color: var(--fg); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; user-select: all }
+.htime { font-family: var(--font-data); font-variant-numeric: tabular-nums }
+.hline { font-size: .8rem; color: var(--muted) }
+.hact { display: flex; gap: 6px }
+.hact a, .hact button { font: 500 .8rem var(--font-body); color: var(--accent); background: transparent; border: 1px solid var(--line); border-radius: 7px; padding: 5px 10px; cursor: pointer; text-decoration: none }
+.hact button.del { color: var(--muted) }
+.hact button.del.armed { color: #fff; background: var(--bad); border-color: var(--bad) }
+.hrows { display: grid; border-top: 1px solid var(--line) }
+.hrow { display: grid; grid-template-columns: 44px minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 6px 12px; color: inherit; text-decoration: none }
+.hrow + .hrow { border-top: 1px solid var(--line) }
+.hrow:hover { background: var(--accent-soft) }
+.hpic { width: 44px; height: 44px; border-radius: 6px; background: #fff; border: 1px solid var(--line); overflow: hidden; display: grid; place-items: center }
+.hpic img { max-width: 100%; max-height: 100%; display: block }
+.htxt { min-width: 0 }
+.hc { font-size: .88rem; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis }
+.hf { font-size: .74rem; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis }
+.gd { display: inline-block; margin-right: 6px; padding: 0 6px; border-radius: 4px; background: var(--accent-soft); color: var(--accent); font-size: .68rem; font-weight: 600; cursor: pointer }
+.hs { display: grid; justify-items: end; font: .78rem var(--font-data); font-variant-numeric: tabular-nums; color: var(--muted); white-space: nowrap }
+.hs span:last-child { color: var(--accent) }
+
+.sync { margin: 0; font-size: .84rem; padding: 10px 12px; border-radius: 8px; border: 1px solid var(--line); background: var(--panel) }
+.sync.on { border-color: var(--accent); color: var(--fg) }
+.sync.off { color: var(--warn) }
+.custtable { width: 100%; border-collapse: collapse; font-size: .85rem }
+.custtable th, .custtable td { text-align: left; padding: 5px 8px; border-bottom: 1px solid var(--line) }
+.custtable th { font-size: .72rem; color: var(--muted); font-weight: 500 }
+.custtable td.num { font-family: var(--font-data); font-variant-numeric: tabular-nums; white-space: nowrap }
+.custwrap { max-height: 260px; overflow: auto; border: 1px solid var(--line); border-radius: 8px }
+.custhint { font-size: .78rem; color: var(--muted); margin: 6px 0 0 }
+.savestate.dirty { color: var(--warn) }
+.savestate.ok { color: var(--accent) }
+.sh { font-size: .95rem; text-transform: none; letter-spacing: 0; color: var(--fg); margin: 0 }
+.form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 16px; margin-top: 12px }
+.form label { display: grid; gap: 3px; font-size: .8rem; color: var(--muted) }
+.form label.check { display: flex; align-items: center; gap: 8px; color: var(--fg) }
+.form .full { grid-column: 1 / -1 }
+.unit { display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: .78rem }
+
+.stage { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px; display: grid; gap: 12px; min-width: 0 }
+.bar { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; justify-content: space-between }
+.stats { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: .85rem }
+.stats b { font-family: var(--font-data); font-weight: 500 }
+.btn { font: 600 .92rem var(--font-body); color: #fff; background: var(--accent); border: 0; border-radius: 8px; padding: 9px 16px; cursor: pointer }
+:root[data-theme="dark"] .btn { color: #15171c }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .btn { color: #15171c } }
+.btn:disabled { opacity: .45; cursor: default }
+.btn:focus-visible, .chip:focus-visible, .x:focus-visible, .drop:focus-visible, select:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px }
+.sheets { display: flex; flex-wrap: wrap; gap: 16px; justify-content: center; padding: 18px; background: var(--table); border-radius: 8px;
+  background-image: linear-gradient(var(--line) 1px, transparent 1px), linear-gradient(90deg, var(--line) 1px, transparent 1px); background-size: 24px 24px; background-position: -1px -1px }
+.sheet { display: grid; gap: 6px; justify-items: center; min-width: 0 }
+.cmp { display: grid; grid-template-rows: auto minmax(0, 1fr); height: clamp(380px, 78vh, 1000px); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: var(--table) }
+.cmp.full { position: fixed; inset: 0; z-index: 50; height: auto; border: 0; border-radius: 0;
+  padding: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px) env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px) }
+.cmpbar { display: flex; align-items: center; gap: 6px 14px; padding: 6px 10px; background: var(--panel); border-bottom: 1px solid var(--line); flex-wrap: wrap; font-size: .85rem }
+.cmpbar label { display: inline-flex; align-items: center; gap: 6px; cursor: pointer }
+.cmppanes { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); min-height: 0 }
+.cmp.solo .cmppanes { grid-template-columns: minmax(0, 1fr) }
+.cmp.solo #zvO { display: none }
+.zv { display: grid; grid-template-rows: auto minmax(0, 1fr); min-width: 0; min-height: 0 }
+#zvO { border-right: 1px solid var(--line) }
+@media (max-width: 900px) {
+  .cmp { height: clamp(560px, 94vh, 1200px) }
+  .cmppanes { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) minmax(0, 1fr) }
+  .cmp.solo .cmppanes { grid-template-rows: minmax(0, 1fr) }
+  #zvO { border-right: 0; border-bottom: 1px solid var(--line) }
+}
+.zvbar { display: flex; align-items: center; gap: 6px; padding: 5px 8px; background: var(--panel); border-bottom: 1px solid var(--line); flex-wrap: wrap; min-height: 42px }
+.zvtitle { font-size: .78rem; font-weight: 600; color: var(--muted); letter-spacing: .04em }
+.zvbar select { flex: 1 1 120px; min-width: 0; max-width: 100%; font: .82rem var(--font-body); padding: 3px 6px }
+.cmpbar button, .zvbar button { font: 600 .86rem var(--font-body); color: var(--fg); background: var(--bg); border: 1px solid var(--line); border-radius: 7px; min-width: 32px; padding: 4px 9px; cursor: pointer }
+.cmpbar button:hover:not(:disabled), .zvbar button:hover:not(:disabled) { border-color: var(--accent) }
+.zvbar button:disabled { opacity: .35; cursor: default }
+.cmpbar button:focus-visible, .zvbar button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px }
+.zvnav { display: flex; align-items: center; gap: 6px; font-size: .82rem }
+.zvpct { font-family: var(--font-data); font-size: .82rem; min-width: 3.8em; text-align: center; font-variant-numeric: tabular-nums }
+.zvsp { flex: 1 }
+.zvbody { position: relative; overflow: hidden; touch-action: none; cursor: grab; outline: none;
+  background-image: linear-gradient(var(--line) 1px, transparent 1px), linear-gradient(90deg, var(--line) 1px, transparent 1px); background-size: 24px 24px; background-position: -1px -1px }
+.zvbody:focus-visible { box-shadow: inset 0 0 0 2px var(--accent) }
+.zvbody.grab { cursor: grabbing }
+.zvbody canvas { position: absolute; left: 0; top: 0; display: block }
+.note { font-size: .8rem; color: var(--muted); margin: 0 }
+.offset { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; font-size: .85rem; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg) }
+.offset b { font-weight: 600 }
+.offset .hint { color: var(--muted); font-size: .78rem }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 7px; overflow: hidden }
+.seg button { font: 500 .8rem var(--font-data); background: transparent; color: var(--fg); border: 0; padding: 4px 10px; cursor: pointer }
+.seg button + button { border-left: 1px solid var(--line) }
+.seg button[aria-pressed="true"] { background: var(--accent); color: var(--bg) }
+.seg button:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px }
+.status { font-size: .82rem }
+.status:empty { display: none }
+.status.bad { color: var(--bad) }
+.empty { color: var(--muted); font-size: .9rem; padding: 48px 24px; text-align: center; max-width: 42ch; line-height: 1.7 }
+.empty b { color: var(--fg); font-size: 1rem }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important } }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header>
+    <h1><a class="homelink" href="/">← ใบงาน</a>ฟิล์ม positive <small id="who"></small></h1>
+    <div class="headr">
+    <button type="button" class="install" id="installBtn" hidden title="ติดตั้งเป็นแอปบนเครื่องนี้ รับไฟล์จากปุ่มแชร์ได้">ติดตั้งแอป</button>
+    <nav class="tabs" role="tablist" aria-label="หน้า">
+      <button type="button" role="tab" id="tabWork" aria-controls="viewWork" aria-selected="true">งานฟิล์ม</button>
+      <button type="button" role="tab" id="tabHist" aria-controls="viewHist" aria-selected="false">ประวัติ</button>
+      <button type="button" role="tab" id="tabSetup" aria-controls="viewSetup" aria-selected="false" hidden>ตั้งค่า</button>
+    </nav>
+    </div>
+  </header>
+
+  <div class="hist" id="viewHist" role="tabpanel" aria-labelledby="tabHist" hidden>
+    <div class="histbar">
+      <label class="hq"><span>ค้นหา</span><input type="search" id="histQ" placeholder="ชื่อไฟล์ ลูกค้า ความหนา เช่น PALLY 400"></label>
+      <label class="hd"><span>ตั้งแต่วันที่</span><input type="date" id="histFrom"></label>
+      <label class="hd"><span>ถึงวันที่</span><input type="date" id="histTo"></label>
+      <button type="button" class="ghost" id="histClear">ล้างตัวกรอง</button>
+    </div>
+    <div class="histsum" id="histSum"></div>
+    <div class="status" id="histStatus" role="status"></div>
+    <div class="histlist" id="histList"></div>
+    <button type="button" class="ghost" id="histMore" hidden>โหลดรายการเก่ากว่านี้</button>
+  </div>
+
+  <div class="setup" id="viewSetup" role="tabpanel" aria-labelledby="tabSetup" hidden>
+      <p class="sync" id="syncNote"></p>
+      <section class="settings" id="custBox">
+        <h2 class="sh">ลูกค้า ความหนาบล็อก และการชดเชยขอบ</h2>
+        <div class="form">
+          <label class="full" id="custLocal">รายชื่อลูกค้า บรรทัดละราย: ชื่อ, ความหนาบล็อกปกติ (µm)
+            <textarea id="custList" rows="7" spellcheck="false"></textarea></label>
+          <div class="full" id="custRemote" hidden></div>
+          <label class="full">ความหนาบล็อกที่มีให้เลือก (µm คั่นด้วยจุลภาค)
+            <input type="text" id="thickList" inputmode="numeric"></label>
+          <label>ความหนาเมื่อไม่ระบุลูกค้า <span class="unit"><input type="number" id="defaultThick" step="50" min="0" value="0"> µm</span></label>
+          <label>ชดเชยอัตโนมัติ = ความหนา × <span class="unit"><input type="number" id="autoFactor" step="0.05" min="0" max="2"></span></label>
+          <p class="note full">ลูกค้าที่ชื่ออยู่ในชื่อไฟล์จะถูกเลือกให้อัตโนมัติ · ใส่ 0 ได้ถ้าไม่ต้องการความหนาเริ่มต้น</p>
+        </div>
+      </section>
+
+      <section class="settings" id="settingsBox">
+        <h2 class="sh">แผ่นฟิล์มและมาร์ค</h2>
+        <div class="form">
+          <label>ขนาดฟิล์ม กว้าง <span class="unit"><input type="number" id="sheetW" step="0.5" min="4"> นิ้ว</span></label>
+          <label>ยาว <span class="unit"><input type="number" id="sheetH" step="0.5" min="4"> นิ้ว</span></label>
+          <label>ขอบแผ่น <span class="unit"><input type="number" id="margin" step="1" min="0"> mm</span></label>
+          <label>ช่องห่างระหว่างงาน <span class="unit"><input type="number" id="gap" step="1" min="0"> mm</span></label>
+          <label>ขนาดกากบาท (ครึ่งแขน) <span class="unit"><input type="number" id="markArm" step="0.5" min="2"> mm</span></label>
+          <label>ความเข้มมาร์ค <span class="unit"><input type="number" id="markGrey" step="5" min="5" max="100"> % K</span></label>
+          <label>ความเข้มชื่องาน <span class="unit"><input type="number" id="labelGrey" step="5" min="5" max="100"> % K</span></label>
+          <label>ความหนาเส้นกากบาท <span class="unit"><input type="number" id="markWidthMm" step="0.05" min="0.05" max="2"> mm</span></label>
+          <label class="full">สีที่อ่อนกว่านี้ถือเป็นสีขาว (ไม่พิมพ์) <span class="unit"><input type="number" id="nearWhite" step="1" min="0" max="50"> % หมึกรวม (C+M+Y+K)</span></label>
+          <label class="full">ชิ้นที่เล็กกว่านี้ถือเป็นเศษ ตัดทิ้ง (ไม่ขยายตอนชดเชยขอบ) <span class="unit"><input type="number" id="speckMm" step="0.05" min="0" max="2"> mm</span></label>
+          <label class="check"><input type="checkbox" id="labels"> ข้อความใต้ลาย</label>
+          <label class="check"><input type="checkbox" id="cropMarks"> เส้นตัด (crop mark)</label>
+          <p class="note full">ส่วนที่ไม่ใช่ลายแยกจากหน้าที่ของเส้น ไม่ได้ดูจากความหนา: เส้นกรอบแป้น เส้นรูปถุงเท้า เส้นประ เส้นสีเดียวกับเส้นบอกขนาดนอกกรอบ และเส้นวงใหญ่ที่คลุมเกือบทั้งแป้น (เช่นวงกลมร่าง) จะไม่ถูกทำเป็นสีดำ ถ้ายังมีสีที่ไม่ใช่ลายหลุดเข้ามา แตะที่วงสีบนการ์ดเพื่อตัดออก</p>
+          <p class="note full">กากบาท 3 จุด (บน กลาง ล่าง) วางบนเส้นกึ่งกลางระหว่างลายซ้ายและขวา ใต้ลายมี 2 บรรทัด (ห่างกากบาทล่างสุด 1 cm): ลูกค้า - ชื่อไฟล์ แล้วตามด้วยความหนาบล็อก · การชดเชยขอบ · วันที่ ทั้งหมดเป็นสีเทาจาง จึงถ่ายไม่ติดบล็อก · crop mark อยู่นอกแนวตัด</p>
+        </div>
+      </section>
+    <div class="savebar">
+      <button type="button" class="btn" id="saveAll">บันทึกการตั้งค่า</button>
+      <button type="button" class="ghost" id="reset">คืนค่าเริ่มต้น</button>
+      <span class="savestate" id="saveState" role="status"></span>
+    </div>
+    <p class="note">ไฟล์ลูกค้าทั้งหมดประมวลผลในเบราว์เซอร์นี้ ไม่ได้อัปโหลดไปที่ไหน</p>
+  </div>
+
+  <div class="grid" id="viewWork" role="tabpanel" aria-labelledby="tabWork">
+    <section class="rail" aria-label="งาน">
+      <section class="queue" id="queueBox" aria-label="บล็อครอทำฟิล์ม">
+        <div class="qhead"><h2 class="sh">บล็อครอทำฟิล์ม</h2><span class="qempty" id="queueCount"></span></div>
+        <div id="queueList"><div class="qempty">กำลังโหลด…</div></div>
+        <div class="qbar" id="queueBar" hidden>
+          <button type="button" class="btn" id="queueAdd">ใส่ที่เลือกลงฟิล์ม</button>
+          <button type="button" class="ghost" id="queueAll">เลือกทั้งหมด</button>
+        </div>
+      </section>
+      <label class="drop" id="drop" tabindex="0">
+        <strong>หรือลากไฟล์ .ai / .pdf / .zip มาวางเอง</strong>
+        <span>สำหรับงานที่ไม่มีใบงาน · ใส่ได้หลายไฟล์พร้อมกัน</span>
+        <input type="file" id="pick" multiple accept=".ai,.pdf,.zip,application/pdf,application/zip">
+      </label>
+
+      <div class="jobs" id="jobs"></div>
+
+    </section>
+
+    <section class="stage" aria-label="แผ่นฟิล์ม">
+      <div class="bar">
+        <div class="stats" id="stats"></div>
+        <div class="saveside">
+          <label class="keep" id="keepWrap" hidden><input type="checkbox" id="keepCopy" checked> เก็บสำเนาในประวัติ</label>
+          <label class="keep" id="origWrap" hidden><input type="checkbox" id="keepOrig" checked> เก็บไฟล์ต้นฉบับ</label>
+          <button class="btn" id="save" disabled>บันทึก PDF ฟิล์ม</button>
+        </div>
+      </div>
+      <div class="status" id="status" role="status"></div>
+      <div class="sheets" id="sheets"><div class="empty">กำลังโหลดเครื่องมือ…</div></div>
+      <div class="cmp" id="cmp" hidden>
+        <div class="cmpbar">
+          <label><input type="checkbox" id="cmpShow" checked> เทียบกับต้นฉบับ</label>
+          <label><input type="checkbox" id="cmpSync" checked> ซูมและเลื่อนพร้อมกัน</label>
+          <span class="zvsp"></span>
+          <button type="button" id="cmpFull" title="ขยายเต็มจอ (Esc เพื่อออก)">เต็มจอ</button>
+        </div>
+        <div class="cmppanes">
+          <div class="zv" id="zvO">
+            <div class="zvbar">
+              <span class="zvtitle">ต้นฉบับ</span>
+              <select id="origSel" aria-label="เลือกไฟล์ต้นฉบับที่จะเทียบ"></select>
+              <button type="button" data-act="out" aria-label="ซูมออก">−</button><span class="zvpct" data-role="pct">100%</span><button type="button" data-act="in" aria-label="ซูมเข้า">+</button>
+              <button type="button" data-act="fit" title="พอดีกรอบ (0)">พอดี</button>
+            </div>
+            <div class="zvbody" tabindex="0" role="img" aria-label="ไฟล์ต้นฉบับ"><canvas></canvas></div>
+          </div>
+          <div class="zv" id="zvF">
+            <div class="zvbar">
+              <span class="zvtitle">ฟิล์ม</span>
+              <span class="zvnav" data-role="nav"><button type="button" data-act="prev" aria-label="แผ่นก่อนหน้า">‹</button><span data-role="page">แผ่น 1</span><button type="button" data-act="next" aria-label="แผ่นถัดไป">›</button></span>
+              <span class="zvsp"></span>
+              <button type="button" data-act="out" aria-label="ซูมออก">−</button><span class="zvpct" data-role="pct">100%</span><button type="button" data-act="in" aria-label="ซูมเข้า">+</button>
+              <button type="button" data-act="fit" title="เห็นทุกแผ่นพอดีกรอบ (0)">พอดี</button>
+              <button type="button" data-act="100" title="ขนาดจริงบนจอ (1)">100%</button>
+            </div>
+            <div class="zvbody" tabindex="0" role="img" aria-label="ตัวอย่างฟิล์ม"><canvas></canvas></div>
+          </div>
+        </div>
+      </div>
+      <p class="note">ล้อเมาส์หรือหนีบสองนิ้วบนตัวอย่างเพื่อซูม · ลากเพื่อเลื่อน · ดับเบิลคลิกเพื่อขยายตรงจุดนั้น · สั่งพิมพ์ที่ 100% / Actual size เท่านั้น ห้ามใช้ Fit to page · ลายทุกชิ้นเป็นเวกเตอร์ขนาดจริง</p>
+    </section>
+  </div>
+</div>
+
+
+<script src="/film/vendor/pdf-lib.min.js"></script>
+<script src="/film/vendor/jszip.min.js"></script>
+<script src="/film/vendor/pdf.min.js"></script>
+<script src="/film/js/film-core.js"></script>
+<script>
+(function () {
+  'use strict';
+  const C = window.FilmCore;
+  const $ = (id) => document.getElementById(id);
+  /* ---------- login: same session as the job app (บันทึกขึ้นบล็อค) ---------- */
+  const TOKEN_KEY = 'stencil-token';
+  let token = null; try { token = localStorage.getItem(TOKEN_KEY); } catch (e) {}
+  if (!token) { location.replace('/'); return; }
+  async function apiFetch(path, opt = {}) {
+    const r = await fetch(path, { cache: 'no-store', ...opt, headers: { ...(opt.headers || {}), Authorization: 'Bearer ' + token } });
+    if (r.status === 401) { try { localStorage.removeItem(TOKEN_KEY); } catch (e) {} location.replace('/'); throw new Error('กรุณาเข้าสู่ระบบใหม่'); }
+    return r;
+  }
+  const tq = (u) => u + (u.includes('?') ? '&' : '?') + 't=' + encodeURIComponent(token);
+  const DEFAULTS = { sheetW: 21, sheetH: 31, margin: 10, gap: 15, markArm: 5, markGrey: 25, markWidthMm: 0.15, labelGrey: 25, nearWhite: 5, speckMm: 0.2, labels: true, cropMarks: false };
+  let st = { ...DEFAULTS };
+  try {
+    const s4 = JSON.parse(localStorage.getItem('film-settings-v4') || 'null');
+    if (s4) st = { ...DEFAULTS, ...s4 };
+    else {
+      const s3 = JSON.parse(localStorage.getItem('film-settings-v3') || 'null');
+      if (s3) { st = { ...DEFAULTS, ...s3, cropMarks: false }; if (s3.markWidth) st.markWidthMm = Math.round(s3.markWidth * 25.4 / 72 * 100) / 100; delete st.markWidth; }
+    }
+  } catch (e) {}
+  const jobs = []; let lastPdf = null, lastPlan = null, lastBlocks = []; let seq = 0; let buildTimer = 0; let buildId = 0;
+  if (window.pdfjsLib) pdfjsLib.GlobalWorkerOptions.workerSrc = '/film/vendor/pdf.worker.min.js';
+
+  /* ---------- settings form ---------- */
+  const NUMS = ['sheetW', 'sheetH', 'margin', 'gap', 'markArm', 'markGrey', 'labelGrey', 'markWidthMm', 'nearWhite', 'speckMm'];
+  function fillForm() { NUMS.forEach(k => $(k).value = st[k]); $('labels').checked = st.labels; $('cropMarks').checked = st.cropMarks; }
+  fillForm();
+  function stPlain() { const o = {}; Object.keys(DEFAULTS).forEach(k => o[k] = st[k]); return o; }
+  const LBL_FONT = '"IBM Plex Sans Thai", "Noto Sans Thai", Tahoma, sans-serif';
+  const mctx = document.createElement('canvas').getContext('2d');
+  function measureText(t, pt) { mctx.font = `${pt * 10}px ${LBL_FONT}`; return mctx.measureText(t).width / 10; }
+  async function labelImage(t, pt, grey) {
+    const S = 10;                                   // 10 px per pt, about 720 dpi
+    const w = Math.ceil(measureText(t, pt) * S) + 4, h = Math.ceil(pt * 1.45 * S);
+    const cv = document.createElement('canvas'); cv.width = w; cv.height = h;
+    const g = cv.getContext('2d'); g.font = `${pt * S}px ${LBL_FONT}`; g.textBaseline = 'alphabetic';
+    const v = Math.round(255 * (1 - grey)); g.fillStyle = `rgb(${v},${v},${v})`; g.fillText(t, 2, pt * 1.1 * S);
+    const blob = await new Promise(r => cv.toBlob(r, 'image/png'));
+    return { png: new Uint8Array(await blob.arrayBuffer()), w: w / S, h: h / S };
+  }
+  st.measureText = measureText; st.labelImage = labelImage;
+  const today = new Date();
+  st.dateText = `${String(today.getDate()).padStart(2, '0')}/${String(today.getMonth() + 1).padStart(2, '0')}/${today.getFullYear()}`;
+
+  /* ---------- customers & stencil thickness ---------- */
+  const CFG_DEFAULT = {
+    customers: [{ name: 'PALLY', thick: 500 }, { name: 'Skims Crew', thick: 500 }, { name: 'CARVE HOUSE', thick: 500 }, { name: 'REQ', thick: 500 }, { name: 'BERV', thick: 500 }],
+    thicknesses: [100, 200, 300, 400, 500, 600, 800], defaultThick: 500, factor: 0.5
+  };
+  let cfg = JSON.parse(JSON.stringify(CFG_DEFAULT));
+  try { const c = JSON.parse(localStorage.getItem('film-cfg-v1') || 'null'); if (c && Array.isArray(c.customers)) cfg = { ...cfg, ...c }; } catch (e) {}
+  st.autoFactor = cfg.factor;
+  /* ---------- shared settings on the server (Cloudflare Worker + stencil-db) ---------- */
+  const remote = { ok: false, updated: 0, customers: [] };
+  const BOOLS = ['labels', 'cropMarks'];
+  function syncNote() {
+    const n = $('syncNote');
+    if (remote.ok) { n.className = 'sync on'; n.textContent = 'การตั้งค่าในหน้านี้ใช้ร่วมกันทุกเครื่อง บันทึกแล้วทุกคนเห็นค่าเดียวกัน · รายชื่อลูกค้าและความหนามาจากแอปบันทึกขึ้นบล็อค'; }
+    else { n.className = 'sync off'; n.textContent = 'ต่อเซิร์ฟเวอร์ไม่ได้ การตั้งค่าจะเก็บไว้ในเบราว์เซอร์นี้เท่านั้น'; }
+    $('custLocal').hidden = remote.ok; $('custRemote').hidden = !remote.ok;
+  }
+  function renderCustRemote() {
+    const box = $('custRemote'); box.textContent = '';
+    const lab = document.createElement('div'); lab.style.cssText = 'font-size:.8rem;color:var(--muted);margin-bottom:4px'; lab.textContent = `รายชื่อลูกค้า (${remote.customers.length} ราย) จากแอปบันทึกขึ้นบล็อค`;
+    box.appendChild(lab);
+    if (!remote.customers.length) { const p = document.createElement('p'); p.className = 'custhint'; p.textContent = 'ยังไม่มีลูกค้าในแอปบันทึกขึ้นบล็อค'; box.appendChild(p); return; }
+    const wrap = document.createElement('div'); wrap.className = 'custwrap';
+    const t = document.createElement('table'); t.className = 'custtable';
+    t.innerHTML = '<thead><tr><th>ลูกค้า</th><th>ความหนาบล็อก</th></tr></thead>';
+    const tb = document.createElement('tbody');
+    remote.customers.forEach(c => { const tr = document.createElement('tr'); const a = document.createElement('td'); a.textContent = c.name; const b = document.createElement('td'); b.className = 'num';
+      b.textContent = c.thick != null ? `${c.thick} µm` : `— (ใช้ ${cfg.defaultThick} µm)`; tr.append(a, b); tb.appendChild(tr); });
+    t.appendChild(tb); wrap.appendChild(t); box.appendChild(wrap);
+    const h = document.createElement('p'); h.className = 'custhint'; h.textContent = 'เพิ่มลูกค้าหรือแก้ความหนาได้ที่แอปบันทึกขึ้นบล็อค ⚙ ตั้งค่า (สเปคประจำของลูกค้า) แล้วกลับมาเปิดหน้านี้ใหม่'; box.appendChild(h);
+  }
+  function applyFilm(f) {
+    if (f) {
+      Object.keys(DEFAULTS).forEach(k => { if (BOOLS.includes(k)) { if (typeof f[k] === 'boolean') st[k] = f[k]; } else if (typeof f[k] === 'number') st[k] = f[k]; });
+      if (Array.isArray(f.thicknesses) && f.thicknesses.length) cfg.thicknesses = f.thicknesses;
+      if (typeof f.defaultThick === 'number') cfg.defaultThick = f.defaultThick;
+      if (typeof f.factor === 'number') cfg.factor = f.factor;
+      remote.updated = f.updated || 0;
+    }
+    if (remote.ok) cfg.customers = remote.customers;
+    st.autoFactor = cfg.factor;
+    fillForm(); fillCfg(); if (remote.ok) renderCustRemote();
+  }
+  async function loadRemote() {
+    try {
+      const ctl = new AbortController(); const tm = setTimeout(() => ctl.abort(), 5000);
+      const r = await apiFetch('/api/film-settings', { signal: ctl.signal }); clearTimeout(tm);
+      if (!r.ok) throw new Error('http ' + r.status);
+      const d = await r.json();
+      remote.ok = true; remote.customers = Array.isArray(d.customers) ? d.customers : []; remote.history = !!(d.features && d.features.history); remote.originals = !!(d.features && d.features.originals);
+      applyFilm(d.film);
+    } catch (e) { remote.ok = false; }
+    syncNote(); syncKeep();
+    return remote.ok;
+  }
+  function filmPayload() { return { ...stPlain(), thicknesses: cfg.thicknesses, defaultThick: cfg.defaultThick, factor: cfg.factor }; }
+
+  function fillCfg() {
+    $('custList').value = cfg.customers.map(c => `${c.name}, ${c.thick}`).join('\n');
+    $('thickList').value = cfg.thicknesses.join(', ');
+    $('defaultThick').value = cfg.defaultThick; $('autoFactor').value = cfg.factor;
+  }
+  fillCfg();
+  function readCfgForm() {
+    const customers = remote.ok ? remote.customers : $('custList').value.split(/\n/).map(l => l.trim()).filter(Boolean).map(l => {
+      const m = l.match(/^(.*?)[,\t;]\s*(\d+)\s*(µm|um)?$/i);
+      return m ? { name: m[1].trim(), thick: +m[2] } : { name: l, thick: null };
+    }).filter(c => c.name);
+    const thicknesses = [...new Set($('thickList').value.split(/[,\s]+/).filter(x => x !== '').map(Number).filter(v => isFinite(v) && v >= 0))].sort((a, b) => a - b);
+    const dt = parseFloat($('defaultThick').value), fa = parseFloat($('autoFactor').value);
+    return { customers, thicknesses: thicknesses.length ? thicknesses : CFG_DEFAULT.thicknesses,
+      defaultThick: isFinite(dt) && dt >= 0 ? dt : CFG_DEFAULT.defaultThick, factor: isFinite(fa) && fa >= 0 ? fa : 0.5 };
+  }
+  /* ---------- one save button for every setting on this tab ---------- */
+  function markDirty() { $('saveState').textContent = 'มีการแก้ไขที่ยังไม่ได้บันทึก'; $('saveState').className = 'savestate dirty'; }
+  $('viewSetup').addEventListener('input', markDirty);
+  $('viewSetup').addEventListener('change', markDirty);
+  $('saveAll').addEventListener('click', async () => {
+    const bad = [];
+    NUMS.forEach(k => { const v = parseFloat($(k).value); if (isFinite(v) && v >= 0) st[k] = v; else bad.push(k); });
+    st.labels = $('labels').checked; st.cropMarks = $('cropMarks').checked;
+    cfg = readCfgForm(); st.autoFactor = cfg.factor;
+    saveSettings();
+    try { localStorage.setItem('film-cfg-v1', JSON.stringify(cfg)); } catch (e) {}
+    let note = '';
+    if (remote.ok) {
+      $('saveAll').disabled = true; $('saveState').textContent = 'กำลังบันทึก…'; $('saveState').className = 'savestate';
+      try {
+        const r = await apiFetch('/api/film-settings', { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ film: filmPayload(), baseUpdated: remote.updated }) });
+        const d = await r.json();
+        if (r.status === 409) { applyFilm(d.film); $('saveAll').disabled = false; $('saveState').textContent = 'มีคนบันทึกการตั้งค่าก่อนหน้าคุณ แสดงค่าล่าสุดแล้ว ตรวจแล้วกดบันทึกอีกครั้ง'; $('saveState').className = 'savestate dirty'; renderJobs(); schedule(0); return; }
+        if (!r.ok) throw new Error(d.error || r.status);
+        remote.updated = d.film.updated; note = ' ทุกเครื่องจะใช้ค่านี้';
+      } catch (e) { note = ' (บันทึกขึ้นเซิร์ฟเวอร์ไม่สำเร็จ เก็บไว้ในเบราว์เซอร์นี้ก่อน)'; }
+      $('saveAll').disabled = false;
+    }
+    fillForm(); fillCfg(); if (remote.ok) renderCustRemote();
+    // designs that still follow a customer default pick up the new thickness
+    jobs.forEach(r => { if (r.job && r.job.dset) Object.values(r.job.dset).forEach(ds => { if (!ds.thickSet) ds.thick = thickFor(ds.customer); }); });
+    renderJobs(); schedule(0);
+    $('saveState').textContent = (bad.length ? 'บันทึกแล้ว (บางช่องไม่ใช่ตัวเลข จึงใช้ค่าเดิม)' : 'บันทึกการตั้งค่าแล้ว') + note;
+    $('saveState').className = 'savestate ok';
+  });
+  $('reset').addEventListener('click', () => {
+    NUMS.forEach(k => $(k).value = DEFAULTS[k]); $('labels').checked = DEFAULTS.labels; $('cropMarks').checked = DEFAULTS.cropMarks;
+    const keep = cfg; cfg = JSON.parse(JSON.stringify(CFG_DEFAULT)); if (remote.ok) cfg.customers = remote.customers; fillCfg(); cfg = keep;
+    $('saveState').textContent = 'ใส่ค่าเริ่มต้นแล้ว กดบันทึกการตั้งค่าเพื่อใช้งาน'; $('saveState').className = 'savestate dirty';
+  });
+  const custOf = (name) => cfg.customers.find(c => c.name === name);
+  const thickFor = (name) => { const c = custOf(name); return c && c.thick != null ? c.thick : cfg.defaultThick; };
+  function guessCustomer(fileName) {
+    const f = fileName.toLowerCase().replace(/[_\-.]+/g, ' ');
+    const g = f.replace(/\s+/g, '');
+    let best = null, bestScore = 0;
+    for (const c of cfg.customers) {
+      const n = c.name.toLowerCase().replace(/[_\-.]+/g, ' ').trim(); if (!n) continue;
+      let score = g.includes(n.replace(/\s+/g, '')) ? 100 + n.length : 0;          // whole name, spaces ignored
+      if (!score) n.split(/\s+/).forEach(tok => { if (tok.length >= 4 && g.includes(tok)) score += tok.length; });
+      if (score > bestScore) { best = c; bestScore = score; }
+    }
+    return best ? best.name : '';
+  }
+  function dsFor(j, idx, fileName) {
+    j.dset = j.dset || {};
+    if (!j.dset[idx]) { const cu = guessCustomer(fileName); j.dset[idx] = { customer: cu, thick: thickFor(cu), mode: 'auto', manualUm: 200 }; }
+    return j.dset[idx];
+  }
+  function saveSettings() { try { localStorage.setItem('film-settings-v4', JSON.stringify(stPlain())); } catch (e) {} }
+
+  /* ---------- tabs ---------- */
+  const TABS = [['work', 'tabWork', 'viewWork'], ['hist', 'tabHist', 'viewHist'], ['setup', 'tabSetup', 'viewSetup']];
+  function showTab(which) {
+    TABS.forEach(([k, t, v]) => { $(v).hidden = k !== which; $(t).setAttribute('aria-selected', String(k === which)); });
+    if (which === 'work') schedule(0);
+    if (which === 'hist') loadHistory(true);
+    if (which === 'setup' && !/dirty/.test($('saveState').className)) loadRemote();
+  }
+  TABS.forEach(([k, t], i) => {
+    $(t).addEventListener('click', () => showTab(k));
+    $(t).addEventListener('keydown', e => {
+      if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return;
+      e.preventDefault(); const n = TABS[(i + (e.key === 'ArrowRight' ? 1 : TABS.length - 1)) % TABS.length]; showTab(n[0]); $(n[1]).focus();
+    });
+  });
+
+  /* ---------- file intake ---------- */
+  const drop = $('drop');
+  ['dragenter', 'dragover'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.add('over'); }));
+  ['dragleave', 'drop'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.remove('over'); }));
+  drop.addEventListener('drop', e => addFiles([...e.dataTransfer.files]));
+  drop.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); $('pick').click(); } });
+  $('pick').addEventListener('change', e => { addFiles([...e.target.files]); e.target.value = ''; });
+
+  async function addFiles(files) {
+    const items = [];
+    for (const f of files) {
+      if (/\.zip$/i.test(f.name)) {
+        try {
+          const z = await JSZip.loadAsync(await f.arrayBuffer(), { decodeFileName: (b) => {
+            try { return new TextDecoder('utf-8', { fatal: true }).decode(b); } catch (e) {}
+            try { return new TextDecoder('windows-874').decode(b); } catch (e) { return String.fromCharCode.apply(null, b); } } });
+          const entries = Object.values(z.files).filter(e => !e.dir && /\.(ai|pdf)$/i.test(e.name) && !/(^|\/)(__MACOSX|\._)/.test(e.name));
+          if (!entries.length) setStatus('ไม่พบไฟล์ .ai หรือ .pdf ใน ' + f.name, true);
+          for (const e of entries) items.push({ name: e.name.split('/').pop(), bytes: new Uint8Array(await e.async('arraybuffer')) });
+        } catch (err) { setStatus('เปิดไฟล์ zip ไม่ได้: ' + f.name, true); }
+      } else if (/\.(ai|pdf)$/i.test(f.name)) items.push({ name: f.name, bytes: new Uint8Array(await f.arrayBuffer()) });
+      else setStatus('ข้ามไฟล์ ' + f.name + ' (รับเฉพาะ .ai .pdf .zip)', true);
+    }
+    if (!items.length) return;
+    for (let i = jobs.length - 1; i >= 0; i--) if (jobs[i].sample) jobs.splice(i, 1);
+    for (const it of items) await addJob(it.name, it.bytes, false);
+    renderJobs(); schedule(0);
+  }
+  async function addJob(name, bytes, sample) {
+    const fail = (e) => /PDF-compatible/.test(e.message) ? e.message : 'อ่านไฟล์นี้ไม่ได้ ไฟล์อาจเสียระหว่างส่ง ลองบีบเป็น .zip แล้วส่งใหม่ หรือ Save As PDF จาก Illustrator';
+    let n = 1;
+    try { n = await C.pageCount(bytes); } catch (e) { jobs.push({ id: ++seq, name, sample, bytes, error: fail(e) }); return; }
+    const base = name.replace(/\.(ai|pdf)$/i, ''), ext = (name.match(/\.(ai|pdf)$/i) || ['.pdf'])[0];
+    for (let p = 0; p < n; p++) {
+      const nm = n > 1 ? `${base} หน้า ${p + 1}${ext}` : name;
+      const rec = { id: ++seq, name: nm, sample, bytes: bytes.slice(0), page: p, src: name, srcBytes: bytes };
+      try { rec.job = await C.analyze(bytes, nm, p); } catch (e) { rec.error = fail(e); }
+      jobs.push(rec);
+    }
+  }
+
+  /* ---------- job cards ---------- */
+  const f1 = (v) => v.toFixed(1);
+  function colourGroups(cols) {
+    const m = new Map();
+    for (const c of cols) { const g = m.get(c.label); if (g) { g.keys.push(c.key); g.art = g.art || c.art; } else m.set(c.label, { ...c, keys: [c.key] }); }
+    return [...m.values()];
+  }
+  function renderJobs() {
+    const box = $('jobs'); box.textContent = '';
+    for (const rec of jobs) {
+      const card = document.createElement('article'); card.className = 'job' + (rec.sample ? ' sample' : '');
+      const th = document.createElement('div'); th.className = 'thumb'; card.appendChild(th);
+      const body = document.createElement('div'); body.style.minWidth = '0';
+      const head = document.createElement('div'); head.className = 'jhead';
+      const nm = document.createElement('div'); nm.className = 'jname'; nm.textContent = rec.name;
+      if (rec.sample) { const t = document.createElement('span'); t.className = 'tag'; t.textContent = 'ตัวอย่าง'; nm.appendChild(t); }
+      if (rec.screen) { const t = document.createElement('span'); t.className = 'jtag'; t.textContent = rec.screen.done ? `${rec.screen.jobNo} · ทำฟิล์มแล้ว` : rec.screen.jobNo; nm.appendChild(t); }
+      const x = document.createElement('button'); x.className = 'x'; x.type = 'button'; x.textContent = '✕'; x.title = 'เอาไฟล์นี้ออก'; x.setAttribute('aria-label', 'เอา ' + rec.name + ' ออก');
+      x.addEventListener('click', () => { jobs.splice(jobs.indexOf(rec), 1); renderJobs(); renderQueue(); schedule(0); });
+      head.append(nm, x); body.appendChild(head);
+      if (rec.error) { const e = document.createElement('div'); e.className = 'err'; e.textContent = rec.error; body.appendChild(e); card.appendChild(body); box.appendChild(card); continue; }
+      const j = rec.job; const d = C.describe(j, st);
+
+      const sum = document.createElement('div'); sum.className = 'meta';
+      sum.textContent = d.designs.length ? `พบ ${d.designs.length} ลาย` + (d.framed ? ' จากกรอบแป้นในไฟล์' : '') : 'ไม่พบลายในไฟล์นี้';
+      body.appendChild(sum);
+
+      const list = document.createElement('div'); list.className = 'designs';
+      d.designs.forEach((ds) => {
+        const set = dsFor(j, ds.index, rec.name);
+        const box2 = document.createElement('div'); box2.className = 'dbox' + (ds.off ? ' off' : '');
+        const row = document.createElement('label'); row.className = 'design' + (ds.off ? ' off' : '');
+        const cb = document.createElement('input'); cb.type = 'checkbox'; cb.checked = !ds.off; cb.id = `d-${rec.id}-${ds.index}`;
+        cb.addEventListener('change', () => { if (cb.checked) j.excluded.delete(ds.index); else j.excluded.add(ds.index); renderJobs(); schedule(0); });
+        const num = document.createElement('span'); num.className = 'dnum'; num.textContent = ds.index + 1;
+        const txt = document.createElement('span'); txt.className = 'mono';
+        const fr = ds.frames[0];
+        txt.textContent = (ds.frames.length === 2 ? `ซ้าย-ขวา · แป้นละ ${f1(fr.w)} × ${f1(fr.h)} mm · กึ่งกลางห่าง ${f1(ds.centreDistance)} mm` : `แป้นเดียว ไม่มีคู่ · ${f1(fr.w)} × ${f1(fr.h)} mm`);
+        const sw = document.createElement('span'); sw.className = 'swatches';
+        ds.colours.forEach(c => { const i = document.createElement('i'); i.style.background = c.css; i.title = c.label; sw.appendChild(i); });
+        row.append(cb, num, txt, sw); box2.appendChild(row);
+
+        // customer / stencil thickness / edge compensation for this design
+        const spec = document.createElement('div'); spec.className = 'spec';
+        const mk = (labelText, el) => { const l = document.createElement('label'); const t = document.createElement('span'); t.textContent = labelText; l.append(t, el); spec.appendChild(l); return l; };
+        const selC = document.createElement('select'); selC.id = `cu-${rec.id}-${ds.index}`;
+        const names = cfg.customers.map(c => c.name); if (set.customer && !names.includes(set.customer)) names.push(set.customer);
+        [['', 'ไม่ระบุลูกค้า'], ...names.map(n => [n, n])].forEach(([v, t]) => { const o = document.createElement('option'); o.value = v; o.textContent = t; selC.appendChild(o); });
+        selC.value = set.customer;
+        selC.addEventListener('change', () => { set.customer = selC.value; set.thick = thickFor(selC.value); set.thickSet = false; renderJobs(); schedule(0); });
+        mk('ลูกค้า', selC);
+        const selT = document.createElement('select'); selT.id = `th-${rec.id}-${ds.index}`;
+        const ths = cfg.thicknesses.slice(); if (set.thick != null && !ths.includes(set.thick)) ths.push(set.thick); ths.sort((a, b) => a - b);
+        ths.forEach(v => { const o = document.createElement('option'); o.value = v; o.textContent = `${v} µm`; selT.appendChild(o); });
+        selT.value = set.thick;
+        selT.addEventListener('change', () => { set.thick = +selT.value; set.thickSet = true; renderJobs(); schedule(0); });
+        mk('ความหนาบล็อก', selT);
+        const selM = document.createElement('select'); selM.id = `cm-${rec.id}-${ds.index}`;
+        [['auto', 'อัตโนมัติ'], ['manual', 'ระบุค่า'], ['none', 'ไม่ชดเชย']].forEach(([v, t]) => { const o = document.createElement('option'); o.value = v; o.textContent = t; selM.appendChild(o); });
+        selM.value = set.mode;
+        selM.addEventListener('change', () => { if (selM.value === 'manual' && set.mode === 'auto') set.manualUm = C.compensation(set, st); set.mode = selM.value; renderJobs(); schedule(0); });
+        mk('ชดเชยขอบ', selM);
+        // value box: editable when "ระบุค่า", otherwise shows the computed value and cannot be edited
+        const um = C.compensation(set, st);
+        const inp = document.createElement('input'); inp.type = 'number'; inp.min = 0; inp.max = 2000; inp.step = 10; inp.id = `mu-${rec.id}-${ds.index}`;
+        inp.value = set.mode === 'manual' ? set.manualUm : um;
+        inp.disabled = set.mode !== 'manual';
+        inp.title = set.mode === 'auto' ? `คำนวณอัตโนมัติ: ${set.thick} × ${st.autoFactor}` : set.mode === 'none' ? 'ไม่ชดเชยขอบ' : 'ระบุค่าชดเชยขอบต่อด้าน';
+        inp.addEventListener('change', () => { const v = +inp.value; if (isFinite(v) && v >= 0) { set.manualUm = v; renderJobs(); schedule(0); } });
+        mk('ค่า µm', inp);
+        box2.appendChild(spec);
+        list.appendChild(box2);
+      });
+      body.appendChild(list);
+
+      // colours found in the artwork: all become black; tap one to leave it out
+      if (d.colours.length) {
+        const chips = document.createElement('div'); chips.className = 'chips';
+        for (const c of colourGroups(d.colours)) {   // colours that differ by less than 1% show as one chip
+          const b = document.createElement('button'); b.type = 'button'; b.className = 'chip';
+          const s = document.createElement('i'); s.style.background = c.css; b.appendChild(s);
+          b.appendChild(document.createTextNode(c.label));
+          b.setAttribute('aria-pressed', String(c.art));
+          b.title = c.art ? 'สีนี้เป็นส่วนของลาย จะกลายเป็นสีดำ แตะเพื่อตัดสีนี้ออกจากลาย' : 'สีนี้ถูกตัดออกจากลาย แตะเพื่อนับกลับเป็นลาย';
+          b.addEventListener('click', () => { c.keys.forEach(k => { if (c.art) j.notArt.add(k); else j.notArt.delete(k); }); renderJobs(); schedule(0); });
+          chips.appendChild(b);
+        }
+        body.appendChild(chips);
+      }
+
+      const notes = [];
+      const nCol = colourGroups(d.colours).filter(c => c.art).length;
+      if (nCol > 1) notes.push(`ลายใช้ ${nCol} สีในไฟล์ ทุกสีกลายเป็นสีดำในฟิล์มเดียว`);
+      if (d.ignored) notes.push(`ไม่นำมาทำฟิล์ม ${d.ignored} ชิ้นที่อยู่นอกกรอบ (คำอธิบาย ขนาด ตัวอย่างสี)`);
+      if (d.specks) notes.push(`ตัดเศษชิ้นเล็ก (เล็กกว่า ${st.speckMm} mm) ออก ${d.specks} ชิ้น`);
+      if (d.nearWhite) notes.push(`พบวัตถุสีเกือบขาว ${d.nearWhite} ชิ้นในกรอบ ถือเป็นสีขาว (ไม่พิมพ์)`);
+      if (d.guides) notes.push(`ตัดเส้นกรอบ เส้นร่าง และเส้นประในแป้นออก ${d.guides} เส้น`);
+      if (notes.length) { const m = document.createElement('div'); m.className = 'meta'; m.textContent = notes.join(' · '); body.appendChild(m); }
+      const warns = j.warnings.slice();
+      if (d.designs.length && !d.framed) warns.unshift('ไม่พบกรอบแป้นในไฟล์ จึงแยกลายจากกลุ่มชิ้นงานแทน ตรวจภาพย่อว่ากรอบตรงกับลายจริง');
+      if (warns.length) { const ul = document.createElement('ul'); ul.className = 'warns'; warns.forEach(w => { const li = document.createElement('li'); li.textContent = w; ul.appendChild(li); }); body.appendChild(ul); }
+      card.appendChild(body); box.appendChild(card);
+      thumb(rec, th);
+    }
+  }
+  const pageCache = new Map();
+  async function thumb(rec, el) {
+    if (!window.pdfjsLib || rec.error) return;
+    try {
+      let pc = pageCache.get(rec.id);
+      if (!pc) {
+        const doc = await pdfjsLib.getDocument({ data: rec.bytes.slice(0), isEvalSupported: false, verbosity: 0 }).promise;
+        const pg = await doc.getPage((rec.page || 0) + 1); const v1 = pg.getViewport({ scale: 1 });
+        const px = 240 * Math.min(2, window.devicePixelRatio || 1);
+        const vp = pg.getViewport({ scale: px / Math.max(v1.width, v1.height) });
+        const cv = document.createElement('canvas'); cv.width = vp.width; cv.height = vp.height;
+        await pg.render({ canvasContext: cv.getContext('2d'), viewport: vp }).promise;
+        pc = { cv, vp }; pageCache.set(rec.id, pc); doc.destroy();
+      }
+      const out = document.createElement('canvas'); out.width = pc.cv.width; out.height = pc.cv.height;
+      const g = out.getContext('2d'); g.drawImage(pc.cv, 0, 0);
+      const d = C.describe(rec.job, st); const k = out.width / 240;
+      const rect = (bb) => { const a = pc.vp.convertToViewportPoint(bb[0], bb[1]), b = pc.vp.convertToViewportPoint(bb[2], bb[3]);
+        return [Math.min(a[0], b[0]), Math.min(a[1], b[1]), Math.abs(b[0] - a[0]), Math.abs(b[1] - a[1])]; };
+      // wash out everything that is not inside a used frame
+      g.save(); g.beginPath(); g.rect(0, 0, out.width, out.height);
+      d.designs.filter(ds => !ds.off).forEach(ds => ds.boxes.forEach(f => { const [x, y, w, h] = rect(f); g.rect(x, y, w, h); }));
+      g.fillStyle = 'rgba(255,255,255,.72)'; g.fill('evenodd'); g.restore();
+      g.font = `600 ${12 * k}px sans-serif`;
+      d.designs.forEach(ds => {
+        const col = ds.off ? '#8a8f99' : '#4a3fb0';
+        g.strokeStyle = col; g.lineWidth = 1.5 * k; g.setLineDash(ds.off ? [4 * k, 3 * k] : []);
+        ds.boxes.forEach(f => { const [x, y, w, h] = rect(f); g.strokeRect(x, y, w, h); });
+        const [x, y] = rect(ds.boxes[0]);
+        g.setLineDash([]); g.fillStyle = col; g.fillRect(x, y, 16 * k, 15 * k);
+        g.fillStyle = '#fff'; g.fillText(String(ds.index + 1), x + 4 * k, y + 11.5 * k);
+      });
+      el.textContent = ''; el.appendChild(out);
+    } catch (e) {}
+  }
+
+  /* ---------- build + preview ---------- */
+  function schedule(ms) { clearTimeout(buildTimer); buildTimer = setTimeout(build, ms == null ? 300 : ms); }
+  function setStatus(t, bad) { const s = $('status'); s.textContent = t || ''; s.classList.toggle('bad', !!bad); }
+  async function build() {
+    const id = ++buildId;
+    const ready = jobs.filter(r => r.job);
+    let blocks = []; ready.forEach(r => { C.describe(r.job, st).designs.forEach(ds => dsFor(r.job, ds.index, r.name)); blocks = blocks.concat(C.blocksFor(r.job, st)); });
+    const stats = $('stats'); stats.textContent = '';
+    if (!blocks.length) { lastPdf = null; $('save').disabled = true; showMsg('<div class="empty"><b>ยังไม่มีงานบนฟิล์ม</b><br>เลือกบล็อคจาก "บล็อครอทำฟิล์ม" ทางซ้าย หรือลากไฟล์ลูกค้า (.ai / .pdf / .zip) มาวาง แอปจะตัดส่วนที่ไม่ใช่ลาย ทำเป็นสีดำ และเรียงลงฟิล์ม ' + `${st.sheetW}×${st.sheetH}″` + ' ให้ที่นี่</div>'); return; }
+    let res;
+    try { res = await C.render(blocks, st); } catch (e) { setStatus('สร้างฟิล์มไม่สำเร็จ: ' + e.message, true); return; }
+    if (id !== buildId) return;
+    lastPdf = res.bytes; lastPlan = res.plan; lastBlocks = blocks; $('save').disabled = !res.plan.sheets.length;
+    const MM = C.MM, plan = res.plan;
+    const used = plan.sheets.map(s => (plan.H - st.margin * MM - Math.min(...s.map(it => it.y))) / MM);
+    const addStat = (k, v) => { const s = document.createElement('span'); s.append(k + ' '); const b = document.createElement('b'); b.textContent = v; s.appendChild(b); stats.appendChild(s); };
+    addStat('ฟิล์ม', `${plan.sheets.length} แผ่น`);
+    addStat('บล็อก', `${blocks.length - plan.tooBig.length}`);
+    addStat('ขนาด', `${st.sheetW}×${st.sheetH}″`);
+    addStat('วันที่', st.dateText);
+    if (plan.sheets.length) addStat('ใช้ความยาวแผ่นสุดท้าย', `${Math.round(used[used.length - 1])} / ${Math.round(plan.H / MM)} mm`);
+    setStatus(plan.tooBig.length ? 'ใหญ่เกินแผ่นฟิล์ม วางไม่ได้: ' + plan.tooBig.map(t => t.b.label).join(', ') : '', !!plan.tooBig.length);
+    await preview(res.bytes, id, used, plan);
+  }
+
+  /* ---------- history (server: R2 + film_outputs) ---------- */
+  function historyOn() { return remote.ok && remote.history; }
+  function syncKeep() {
+    $('keepWrap').hidden = true; $('keepCopy').checked = true;   // always kept: screens are linked to the saved copy
+    $('origWrap').hidden = !(historyOn() && remote.originals);
+    $('keepOrig').disabled = !$('keepCopy').checked;
+  }
+  $('keepCopy').addEventListener('change', syncKeep);
+  async function archive(filename, bytes, plan, blocks) {
+    // returns { text, bad } describing what was stored; never throws
+    if (!historyOn() || !$('keepCopy').checked || !bytes) return null;
+    setStatus('กำลังเก็บสำเนาในประวัติ… อย่าเพิ่งปิดหน้านี้');
+    const order = plan ? plan.sheets.flatMap((sh, pi) => sh.map(it => ({ it, pi }))) : [];
+    const items = order.map(({ it }) => it.b).map(b => {
+      const ds = (b.job.dset && b.job.dset[b.design.index]) || {};
+      const rec = jobs.find(r => r.job === b.job);
+      const sc = rec && rec.screen;
+      return { file: b.job.name, src: rec ? rec.src : b.job.name, customer: ds.customer || '', thick: ds.thick != null ? ds.thick : null, compUm: b.offsetUm, mode: ds.mode || 'auto',
+        screenId: sc ? sc.id : '', jobNo: sc ? sc.jobNo : '', design: sc ? sc.design : '' };
+    });
+    const info = { sheets: plan ? plan.sheets.length : 0, blocks: items.length, sheetW: st.sheetW, sheetH: st.sheetH, date: st.dateText, items };
+    const fd = new FormData();
+    fd.append('name', filename); fd.append('info', JSON.stringify(info));
+    fd.append('file', new Blob([bytes], { type: 'application/pdf' }), filename);
+    try { (await makeThumbs(bytes, plan, order)).forEach((t, n) => { if (t) fd.append('thumb_' + n, t, `t${n}`); }); } catch (e) {}
+    try {
+      const r = await apiFetch('/api/films', { method: 'POST', body: fd });
+      const saved = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(saved.error || r.status);
+      hist.items = null;   // refresh next time the tab opens
+      const link = await linkScreens(saved.id, order);
+      if (remote.originals && $('keepOrig').checked) {
+        const o = await backupOriginals(saved.id, order);
+        return { text: 'เก็บสำเนาในประวัติแล้ว' + link.text + (o.text ? ' · ' + o.text : ''), bad: o.bad || link.bad };
+      }
+      return { text: 'เก็บสำเนาในประวัติแล้ว' + link.text, bad: link.bad };
+    } catch (e) { return { text: 'เก็บสำเนาในประวัติไม่สำเร็จ (' + e.message + ')', bad: true }; }
+  }
+  // tell each job screen on this film that its film is done
+  async function linkScreens(filmId, order) {
+    const list = [];
+    order.forEach(({ it }) => {
+      const rec = jobs.find(r => r.job === it.b.job); if (!rec || !rec.screen || it.b.design.index !== rec.screen.index) return;
+      const ds = (it.b.job.dset && it.b.job.dset[it.b.design.index]) || {};
+      list.push({ id: rec.screen.id, compUm: it.b.offsetUm, thick: ds.thick != null ? ds.thick : null });
+    });
+    if (!list.length) return { text: '', bad: false };
+    try {
+      const r = await apiFetch(`/api/films/${filmId}/link`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ screens: list }) });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(d.error || r.status);
+      const n = (d.linked || []).length;
+      // the linked screens leave the waiting list; their cards stay so the film can be checked
+      jobs.forEach(rec => { if (rec.screen && (d.linked || []).includes(rec.screen.id)) rec.screen.done = true; });
+      loadQueue();
+      return { text: ` · บันทึกลงใบงานแล้ว ${n}/${list.length} บล็อค`, bad: n < list.length };
+    } catch (e) { return { text: ' · บันทึกลงใบงานไม่สำเร็จ (' + e.message + ')', bad: true }; }
+  }
+  // customer original files -> server (R2), stored once per distinct file content
+  async function sha256hex(u8) { const h = new Uint8Array(await crypto.subtle.digest('SHA-256', u8)); return [...h].map(x => x.toString(16).padStart(2, '0')).join(''); }
+  async function backupOriginals(filmId, order) {
+    const srcs = new Map();
+    order.forEach(({ it }) => { const rec = jobs.find(r => r.job === it.b.job); if (rec && rec.srcBytes && !rec.sample && !rec.screen && !srcs.has(rec.src)) srcs.set(rec.src, rec); });
+    const list = [...srcs.values()]; let ok = 0; const fails = [];
+    const head = 'เก็บสำเนาในประวัติแล้ว';
+    for (let i = 0; i < list.length; i++) {
+      const rec = list[i];
+      setStatus(`${head} · กำลังเก็บไฟล์ต้นฉบับ ${i + 1}/${list.length}… อย่าเพิ่งปิดหน้านี้`);
+      try {
+        const sha = await sha256hex(rec.srcBytes);
+        const r = await apiFetch('/api/originals?' + new URLSearchParams({ film: filmId, name: rec.src, sha }), { method: 'POST', headers: { 'content-type': 'application/octet-stream' }, body: new Blob([rec.srcBytes]) });
+        const d = await r.json().catch(() => ({}));
+        if (!r.ok) throw new Error(d.error || r.status);
+        ok++;
+      } catch (e) { fails.push(rec.src + ': ' + e.message); }
+    }
+    if (!list.length) return { text: '', bad: false };   // job screens: originals are already in the artwork library
+    const msg = `เก็บไฟล์ต้นฉบับ ${ok}/${list.length} ไฟล์`;
+    return { text: fails.length ? msg + ' · ไม่สำเร็จ: ' + fails.join(', ') : msg, bad: !!fails.length };
+  }
+  // one small picture per design, cut out of the finished film so it shows exactly what was saved
+  async function makeThumbs(bytes, plan, order) {
+    if (!window.pdfjsLib || !plan) return [];
+    const doc = await pdfjsLib.getDocument({ data: bytes.slice(0), isEvalSupported: false, verbosity: 0 }).promise;
+    const out = new Array(order.length).fill(null), TH = 160;   // px tall
+    for (let pi = 0; pi < doc.numPages; pi++) {
+      const mine = order.map((o, n) => ({ ...o, n })).filter(o => o.pi === pi);
+      if (!mine.length) continue;
+      const maxH = Math.max(...mine.map(o => o.it.H));
+      const sc = Math.min(1.5, TH / maxH);
+      const pg = await doc.getPage(pi + 1); const vp = pg.getViewport({ scale: sc });
+      const cv = document.createElement('canvas'); cv.width = Math.ceil(vp.width); cv.height = Math.ceil(vp.height);
+      const g = cv.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, cv.width, cv.height);
+      await pg.render({ canvasContext: g, viewport: vp }).promise;
+      for (const o of mine) {
+        const it = o.it, bb = it.b.bbox;
+        let rx = it.x, ry = it.y, rw = it.W, rh = it.H;
+        if (!it.rot && it.b.design && it.b.design.frames) {                 // artwork area only
+          const fr = it.b.design.frames.reduce((a, f) => [Math.min(a[0], f[0]), Math.min(a[1], f[1]), Math.max(a[2], f[2]), Math.max(a[3], f[3])]);
+          rx = it.x + (fr[0] - bb[0]); ry = it.y + (fr[1] - bb[1]); rw = fr[2] - fr[0]; rh = fr[3] - fr[1];
+        }
+        const x = rx * sc, y = (plan.H - ry - rh) * sc, w = rw * sc, h = rh * sc;
+        const c2 = document.createElement('canvas'); c2.width = Math.max(1, Math.round(w)); c2.height = Math.max(1, Math.round(h));
+        c2.getContext('2d').drawImage(cv, x, y, w, h, 0, 0, c2.width, c2.height);
+        out[o.n] = await new Promise(r => c2.toBlob(b => r(b && b.type === 'image/webp' ? b : null), 'image/webp', 0.8))
+          || await new Promise(r => c2.toBlob(r, 'image/jpeg', 0.8));
+      }
+    }
+    doc.destroy();
+    return out;
+  }
+  const hist = { items: null, more: false, loading: false };
+  const fmtDate = (t) => { const d = new Date(t), p = (n) => String(n).padStart(2, '0'); return `${p(d.getDate())}/${p(d.getMonth() + 1)}/${d.getFullYear()} ${p(d.getHours())}:${p(d.getMinutes())}`; };
+  const fmtSize = (n) => n > 1048576 ? (n / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(n / 1024)) + ' KB';
+  async function loadHistory(fresh) {
+    if (!historyOn()) { await loadRemote(); }
+    if (!historyOn()) { $('histList').textContent = ''; $('histMore').hidden = true;
+      $('histStatus').textContent = remote.ok ? 'ยังไม่ได้เชื่อมที่เก็บไฟล์ (R2) บนเซิร์ฟเวอร์' : 'ประวัติดูได้เฉพาะตอนเปิดแอปจากเว็บของบริษัท (Cloudflare)'; $('histStatus').className = 'status bad'; return; }
+    if (hist.loading) return;
+    if (!fresh && hist.items) return renderHistory();
+    hist.loading = true; $('histStatus').textContent = 'กำลังโหลด…'; $('histStatus').className = 'status';
+    try {
+      const before = !fresh && hist.items && hist.items.length ? hist.items[hist.items.length - 1].created : '';
+      const r = await apiFetch('/api/films?' + histQuery(before));
+      const d = await r.json(); if (!r.ok) throw new Error(d.error || r.status);
+      hist.items = fresh ? d.items : (hist.items || []).concat(d.items); hist.more = d.more;
+      $('histStatus').textContent = '';
+    } catch (e) { $('histStatus').textContent = 'โหลดประวัติไม่สำเร็จ (' + e.message + ')'; $('histStatus').className = 'status bad'; }
+    hist.loading = false; renderHistory();
+  }
+  function histQuery(before) {
+    const q = $('histQ').value.trim(), f = $('histFrom').value, t = $('histTo').value;
+    const ps = new URLSearchParams({ limit: '50' });
+    if (before) ps.set('before', before);
+    if (q) ps.set('q', q);
+    if (f) ps.set('from', String(new Date(f + 'T00:00:00').getTime()));
+    if (t) ps.set('to', String(new Date(t + 'T00:00:00').getTime() + 864e5));
+    return ps.toString();
+  }
+  function renderHistory() {
+    const box = $('histList'); box.textContent = '';
+    const filtered = !!($('histQ').value.trim() || $('histFrom').value || $('histTo').value);
+    const list = hist.items || [];
+    $('histSum').textContent = hist.items ? (filtered ? `พบ ${list.length}${hist.more ? '+' : ''} รายการที่ตรงกับตัวกรอง` : `${list.length}${hist.more ? '+' : ''} รายการล่าสุด`) : '';
+    if (!list.length && hist.items) { const e = document.createElement('div'); e.className = 'empty'; e.textContent = filtered ? 'ไม่พบรายการที่ตรงกับตัวกรอง' : 'ยังไม่มีฟิล์มที่บันทึกไว้ เมื่อกดบันทึก PDF ฟิล์ม สำเนาจะมาอยู่ที่นี่'; box.appendChild(e); }
+    let lastDay = '';
+    for (const it of list) {
+      const day = fmtDate(it.created).slice(0, 10);
+      if (day !== lastDay) { const h = document.createElement('div'); h.className = 'hday'; h.textContent = day; box.appendChild(h); lastDay = day; }
+      const card = document.createElement('div'); card.className = 'hitem';
+      const info = it.info || {}, items = info.items || [];
+      // header: time + counts, actions on the right
+      const head = document.createElement('div'); head.className = 'hhead';
+      const ht = document.createElement('div'); ht.className = 'htitle';
+      const tm = document.createElement('span'); tm.className = 'htime'; tm.textContent = fmtDate(it.created).slice(11);
+      const sub = document.createElement('span');
+      sub.textContent = [`${items.length || info.blocks || 0} ลาย`, info.sheets != null ? `${info.sheets} แผ่น` : '', fmtSize(it.size)].filter(Boolean).join(' · ');
+      // file name first (bold), time and counts under it
+      const fn = document.createElement('div'); fn.className = 'hfile'; fn.textContent = it.name; fn.title = it.name;
+      const line = document.createElement('div'); line.className = 'hline'; line.append(tm, sub);
+      ht.append(fn, line);
+      const act = document.createElement('div'); act.className = 'hact';
+      const view = document.createElement('a'); view.href = tq('/api/films/' + it.id); view.target = '_blank'; view.rel = 'noopener'; view.textContent = 'เปิด';
+      const dl = document.createElement('a'); dl.href = tq('/api/films/' + it.id + '?dl=1'); dl.textContent = 'ดาวน์โหลด';
+      const del = document.createElement('button'); del.type = 'button'; del.className = 'del'; del.textContent = 'ลบ';
+      let armT = 0;
+      del.addEventListener('click', async () => {
+        if (!del.classList.contains('armed')) { del.classList.add('armed'); del.textContent = 'ยืนยันลบ'; armT = setTimeout(() => { del.classList.remove('armed'); del.textContent = 'ลบ'; }, 4000); return; }
+        clearTimeout(armT); del.disabled = true; del.textContent = 'กำลังลบ…';
+        try { const r = await apiFetch('/api/films/' + it.id, { method: 'DELETE' });
+          if (!r.ok) { const d = await r.json().catch(() => ({})); throw new Error(d.detail || d.error || ('HTTP ' + r.status)); }
+          hist.items = hist.items.filter(x => x.id !== it.id); renderHistory(); }
+        catch (e) { del.disabled = false; del.classList.remove('armed'); del.textContent = 'ลบ';
+          $('histStatus').textContent = 'ลบ ' + it.name + ' ไม่สำเร็จ: ' + e.message; $('histStatus').className = 'status bad'; }
+      });
+      act.append(view, dl, del);
+      head.append(ht, act);
+      card.appendChild(head);
+      // one simple row per design: picture | customer + file | thickness · compensation
+      const rows = document.createElement('div'); rows.className = 'hrows';
+      items.forEach((x, n) => {
+        const row = document.createElement('a'); row.className = 'hrow'; row.href = tq('/api/films/' + it.id); row.target = '_blank'; row.rel = 'noopener';
+        const pic = document.createElement('div'); pic.className = 'hpic';
+        if (x.thumb) { const im = document.createElement('img'); im.loading = 'lazy'; im.alt = ''; im.src = tq(`/api/films/${it.id}/t${n}`); pic.appendChild(im); }
+        const txt = document.createElement('div'); txt.className = 'htxt';
+        const c = document.createElement('div'); c.className = 'hc'; c.textContent = x.customer || 'ไม่ระบุลูกค้า';
+        const f = document.createElement('div'); f.className = 'hf'; f.textContent = x.file;
+        const orig = (info.originals || []).find(o => o.name === (x.src || x.file));
+        if (orig) { const ga = document.createElement('span'); ga.className = 'gd'; ga.textContent = 'ต้นฉบับ'; ga.title = 'ดาวน์โหลดไฟล์ต้นฉบับ ' + orig.name;
+          ga.addEventListener('click', e => { e.preventDefault(); e.stopPropagation();
+            const a = document.createElement('a'); a.href = tq(`/api/originals/${orig.sha}?name=${encodeURIComponent(orig.name)}`); a.download = orig.name; document.body.appendChild(a); a.click(); a.remove(); }); f.prepend(ga); }
+        txt.append(c, f);
+        const spec = document.createElement('div'); spec.className = 'hs';
+        const th = document.createElement('span'); th.textContent = x.thick ? `${x.thick} µm` : '—';
+        const cp = document.createElement('span'); cp.textContent = x.compUm ? `+${x.compUm}` : 'ไม่ชดเชย';
+        spec.append(th, cp);
+        row.append(pic, txt, spec); rows.appendChild(row);
+      });
+      card.appendChild(rows);
+      box.appendChild(card);
+    }
+    $('histMore').hidden = !hist.more;
+  }
+  let hqT = 0;
+  const refilter = () => { clearTimeout(hqT); hqT = setTimeout(() => loadHistory(true), 300); };
+  $('histQ').addEventListener('input', refilter);
+  $('histFrom').addEventListener('change', refilter); $('histTo').addEventListener('change', refilter);
+  $('histClear').addEventListener('click', () => { $('histQ').value = ''; $('histFrom').value = ''; $('histTo').value = ''; loadHistory(true); });
+  $('histMore').addEventListener('click', () => loadHistory(false));
+
+  /* ---------- preview: original | film side by side, each zooms and pans in place ---------- */
+  // Each pane is a "world" in PDF points (sheets side by side on the film pane). Moving = stretch the last
+  // sharp bitmap; 140 ms after the last move only the visible part of each visible page is re-rendered.
+  // With "ซูมและเลื่อนพร้อมกัน" on, both panes show the same spot of the same design at the same scale.
+  const dpr = () => Math.min(3, window.devicePixelRatio || 1);
+  const CAP = 26;   // px under the pages for the caption
+  function makeViewer(root) {
+    const v = { pages: [], W: 0, H: 0, scale: 1, tx: 0, ty: 0, touched: false, cur: 0, doc: null,
+      task: null, gen: 0, timer: 0, snap: null, pointers: new Map(), pinch: null, drag: null, onMove: null, lastBox: null };
+    const body = root.querySelector('.zvbody'), cv = body.querySelector('canvas'), ctx = cv.getContext('2d');
+    const q = (r) => root.querySelector(`[data-role="${r}"]`);
+    const shown = () => !root.closest('[hidden]') && body.clientWidth > 0;
+    function stop() { v.gen++; clearTimeout(v.timer); if (v.task) { v.task.cancel(); v.task = null; } }
+    function load(doc, pages, W, H, keepIfSame) {
+      const keep = keepIfSame && v.touched && v.pages.length === pages.length && Math.abs(W - v.W) < 0.5 && Math.abs(H - v.H) < 0.5;
+      stop(); if (v.doc && v.doc !== doc) v.doc.destroy();
+      pages.forEach(p => { p.vp1 = p.pg.getViewport({ scale: 1 }); });
+      Object.assign(v, { doc, pages, W, H, snap: null });
+      const nav = q('nav'); if (nav) nav.hidden = pages.length < 2;
+      if (!shown()) { v.touched = keep && v.touched; return; }
+      sizeCanvas(); if (keep) changed(true, true); else fit();
+    }
+    function clear() { stop(); if (v.doc) v.doc.destroy(); Object.assign(v, { doc: null, pages: [], snap: null, touched: false }); ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.clearRect(0, 0, cv.width, cv.height); }
+    function sizeCanvas() {
+      const r = body.getBoundingClientRect(), k = dpr();
+      const w = Math.max(1, Math.round(r.width * k)), h = Math.max(1, Math.round(r.height * k));
+      if (cv.width !== w || cv.height !== h) { cv.width = w; cv.height = h; }
+      cv.style.width = r.width + 'px'; cv.style.height = r.height + 'px';
+    }
+    function view(w, h, x) {
+      const r = body.getBoundingClientRect(), pad = r.width < 500 ? 12 : 24;
+      const scale = Math.max(0.005, Math.min((r.width - 2 * pad) / w, (r.height - 2 * pad - CAP) / h));
+      v.scale = scale; v.tx = (r.width - w * scale) / 2 - x * scale; v.ty = (r.height - CAP - h * scale) / 2;
+    }
+    function fit() { if (!v.pages.length || !shown()) return; view(v.W, v.H, 0); v.touched = false; changed(true, true); }
+    function fitPage(n) {
+      if (!v.pages.length) return;
+      n = Math.max(0, Math.min(n, v.pages.length - 1)); const p = v.pages[n];
+      view(p.w, v.H, p.x); v.touched = true; v.cur = n; changed(true, true);
+    }
+    // 100% = real size on screen (1 pt = 1/72 in, CSS assumes 96 px per inch)
+    function zoomTo(scale, cx, cy) {
+      if (!v.pages.length) return;
+      if (cx == null) { cx = body.clientWidth / 2; cy = body.clientHeight / 2; }
+      scale = Math.max(0.005, Math.min(scale, 40));
+      v.tx = cx - (cx - v.tx) * scale / v.scale; v.ty = cy - (cy - v.ty) * scale / v.scale; v.scale = scale;
+      v.touched = true; changed();
+    }
+    function panBy(dx, dy) { v.tx += dx; v.ty += dy; v.touched = true; changed(); }
+    function center() { return { x: (body.clientWidth / 2 - v.tx) / v.scale, y: (body.clientHeight / 2 - v.ty) / v.scale }; }
+    function centerOn(pt, scale) {   // used by the other pane: no echo back
+      if (!v.pages.length || !shown()) return;
+      v.scale = scale; v.tx = body.clientWidth / 2 - pt.x * scale; v.ty = body.clientHeight / 2 - pt.y * scale;
+      v.touched = true; changed(false, true);
+    }
+    function changed(now, silent) {
+      const pct = q('pct'); if (pct) pct.textContent = Math.round(v.scale * 72 / 96 * 100) + '%';
+      if (v.pages.length > 1 && q('page')) {   // the page nearest the middle of the view
+        const mid = center().x; let best = 0, bd = Infinity;
+        v.pages.forEach((p, i) => { const d = Math.abs(p.x + p.w / 2 - mid); if (d < bd) { bd = d; best = i; } });
+        v.cur = best; q('page').textContent = `แผ่น ${best + 1} / ${v.pages.length}`;
+        root.querySelector('[data-act="prev"]').disabled = best === 0;
+        root.querySelector('[data-act="next"]').disabled = best >= v.pages.length - 1;
+      }
+      quickDraw();
+      clearTimeout(v.timer); v.timer = setTimeout(sharpDraw, now ? 0 : 140);
+      if (!silent && v.onMove) v.onMove();
+    }
+    function rectOf(p) { return { x: v.tx + p.x * v.scale, y: v.ty, w: p.w * v.scale, h: p.h * v.scale }; }
+    function paintBase(g) {   // empty white pages with a soft shadow
+      const k = dpr(); g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, cv.width, cv.height);
+      g.save(); g.shadowColor = 'rgba(0,0,0,.22)'; g.shadowBlur = 10 * k; g.shadowOffsetY = 2 * k; g.fillStyle = '#fff';
+      v.pages.forEach(p => { const r = rectOf(p); g.fillRect(r.x * k, r.y * k, r.w * k, r.h * k); });
+      g.restore();
+    }
+    function paintCaps(g) {
+      const k = dpr(), cs = getComputedStyle(document.documentElement);
+      g.setTransform(1, 0, 0, 1, 0, 0); g.fillStyle = cs.getPropertyValue('--muted').trim() || '#5d6576';
+      g.font = `${12 * k}px ${cs.getPropertyValue('--font-data')}`; g.textAlign = 'center'; g.textBaseline = 'top';
+      v.pages.forEach(p => { const r = rectOf(p); if (r.w > 60 && p.cap) g.fillText(p.cap, (r.x + r.w / 2) * k, (r.y + r.h + 8) * k, Math.max(r.w, 200) * k); });
+    }
+    function quickDraw() {
+      paintBase(ctx);
+      const s = v.snap;
+      if (s) { const k = dpr(), f = v.scale / s.scale; ctx.drawImage(s.canvas, (v.tx - s.tx * f) * k, (v.ty - s.ty * f) * k, s.canvas.width * f, s.canvas.height * f); }
+      paintCaps(ctx);
+    }
+    async function sharpDraw() {
+      if (!v.pages.length || !shown()) return;
+      const gen = ++v.gen; if (v.task) { v.task.cancel(); v.task = null; }
+      const k = dpr(), off = document.createElement('canvas'); off.width = cv.width; off.height = cv.height;
+      const g = off.getContext('2d'), vw = cv.width / k, vh = cv.height / k;
+      const want = { scale: v.scale, tx: v.tx, ty: v.ty };
+      for (const p of v.pages) {
+        const r = rectOf(p);
+        if (r.x > vw || r.x + r.w < 0 || r.y > vh || r.y + r.h < 0) continue;
+        v.task = p.pg.render({ canvasContext: g, viewport: p.pg.getViewport({ scale: v.scale * k }), transform: [1, 0, 0, 1, r.x * k, r.y * k], background: 'rgba(0,0,0,0)' });
+        try { await v.task.promise; } catch (e) { return; }   // cancelled by a newer move
+        if (gen !== v.gen) return;
+      }
+      v.task = null; v.snap = { canvas: off, ...want };
+      paintBase(ctx); ctx.drawImage(off, 0, 0); paintCaps(ctx);
+    }
+    // wheel / trackpad pinch (ctrl+wheel): zoom at the pointer; shift+wheel pans sideways
+    body.addEventListener('wheel', e => {
+      if (!v.pages.length) return;
+      e.preventDefault();
+      const r = body.getBoundingClientRect(), m = e.deltaMode === 1 ? 16 : 1;
+      if (e.shiftKey) { panBy(-(e.deltaX || e.deltaY) * m, 0); return; }
+      zoomTo(v.scale * Math.exp(-e.deltaY * m * (e.ctrlKey ? 0.01 : 0.0018)), e.clientX - r.left, e.clientY - r.top);
+    }, { passive: false });
+    body.addEventListener('pointerdown', e => {
+      if (e.button > 0) return;
+      body.focus({ preventScroll: true }); body.setPointerCapture(e.pointerId); v.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (v.pointers.size === 2) { const [a, b] = [...v.pointers.values()]; v.pinch = { d: Math.max(1, Math.hypot(a.x - b.x, a.y - b.y)), scale: v.scale }; v.drag = null; }
+      else { v.drag = { x: e.clientX, y: e.clientY, tx: v.tx, ty: v.ty }; body.classList.add('grab'); }
+    });
+    body.addEventListener('pointermove', e => {
+      if (!v.pointers.has(e.pointerId)) return;
+      v.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      const r = body.getBoundingClientRect();
+      if (v.pointers.size === 2 && v.pinch) {
+        const [a, b] = [...v.pointers.values()]; const d = Math.hypot(a.x - b.x, a.y - b.y);
+        zoomTo(v.pinch.scale * d / v.pinch.d, (a.x + b.x) / 2 - r.left, (a.y + b.y) / 2 - r.top);
+      } else if (v.drag) { v.tx = v.drag.tx + e.clientX - v.drag.x; v.ty = v.drag.ty + e.clientY - v.drag.y; v.touched = true; changed(); }
+    });
+    const endPointer = e => {
+      v.pointers.delete(e.pointerId); if (v.pointers.size < 2) v.pinch = null;
+      if (v.pointers.size === 1) { const [a] = [...v.pointers.values()]; v.drag = { x: a.x, y: a.y, tx: v.tx, ty: v.ty }; }
+      if (!v.pointers.size) { v.drag = null; body.classList.remove('grab'); }
+    };
+    body.addEventListener('pointerup', endPointer); body.addEventListener('pointercancel', endPointer);
+    body.addEventListener('dblclick', e => { const r = body.getBoundingClientRect(); zoomTo(v.scale * 2.5, e.clientX - r.left, e.clientY - r.top); });
+    const acts = { in: () => zoomTo(v.scale * 1.5), out: () => zoomTo(v.scale / 1.5), fit, '100': () => zoomTo(96 / 72), prev: () => fitPage(v.cur - 1), next: () => fitPage(v.cur + 1) };
+    root.querySelectorAll('[data-act]').forEach(b => b.addEventListener('click', () => acts[b.dataset.act]()));
+    body.addEventListener('keydown', e => {
+      if (e.key === '+' || e.key === '=') acts.in();
+      else if (e.key === '-') acts.out();
+      else if (e.key === '0') fit();
+      else if (e.key === '1') acts['100']();
+      else if (e.key === 'PageDown') acts.next();
+      else if (e.key === 'PageUp') acts.prev();
+      else if (e.key.startsWith('Arrow')) { const d = 60; panBy(e.key === 'ArrowLeft' ? d : e.key === 'ArrowRight' ? -d : 0, e.key === 'ArrowUp' ? d : e.key === 'ArrowDown' ? -d : 0); }
+      else return;
+      e.preventDefault();
+    });
+    // the box changes size with the window, full-screen mode and showing/hiding the other pane:
+    // keep the middle of the view in the middle
+    new ResizeObserver(() => {
+      const w = body.clientWidth, h = body.clientHeight, old = v.lastBox; v.lastBox = { w, h };
+      if (!v.pages.length || !w || !h) return;
+      sizeCanvas();
+      if (!v.touched) fit();
+      else { if (old && old.w && old.h) { v.tx += (w - old.w) / 2; v.ty += (h - old.h) / 2; } changed(true, true); }
+    }).observe(body);
+    return { v, load, clear, stop, fit, center, centerOn };
+  }
+
+  const FV = makeViewer($('zvF')), OV = makeViewer($('zvO'));
+  let filmPlan = null, origRec = null, origLoading = null, syncing = false;
+  const syncOn = () => $('cmpSync').checked && !$('cmp').classList.contains('solo');
+  function zvStop() { FV.stop(); OV.stop(); }
+  function showMsg(html) { zvStop(); $('cmp').hidden = true; const box = $('sheets'); box.hidden = false; box.innerHTML = html; }
+  async function preview(bytes, id, used, plan) {
+    if (!window.pdfjsLib) { showMsg('<div class="empty">โหลดตัวแสดงตัวอย่างไม่ได้ แต่ยังบันทึก PDF ได้</div>'); return; }
+    const doc = await pdfjsLib.getDocument({ data: bytes.slice(0), isEvalSupported: false, verbosity: 0 }).promise;
+    const pages = []; let x = 0, H = 0, gap = 0;
+    for (let i = 1; i <= doc.numPages; i++) {
+      const pg = await doc.getPage(i); const v = pg.getViewport({ scale: 1 });
+      if (!gap) gap = v.width * 0.06;
+      pages.push({ pg, x, w: v.width, h: v.height, cap: `แผ่น ${i} · ${plan.sheets[i - 1].length} บล็อก · ใช้ ${Math.round(used[i - 1])} mm` });
+      x += v.width + gap; H = Math.max(H, v.height);
+    }
+    if (id !== buildId) { doc.destroy(); return; }
+    filmPlan = plan; plan.sheets.forEach((sh, si) => sh.forEach(it => { it.si = si; }));
+    $('sheets').hidden = true; $('cmp').hidden = false;
+    FV.load(doc, pages, x - gap, H, true);
+    fillOrigSel();
+  }
+  /* original pane */
+  function fillOrigSel() {
+    const sel = $('origSel'), ok = jobs.filter(r => r.job && !r.error);
+    if (!ok.includes(origRec)) origRec = null;
+    sel.textContent = '';
+    ok.forEach(r => { const o = document.createElement('option'); o.value = r.id; o.textContent = r.name; sel.appendChild(o); });
+    if (!origRec && ok.length) showOrig(ok[0]); else if (origRec) sel.value = origRec.id;
+    if (!ok.length) { origRec = null; OV.clear(); }
+  }
+  async function showOrig(rec, then) {
+    origRec = rec; $('origSel').value = rec.id;
+    const mine = origLoading = (async () => {
+      const doc = await pdfjsLib.getDocument({ data: rec.bytes.slice(0), isEvalSupported: false, verbosity: 0 }).promise;
+      const pg = await doc.getPage((rec.page || 0) + 1); const v = pg.getViewport({ scale: 1 });
+      if (origRec !== rec) { doc.destroy(); return false; }
+      OV.load(doc, [{ pg, x: 0, w: v.width, h: v.height, cap: 'ต้นฉบับ · ' + rec.name }], v.width, v.height, false);
+      return true;
+    })();
+    let ok = false; try { ok = await mine; } catch (e) { setStatus('เปิดไฟล์ต้นฉบับเพื่อเทียบไม่ได้: ' + e.message, true); }
+    if (origLoading === mine) origLoading = null;
+    if (ok) { if (then) then(); else if (syncOn()) syncFilmToOrig(); }
+  }
+  $('origSel').addEventListener('change', () => { const r = jobs.find(j => String(j.id) === $('origSel').value); if (r) showOrig(r); });
+  /* mapping: original page point (PDF units) <-> film sheet point, through the block's placement */
+  const toFilm = (it, x, y) => { const b = it.b.bbox; return it.rot ? { x: it.x + it.h - (y - b[1]), y: it.y + (x - b[0]) } : { x: it.x + (x - b[0]), y: it.y + (y - b[1]) }; };
+  const toOrig = (it, X, Y) => { const b = it.b.bbox; return it.rot ? { x: Y - it.y + b[0], y: it.x + it.h - X + b[1] } : { x: X - it.x + b[0], y: Y - it.y + b[1] }; };
+  const dist2 = (b, x, y) => { const dx = Math.max(b[0] - x, 0, x - b[2]), dy = Math.max(b[1] - y, 0, y - b[3]); return dx * dx + dy * dy; };
+  function syncFilmToOrig() {   // the original moved: show the same spot on the film
+    if (syncing || !syncOn() || !filmPlan || !origRec || !OV.v.pages.length || !FV.v.pages.length) return;
+    const op = OV.v.pages[0], c = OV.center(), [px, py] = op.vp1.convertToPdfPoint(c.x, c.y);
+    let best = null, bd = Infinity;
+    filmPlan.sheets.flat().forEach(it => { if (it.b.job !== origRec.job) return; const d = dist2(it.b.bbox, px, py); if (d < bd) { bd = d; best = it; } });
+    if (!best) return;
+    const f = toFilm(best, px, py), fp = FV.v.pages[best.si]; if (!fp) return;
+    const [vx, vy] = fp.vp1.convertToViewportPoint(f.x, f.y);
+    syncing = true; FV.centerOn({ x: fp.x + vx, y: vy }, OV.v.scale); syncing = false;
+  }
+  function syncOrigToFilm() {   // the film moved: show the same spot of the matching original
+    if (syncing || !syncOn() || !filmPlan || !FV.v.pages.length) return;
+    const c = FV.center(); let si = 0;
+    FV.v.pages.forEach((p, i) => { if (c.x >= p.x) si = i; });
+    const fp = FV.v.pages[si], [X, Y] = fp.vp1.convertToPdfPoint(c.x - fp.x, c.y);
+    let best = null, bd = Infinity;
+    (filmPlan.sheets[si] || []).forEach(it => { const d = dist2([it.x, it.y, it.x + it.W, it.y + it.H], X, Y); if (d < bd) { bd = d; best = it; } });
+    if (!best) return;
+    const o = toOrig(best, X, Y), scale = FV.v.scale;
+    const go = () => {
+      const op = OV.v.pages[0]; if (!op) return;
+      const [vx, vy] = op.vp1.convertToViewportPoint(o.x, o.y);
+      syncing = true; OV.centerOn({ x: vx, y: vy }, scale); syncing = false;
+    };
+    const rec = jobs.find(r => r.job === best.b.job);
+    if (rec && rec !== origRec) { if (!origLoading) showOrig(rec, go); }
+    else if (!origLoading) go();
+  }
+  FV.v.onMove = syncOrigToFilm; OV.v.onMove = syncFilmToOrig;
+  $('cmpSync').addEventListener('change', () => { if (syncOn()) syncFilmToOrig(); });
+  $('cmpShow').addEventListener('change', () => { $('cmp').classList.toggle('solo', !$('cmpShow').checked); if (syncOn()) requestAnimationFrame(syncFilmToOrig); });
+  function setFull(on) {
+    $('cmp').classList.toggle('full', on); document.body.style.overflow = on ? 'hidden' : '';
+    $('cmpFull').textContent = on ? 'ย่อกลับ' : 'เต็มจอ';
+  }
+  $('cmpFull').addEventListener('click', () => setFull(!$('cmp').classList.contains('full')));
+  document.addEventListener('keydown', e => { if (e.key === 'Escape' && $('cmp').classList.contains('full')) { setFull(false); e.preventDefault(); } });
+
+  /* ---------- save ---------- */
+  // while copies are being stored, warn before the page is closed
+  let busy = false;
+  window.addEventListener('beforeunload', e => { if (busy) { e.preventDefault(); e.returnValue = ''; } });
+  $('save').addEventListener('click', async () => {
+    if (!lastPdf || busy) return;
+    const pdf = lastPdf, plan = lastPlan, blocks = lastBlocks;   // the film as shown now
+    const real = jobs.filter(r => r.job && !r.sample);
+    const d = new Date(); const p2 = (n) => String(n).padStart(2, '0'); const stamp = `${d.getFullYear()}-${p2(d.getMonth() + 1)}-${p2(d.getDate())}_${p2(d.getHours())}${p2(d.getMinutes())}${p2(d.getSeconds())}`;
+    // name after the job when every design comes from one job (or one customer), otherwise a general name
+    const scr = real.map(r => r.screen).filter(Boolean), safe = (t) => String(t).replace(/[\\/:*?"<>|]+/g, '_').trim();
+    const jobNos = [...new Set(scr.map(x => x.jobNo))], custs = [...new Set(scr.map(x => x.customer))];
+    const base = scr.length === real.length && scr.length ? (jobNos.length === 1 ? `${safe(custs[0])}_${jobNos[0]}_film` : custs.length === 1 ? `${safe(custs[0])}_${jobNos.length}jobs_film` : `film_${jobNos.length}jobs`)
+      : real.length === 1 ? real[0].name.replace(/\.(ai|pdf)$/i, '') + '_film' : `film_${st.sheetW}x${st.sheetH}_${real.length || 1}jobs`;
+    const filename = `${base}_${stamp}.pdf`;
+    // 1) store the copy and the originals on the server first, 2) then hand the file to the browser
+    busy = true; const btn = $('save'), label = btn.textContent; btn.disabled = true; btn.textContent = 'กำลังบันทึก…';
+    let stored = null;
+    try { stored = await archive(filename, pdf, plan, blocks); }
+    finally { busy = false; btn.disabled = false; btn.textContent = label; }
+    const tail = stored ? ' · ' + stored.text : '';
+    const bad = !!(stored && stored.bad);
+    const inViewer = !!(window.claude && window.claude.use);
+    const downloads = inViewer ? await window.claude.use('downloads') : null;
+    if (!downloads) {
+      // opened as a plain file in a browser: an ordinary download works
+      const url = URL.createObjectURL(new Blob([pdf], { type: 'application/pdf' }));
+      const a = document.createElement('a'); a.href = url; a.download = filename; document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 60000);
+      if (inViewer) setStatus('บันทึกไฟล์จากลิงก์นี้ไม่ได้สำหรับบัญชีนี้ ให้ล็อกอิน claude.ai ด้วยบัญชีที่ได้รับแชร์ แล้วเปิดลิงก์อีกครั้ง หรือใช้ไฟล์แอป .html ที่เปิดในเบราว์เซอร์ได้โดยตรง', true);
+      else setStatus('บันทึก ' + filename + ' แล้ว (ดูในโฟลเดอร์ดาวน์โหลด)' + tail, bad);
+      return;
+    }
+    try { await downloads.save({ filename, data: new Blob([pdf], { type: 'application/pdf' }) }); setStatus('บันทึก ' + filename + ' แล้ว' + tail, bad); }
+    catch (e) {
+      const c = e && e.code;
+      if (c === 'declined') setStatus('ยกเลิกการดาวน์โหลด' + tail, bad);
+      else if (c === 'rate_limited') setStatus('มีหน้าต่างบันทึกเปิดค้างอยู่ รอสักครู่แล้วลองใหม่', true);
+      else setStatus('บันทึกไม่สำเร็จในมุมมองนี้ (' + (c || 'unavailable') + ')', true);
+    }
+  });
+
+  /* ---------- start with a demo job ---------- */
+  (async function start() {
+    if (!window.PDFLib || !C) { showMsg('<div class="empty">โหลดเครื่องมือไม่สำเร็จ ลองรีเฟรชหน้า</div>'); return; }
+    syncNote();
+    await loadRemote();
+    renderJobs();
+    await loadQueue();
+    const want = new URLSearchParams(location.search).get('add');
+    if (want) { history.replaceState(null, '', location.pathname); await addScreens(want.split(',').filter(Boolean), true); }
+    try { await Promise.race([document.fonts.load('10px "IBM Plex Sans Thai"', 'ก'), new Promise(r => setTimeout(r, 2500))]); } catch (e) {}
+    build();
+    takeShared();
+  })();
+
+  /* ---------- screens from the job app that still need a film ---------- */
+  const Q = { data: null, sel: new Set(), files: new Map() };
+  const inFilm = (sid) => jobs.some(r => r.screen && r.screen.id === sid);
+  async function loadQueue() {
+    try {
+      const r = await apiFetch('/api/data'); const d = await r.json();
+      if (!r.ok) throw new Error(d.error || r.status);
+      Q.data = d; $('who').textContent = d.me ? d.me.name : '';
+    } catch (e) { $('queueList').innerHTML = ''; const m = document.createElement('div'); m.className = 'qempty'; m.textContent = 'โหลดรายการใบงานไม่ได้: ' + e.message; $('queueList').appendChild(m); return; }
+    renderQueue();
+  }
+  // every screen that has an artwork from the library and no film yet
+  function waiting(all) {
+    const d = Q.data; if (!d) return [];
+    const arts = new Map((d.artworks || []).map(a => [a.id, a]));
+    const out = [];
+    for (const j of d.jobs) for (const s of j.screens) {
+      const a = s.artworkId && arts.get(s.artworkId);
+      if (!a || !a.filmable || !a.file) continue;
+      if (!all && (s.film || s.status === 'sent')) continue;
+      out.push({ j, s, a });
+    }
+    return out;
+  }
+  function renderQueue() {
+    const box = $('queueList'); box.textContent = '';
+    const list = waiting(false);
+    $('queueCount').textContent = list.length ? `${list.length} บล็อค` : '';
+    $('queueBar').hidden = !list.length;
+    if (!list.length) { const m = document.createElement('div'); m.className = 'qempty'; m.textContent = Q.data ? 'ไม่มีบล็อคที่รอทำฟิล์ม (บล็อคต้องมีลายจากคลังลาย)' : ''; box.appendChild(m); return; }
+    const byJob = new Map(); list.forEach(x => { if (!byJob.has(x.j.id)) byJob.set(x.j.id, []); byJob.get(x.j.id).push(x); });
+    for (const xs of byJob.values()) {
+      const g = document.createElement('div'); g.className = 'qjob';
+      const h = document.createElement('b'); h.textContent = xs[0].j.customer; const no = document.createElement('span'); no.textContent = xs[0].j.no; h.appendChild(no); g.appendChild(h);
+      for (const { s, a } of xs) {
+        const lab = document.createElement('label'); lab.className = 'qrow' + (inFilm(s.id) ? ' in' : '');
+        const cb = document.createElement('input'); cb.type = 'checkbox'; cb.checked = Q.sel.has(s.id); cb.disabled = inFilm(s.id);
+        cb.addEventListener('change', () => { if (cb.checked) Q.sel.add(s.id); else Q.sel.delete(s.id); });
+        let pic;
+        if (a.preview) { pic = document.createElement('img'); pic.loading = 'lazy'; pic.alt = ''; pic.src = tq('/api/files/' + a.preview + '?inline=1'); }
+        else { pic = document.createElement('span'); pic.className = 'noimg'; }
+        const t = document.createElement('span'); t.className = 'qt'; t.textContent = s.design || a.name || '(ยังไม่ตั้งชื่อ)';
+        const sm = document.createElement('small'); sm.textContent = `${s.target || '-'} µm · ${s.mesh || ''}${inFilm(s.id) ? ' · อยู่ในฟิล์มนี้แล้ว' : a.customerRef ? ' · ' + a.customerRef : ''}`; t.appendChild(sm);
+        lab.append(cb, pic, t); g.appendChild(lab);
+      }
+      box.appendChild(g);
+    }
+  }
+  $('queueAll').addEventListener('click', () => { waiting(false).forEach(x => { if (!inFilm(x.s.id)) Q.sel.add(x.s.id); }); renderQueue(); });
+  $('queueAdd').addEventListener('click', async () => {
+    const ids = [...Q.sel].filter(id => !inFilm(id));
+    if (!ids.length) { setStatus('เลือกบล็อคที่จะใส่ลงฟิล์มก่อน', true); return; }
+    await addScreens(ids, false);
+  });
+  // load the artwork's original file and keep only that artwork's design, with the screen's customer and thickness
+  async function addScreens(ids, includeDone) {
+    const all = waiting(true), btn = $('queueAdd'); btn.disabled = true;
+    let n = 0; const fails = [];
+    for (const id of ids) {
+      const x = all.find(y => y.s.id === id); if (!x || inFilm(id)) continue;
+      const { j, s, a } = x;
+      setStatus(`กำลังเปิดไฟล์ลาย ${++n}/${ids.length}…`);
+      try {
+        let bytes = Q.files.get(a.file);
+        if (!bytes) {
+          const r = await apiFetch('/api/files/' + a.file); if (!r.ok) throw new Error('เปิดไฟล์ไม่ได้ (' + r.status + ')');
+          bytes = new Uint8Array(await r.arrayBuffer()); Q.files.set(a.file, bytes);
+        }
+        const label = a.customerRef || String(a.fileName || 'artwork').replace(/\.(ai|pdf)$/i, '');
+        const rec = { id: ++seq, name: `${s.design || a.name || label}`, bytes: bytes.slice(0), page: a.page || 0, src: a.fileName || label, srcBytes: bytes,
+          screen: { id: s.id, jobNo: j.no, design: s.design || a.name || '', customer: j.customer, thick: Number(s.target) || null } };
+        rec.job = await C.analyze(bytes, label, a.page || 0);
+        const d = C.describe(rec.job, st);
+        if (d.designs.length) {
+          let pick = d.designs.find(ds => ds.index === a.design) || d.designs[0];
+          if (a.box) {   // the design whose frames sit closest to where it was in the library
+            const cx = (a.box[0] + a.box[2]) / 2, cy = (a.box[1] + a.box[3]) / 2;
+            let best = Infinity;
+            d.designs.forEach(ds => { const b = ds.boxes.reduce((u, f) => [Math.min(u[0], f[0]), Math.min(u[1], f[1]), Math.max(u[2], f[2]), Math.max(u[3], f[3])]);
+              const dd = Math.hypot((b[0] + b[2]) / 2 - cx, (b[1] + b[3]) / 2 - cy); if (dd < best) { best = dd; pick = ds; } });
+          }
+          d.designs.forEach(ds => { if (ds.index !== pick.index) rec.job.excluded.add(ds.index); });
+          rec.screen.index = pick.index;
+          rec.job.dset = { [pick.index]: { customer: j.customer, thick: rec.screen.thick != null ? rec.screen.thick : thickFor(j.customer), thickSet: true, mode: 'auto', manualUm: 200 } };
+        }
+        jobs.push(rec); Q.sel.delete(id);
+      } catch (e) { fails.push((s.design || id) + ': ' + e.message); }
+    }
+    btn.disabled = false;
+    renderJobs(); renderQueue(); schedule(0);
+    setStatus(fails.length ? 'เปิดบางลายไม่ได้: ' + fails.join(', ') : '', !!fails.length);
+  }
+
+  /* ---------- installed app: install button + files shared from other apps (LINE, e-mail, Files) ---------- */
+  let installEvt = null;
+  window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); installEvt = e; $('installBtn').hidden = false; });
+  window.addEventListener('appinstalled', () => { installEvt = null; $('installBtn').hidden = true; });
+  $('installBtn').addEventListener('click', async () => {
+    if (!installEvt) return;
+    installEvt.prompt(); try { await installEvt.userChoice; } catch (e) {}
+    installEvt = null; $('installBtn').hidden = true;
+  });
+  // the service worker (sw.js) keeps shared files in a cache and opens ./?share=…
+  async function takeShared() {
+    const q = new URLSearchParams(location.search); if (!q.has('share')) return;
+    history.replaceState(null, '', location.pathname);
+    if (!window.caches) return;
+    try {
+      const cache = await caches.open('film-share'), keys = await cache.keys(), files = [];
+      for (const k of keys) {
+        const r = await cache.match(k); if (!r) continue;
+        const buf = new Uint8Array(await r.arrayBuffer());
+        let name = decodeURIComponent(r.headers.get('x-name') || '') || 'shared';
+        if (!/\.(ai|pdf|zip)$/i.test(name)) {   // some apps share without a usable extension: look at the bytes
+          const head = String.fromCharCode.apply(null, buf.subarray(0, 1024));
+          if (head.indexOf('%PDF') >= 0) name += '.pdf'; else if (head.slice(0, 2) === 'PK') name += '.zip';
+        }
+        files.push(new File([buf], name)); await cache.delete(k);
+      }
+      if (files.length) { setStatus(`รับไฟล์ที่แชร์มา ${files.length} ไฟล์`); await addFiles(files); }
+      else if (q.get('share') === 'none') setStatus('ไม่ได้รับไฟล์จากการแชร์ ลองแชร์ไฟล์ .ai / .pdf / .zip อีกครั้ง', true);
+    } catch (e) { setStatus('รับไฟล์ที่แชร์มาไม่สำเร็จ: ' + e.message, true); }
+  }
+})();
+</script>
+
+</body>
+</html>

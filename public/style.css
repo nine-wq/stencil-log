@@ -259,3 +259,28 @@ a.btn.primary{color:var(--on-emulsion)}
 .csrow{display:flex;flex-direction:column;gap:6px;padding-block:10px;border-top:1px solid var(--line)}
 .csgrid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
 @media (max-width:560px){.csgrid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+
+/* main menu under the header: jobs · artwork library · film */
+.mainnav{padding-block:0}
+.mainnav .navlink{display:inline-flex;align-items:center;padding:10px 12px;border-bottom:3px solid transparent;color:var(--muted);font-weight:600;white-space:nowrap;text-decoration:none}
+.mainnav .navlink:hover,.tabs button:hover{color:var(--fg)}
+.mainnav .navlink .count{display:inline-block;min-width:20px;padding:0 6px;margin-left:6px;border-radius:99px;background:var(--warn-soft);color:var(--warn);font-size:.75rem;font-family:var(--mono)}
+.groupby{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.groupby .btn[aria-pressed="true"]{border-color:var(--emulsion);color:var(--emulsion)}
+.wrapchips{flex-wrap:wrap;overflow:visible}
+
+/* artwork library tiles */
+.artgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(132px,1fr));gap:10px}
+.arttile{position:relative;display:flex;flex-direction:column;gap:2px;align-items:stretch;text-align:left;padding:8px;border:1.5px solid var(--line);border-radius:var(--r);background:var(--surface);cursor:pointer;min-width:0}
+.arttile:hover{border-color:var(--muted)}
+.arttile.on{border-color:var(--emulsion);background:var(--emulsion-soft);box-shadow:0 0 0 1px var(--emulsion)}
+.arttile img,.arttile .noimg{width:100%;aspect-ratio:1;object-fit:contain;background:#fff;border:1px solid var(--line);border-radius:6px;margin-bottom:4px}
+.arttile .noimg{display:block;background:repeating-linear-gradient(45deg,var(--sunk) 0 6px,transparent 6px 12px)}
+.arttile b{font-size:.88rem;line-height:1.3;overflow-wrap:anywhere}
+.arttile .muted{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.arttile .fstate{align-self:flex-start;margin-top:2px}
+.arttile .tick{position:absolute;top:6px;right:6px;width:24px;height:24px;border-radius:50%;display:grid;place-items:center;background:var(--emulsion);color:var(--on-emulsion);font-weight:700;font-size:.85rem}
+.arttile:focus-visible{outline:2px solid var(--emulsion);outline-offset:2px}
+.artedit{display:grid;grid-template-columns:200px minmax(0,1fr);gap:14px;align-items:start;padding:12px;border:1px solid var(--emulsion);border-radius:var(--r);background:var(--bg)}
+@media (max-width:520px){.artedit{grid-template-columns:minmax(0,1fr)}.artedit .pz{max-width:240px}}
+@media (max-width:420px){.artgrid{grid-template-columns:repeat(2,minmax(0,1fr))}}

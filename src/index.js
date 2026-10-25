@@ -1,10 +1,12 @@
 // Cloudflare Worker: API ของแอปบันทึกขึ้นบล็อค
 // หน้าเว็บ (public/) ถูกเสิร์ฟอัตโนมัติ ส่วน /api/* มาที่โค้ดนี้
 import { SCHEMA } from './schema.js';
+import { filmApi } from './film.js';
 
 const SESSION_DAYS = 60;
 const MAX_FAILS = 5;
 const LOCK_MIN = 5;
+// ทุกคนที่ล็อกอินทำได้ทุกอย่าง (ยังเก็บคอลัมน์ role ไว้ในตาราง users แต่ไม่ใช้ตรวจสิทธิ์)
 const ROLES = ['artwork', 'coater', 'qc', 'admin'];
 const FILE_KINDS = ['original', 'prepared', 'preview'];
 const AI_MODELS = [
@@ -26,6 +28,7 @@ function cleanName(t) {
 function fileIdsOf(d) {
   return [...(d.originals || []), ...(d.prepared || []), ...(d.preview ? [d.preview] : [])];
 }
+const artFileIds = a => [a.file, a.preview].filter(Boolean);
 
 const json = (d, status = 200) =>
   new Response(JSON.stringify(d), { status, headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' } });
@@ -48,6 +51,19 @@ async function currentUser(req, env, url) {
   ).bind(token, since).first();
 }
 
+// ลาย 1 ชิ้นในคลัง (ค่าที่รับจากหน้าเว็บ ตัดให้อยู่ในขอบเขต)
+function cleanArt(it, me, now) {
+  const str = (v, n) => String(v == null ? '' : v).slice(0, n);
+  const num = v => { const x = Number(v); return Number.isFinite(x) ? x : null; };
+  const box = Array.isArray(it.box) && it.box.length === 4 && it.box.every(v => Number.isFinite(Number(v))) ? it.box.map(Number) : null;
+  return {
+    name: str(it.name, 80).trim(), customerRef: str(it.customerRef, 120).trim(),
+    file: /^[\w-]{1,40}$/.test(it.file || '') ? it.file : null, fileName: str(it.fileName, 200), sha: /^[a-f0-9]{64}$/.test(it.sha || '') ? it.sha : '',
+    page: num(it.page) || 0, design: num(it.design), box, w: num(it.w), h: num(it.h), filmable: !!it.filmable,
+    preview: /^[\w-]{1,40}$/.test(it.preview || '') ? it.preview : null, by: me.name, t: now
+  };
+}
+
 async function getSetting(env, key) {
   const r = await env.DB.prepare('SELECT value FROM settings WHERE key = ?').bind(key).first();
   return r ? JSON.parse(r.value) : null;
@@ -63,6 +79,8 @@ function ensureSchema(env) {
 export default {
   async fetch(req, env) {
     const url = new URL(req.url);
+    // a share that arrives before the service worker is running: just open the app
+    if (url.pathname === '/share-target') return Response.redirect(new URL('/?share=none', url).toString(), 303);
     if (!url.pathname.startsWith('/api/')) return env.ASSETS.fetch(req);
     try {
       await ensureSchema(env);
@@ -80,7 +98,7 @@ async function api(req, env, url) {
   // ---------- ไม่ต้องล็อกอิน ----------
   if (m === 'GET' && p === '/users') {
     const { results } = await env.DB.prepare(
-      'SELECT id, name, role FROM users WHERE active = 1 ORDER BY role, name').all();
+      'SELECT id, name, role FROM users WHERE active = 1 ORDER BY name').all();
     return json(results);
   }
 
@@ -111,7 +129,6 @@ async function api(req, env, url) {
   // ---------- ต้องล็อกอิน ----------
   const me = await currentUser(req, env, url);
   if (!me) return err(401, 'กรุณาเข้าสู่ระบบใหม่');
-  const isAdmin = me.role === 'admin';
 
   if (m === 'GET' && p === '/me') return json({ id: me.id, name: me.name, role: me.role });
 
@@ -121,12 +138,13 @@ async function api(req, env, url) {
   }
 
   if (m === 'GET' && p === '/data') {
-    const [master, jobsR, screensR, photosR, filesR] = await Promise.all([
+    const [master, jobsR, screensR, photosR, filesR, artR] = await Promise.all([
       getSetting(env, 'master'),
       env.DB.prepare('SELECT id, no, data, created FROM jobs ORDER BY created DESC').all(),
       env.DB.prepare('SELECT id, job_id, idx, data, rev FROM screens ORDER BY job_id, idx').all(),
       env.DB.prepare('SELECT id, screen_id, by_name, t FROM photos ORDER BY t').all(),
-      env.DB.prepare('SELECT id, kind, name, type, size, by_name, t FROM files').all()
+      env.DB.prepare('SELECT id, kind, name, type, size, by_name, t FROM files').all(),
+      env.DB.prepare('SELECT id, customer, data, created FROM artworks ORDER BY created DESC').all()
     ]);
     const files = {};
     for (const f of filesR.results) files[f.id] = { id: f.id, kind: f.kind, name: f.name, type: f.type, size: f.size, by: f.by_name, t: f.t };
@@ -136,13 +154,13 @@ async function api(req, env, url) {
     for (const s of screensR.results)
       (screens[s.job_id] ||= []).push({ ...JSON.parse(s.data), id: s.id, jobId: s.job_id, rev: s.rev, photos: photos[s.id] || [] });
     const jobs = jobsR.results.map(j => ({ ...JSON.parse(j.data), id: j.id, no: j.no, screens: screens[j.id] || [] }));
-    const used = new Set(jobs.flatMap(j => j.screens.flatMap(fileIdsOf)));
+    const artworks = artR.results.map(a => ({ ...JSON.parse(a.data), id: a.id, customer: a.customer, created: a.created }));
+    const used = new Set([...jobs.flatMap(j => j.screens.flatMap(fileIdsOf)), ...artworks.flatMap(artFileIds)]);
     const fileMap = Object.fromEntries(Object.entries(files).filter(([k]) => used.has(k)));
-    return json({ master, jobs, files: fileMap, features: { files: !!env.FILES, ai: !!env.AI }, me: { id: me.id, name: me.name, role: me.role } });
+    return json({ master, jobs, artworks, files: fileMap, features: { files: !!env.FILES, ai: !!env.AI }, me: { id: me.id, name: me.name, role: me.role } });
   }
 
   if (m === 'POST' && p === '/jobs') {
-    if (!['artwork', 'admin'].includes(me.role)) return err(403, 'เฉพาะฝ่ายอาร์ทเวิร์ค');
     const b = await req.json();
     if (!b.customer || !Array.isArray(b.screens) || !b.screens.length) return err(400, 'ข้อมูลใบงานไม่ครบ');
     const seqRow = await env.DB.prepare(
@@ -155,7 +173,7 @@ async function api(req, env, url) {
     const stmts = [env.DB.prepare('INSERT INTO jobs (id, no, data, created) VALUES (?, ?, ?, ?)').bind(id, no, JSON.stringify(jobData), now)];
     b.screens.forEach((s, i) => {
       const sd = {
-        design: s.design, customerRef: s.customerRef || '',
+        design: s.design, customerRef: s.customerRef || '', artworkId: typeof s.artworkId === 'string' ? s.artworkId.slice(0, 40) : null,
         originals: Array.isArray(s.originals) ? s.originals : [], prepared: [], preview: s.preview || null,
         mesh: s.mesh, frame: s.frame, emulsion: s.emulsion, target: Number(s.target) || 0,
         status: 'ordered', coats: [], thBefore: '', thAfter: '', coatNote: '', qc: { checks: {}, note: '' },
@@ -184,9 +202,12 @@ async function api(req, env, url) {
   if ((mm = p.match(/^\/jobs\/([\w-]+)$/))) {
     const id = mm[1];
     if (m === 'DELETE') {
-      if (!['artwork', 'admin'].includes(me.role)) return err(403, 'ไม่มีสิทธิ์ลบ');
       const { results: sc } = await env.DB.prepare('SELECT data FROM screens WHERE job_id = ?').bind(id).all();
-      const fids = [...new Set(sc.flatMap(s => fileIdsOf(JSON.parse(s.data))))];
+      // ลบเฉพาะไฟล์ที่ไม่มีใบงานอื่นหรือคลังลายใช้อยู่ (ไฟล์ลายในคลังใช้ซ้ำได้หลายใบงาน)
+      const { results: others } = await env.DB.prepare('SELECT data FROM screens WHERE job_id != ?').bind(id).all();
+      const { results: arts } = await env.DB.prepare('SELECT data FROM artworks').all();
+      const keep = new Set([...others.flatMap(s => fileIdsOf(JSON.parse(s.data))), ...arts.flatMap(a => artFileIds(JSON.parse(a.data)))]);
+      const fids = [...new Set(sc.flatMap(s => fileIdsOf(JSON.parse(s.data))))].filter(f => !keep.has(f));
       if (fids.length) {
         if (env.FILES) await env.FILES.delete(fids);
         await env.DB.batch(fids.map(f => env.DB.prepare('DELETE FROM files WHERE id = ?').bind(f)));
@@ -239,6 +260,68 @@ async function api(req, env, url) {
     }
   }
 
+  // ---------- คลังลายของลูกค้า ----------
+  if (m === 'POST' && p === '/artworks') {
+    const b = await req.json();
+    const customer = String(b.customer || '').trim().slice(0, 100);
+    if (!customer || !Array.isArray(b.items) || !b.items.length) return err(400, 'ข้อมูลลายไม่ครบ');
+    const now = Date.now(), out = [], stmts = [];
+    for (const it of b.items.slice(0, 100)) {
+      const d = cleanArt(it, me, now);
+      if (!d.file) continue;
+      const id = uid();
+      stmts.push(env.DB.prepare('INSERT INTO artworks (id, customer, data, created) VALUES (?, ?, ?, ?)').bind(id, customer, JSON.stringify(d), now));
+      out.push({ ...d, id, customer, created: now });
+    }
+    if (!stmts.length) return err(400, 'ไม่มีลายที่บันทึกได้');
+    // ลูกค้าใหม่: เพิ่มเข้ารายชื่อ
+    const master = await getSetting(env, 'master');
+    if (!master.customers.includes(customer)) { master.customers.push(customer); stmts.push(env.DB.prepare("UPDATE settings SET value = ? WHERE key = 'master'").bind(JSON.stringify(master))); }
+    await env.DB.batch(stmts);
+    return json({ items: out });
+  }
+  if ((mm = p.match(/^\/artworks\/([\w-]+)$/))) {
+    const row = await env.DB.prepare('SELECT customer, data FROM artworks WHERE id = ?').bind(mm[1]).first();
+    if (!row) return err(404, 'ไม่พบลาย');
+    const d = JSON.parse(row.data);
+    if (m === 'PATCH') {
+      const b = await req.json();
+      if ('name' in b) d.name = String(b.name || '').trim().slice(0, 80);
+      if ('customerRef' in b) d.customerRef = String(b.customerRef || '').trim().slice(0, 120);
+      if ('hidden' in b) d.hidden = !!b.hidden;
+      if ('preview' in b && typeof b.preview === 'string') d.preview = b.preview.slice(0, 40);
+      let customer = row.customer;
+      if ('customer' in b && String(b.customer || '').trim()) customer = String(b.customer).trim().slice(0, 100);
+      await env.DB.prepare('UPDATE artworks SET customer = ?, data = ? WHERE id = ?').bind(customer, JSON.stringify(d), mm[1]).run();
+      return json({ ...d, id: mm[1], customer });
+    }
+    if (m === 'DELETE') {
+      // ลายที่ใบงานใช้อยู่: ซ่อนจากคลังแทนการลบ (ใบงานเดิมยังเปิดไฟล์ได้)
+      const used = await env.DB.prepare('SELECT 1 FROM screens WHERE instr(data, ?) > 0 LIMIT 1').bind(`"artworkId":"${mm[1]}"`).first();
+      if (used) {
+        d.hidden = true;
+        await env.DB.prepare('UPDATE artworks SET data = ? WHERE id = ?').bind(JSON.stringify(d), mm[1]).run();
+        return json({ ok: true, hidden: true });
+      }
+      await env.DB.prepare('DELETE FROM artworks WHERE id = ?').bind(mm[1]).run();
+      // ไฟล์ที่ไม่มีลายอื่นหรือใบงานไหนใช้แล้ว ลบทิ้ง
+      const gone = [];
+      for (const f of artFileIds(d)) {
+        const other = await env.DB.prepare('SELECT 1 FROM artworks WHERE instr(data, ?) > 0 LIMIT 1').bind(`"${f}"`).first()
+          || await env.DB.prepare('SELECT 1 FROM screens WHERE instr(data, ?) > 0 LIMIT 1').bind(`"${f}"`).first();
+        if (!other) gone.push(f);
+      }
+      if (gone.length) {
+        if (env.FILES) await env.FILES.delete(gone);
+        await env.DB.batch(gone.map(f => env.DB.prepare('DELETE FROM files WHERE id = ?').bind(f)));
+      }
+      return json({ ok: true });
+    }
+  }
+
+  // ---------- ฟิล์ม positive ----------
+  { const r = await filmApi(req, env, url, p, m, me); if (r) return r; }
+
   // ---------- ไฟล์งาน (R2) ----------
   if (m === 'POST' && p === '/files') {
     if (!env.FILES) return err(500, 'ยังไม่ได้เปิดใช้ R2 สำหรับเก็บไฟล์ (ดูขั้นตอนใน README)');
@@ -267,7 +350,9 @@ async function api(req, env, url) {
       } });
     }
     if (m === 'DELETE') {
-      if (!['artwork', 'admin'].includes(me.role)) return err(403, 'ไม่มีสิทธิ์ลบไฟล์');
+      // ไฟล์ที่ลายในคลังใช้อยู่ไม่ลบ (เอาออกจากบล็อคได้ แต่ไฟล์ยังอยู่ในคลังลาย)
+      const inLib = await env.DB.prepare('SELECT 1 FROM artworks WHERE instr(data, ?) > 0 LIMIT 1').bind(`"${id}"`).first();
+      if (inLib) return json({ ok: true, kept: true });
       if (env.FILES) await env.FILES.delete(id);
       await env.DB.prepare('DELETE FROM files WHERE id = ?').bind(id).run();
       return json({ ok: true });
@@ -322,23 +407,22 @@ async function api(req, env, url) {
 
   // ---------- ผู้ดูแล ----------
   if (p.startsWith('/admin/') || p === '/master') {
-    if (!isAdmin) return err(403, 'เฉพาะผู้ดูแล');
-
     if (m === 'PUT' && p === '/master') {
       const b = await req.json();
       await env.DB.prepare("UPDATE settings SET value = ? WHERE key = 'master'").bind(JSON.stringify(b)).run();
       return json({ ok: true });
     }
     if (m === 'GET' && p === '/admin/users') {
-      const { results } = await env.DB.prepare('SELECT id, name, role, active FROM users ORDER BY active DESC, role, name').all();
+      const { results } = await env.DB.prepare('SELECT id, name, role, active FROM users ORDER BY active DESC, name').all();
       return json(results);
     }
     if (m === 'POST' && p === '/admin/users') {
       const b = await req.json();
-      if (!b.name || !ROLES.includes(b.role)) return err(400, 'ข้อมูลไม่ครบ');
+      if (!b.name) return err(400, 'ข้อมูลไม่ครบ');
+      if (!ROLES.includes(b.role)) b.role = 'artwork';
       if (b.pin && !/^\d{4}$/.test(b.pin)) return err(400, 'PIN ต้องเป็นตัวเลข 4 หลัก');
       if (b.id) {
-        if (b.id === me.id && (b.role !== 'admin' || !b.active)) return err(400, 'ปิดสิทธิ์ผู้ดูแลของตัวเองไม่ได้');
+        if (b.id === me.id && !b.active) return err(400, 'ปิดการใช้งานชื่อของตัวเองไม่ได้');
         await env.DB.prepare('UPDATE users SET name = ?, role = ?, active = ? WHERE id = ?').bind(b.name, b.role, b.active ? 1 : 0, b.id).run();
         if (b.pin) await env.DB.prepare('UPDATE users SET pin_hash = ?, fails = 0, locked_until = 0 WHERE id = ?').bind(await sha256(`${b.id}:${b.pin}`), b.id).run();
         if (!b.active) await env.DB.prepare('DELETE FROM sessions WHERE user_id = ?').bind(b.id).run();

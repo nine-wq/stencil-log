@@ -1,6 +1,6 @@
 # บันทึกขึ้นบล็อค (Viczo)
 
-เว็บแอปรับงานขึ้นบล็อคสกรีนสำหรับ 3 ฝ่าย: อาร์ทเวิร์ค, ขึ้นบล็อค, เก็บงาน/ตรวจ
+เว็บแอปรับงานขึ้นบล็อคสกรีน: คลังลายของลูกค้า, ใบงาน, ทำฟิล์ม positive, ขึ้นบล็อค, เก็บงาน/ตรวจ
 รันบน Cloudflare (Workers + D1 + R2 + Workers AI) แบบฟรี
 
 ## การ deploy
@@ -31,7 +31,10 @@ npx wrangler dev
 ## โครงสร้างไฟล์
 | ไฟล์ | หน้าที่ |
 |---|---|
-| `public/index.html`, `public/app.js`, `public/style.css` | หน้าจอแอป |
+| `public/index.html`, `public/app.js`, `public/style.css` | หน้าจอแอป: ใบงาน คลังลาย ตั้งค่า |
+| `public/film/` | หน้าทำฟิล์ม positive (รวมมาจากแอป film-positive) |
+| `public/sw.js`, `public/manifest.webmanifest`, `public/icons/` | ติดตั้งเป็นแอปบนมือถือ และรับไฟล์จากปุ่มแชร์ |
+| `src/film.js` | API ฟิล์ม: การตั้งค่าฟิล์ม ประวัติฟิล์ม ผูกฟิล์มกับบล็อค |
 | `src/index.js` | API: ล็อกอิน, ใบงาน, ไฟล์ (R2), รูป QC, AI ตั้งชื่อลาย, CSV |
 | `src/schema.js` | โครงสร้างฐานข้อมูล (รันเองอัตโนมัติ) |
 | `wrangler.jsonc` | การตั้งค่า Cloudflare |

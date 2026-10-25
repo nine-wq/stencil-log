@@ -12,5 +12,11 @@ export const SCHEMA = [
   "CREATE TABLE IF NOT EXISTS settings ( key TEXT PRIMARY KEY, value TEXT NOT NULL )",
   "INSERT OR IGNORE INTO settings (key, value) VALUES ('seq', '1'), ('master', '{\"customers\":[],\"mesh\":[\"32T\",\"43T\",\"55T\",\"77T\",\"90T\",\"120T\",\"140T\"],\"frames\":[\"40×50 ซม.\",\"50×60 ซม.\",\"60×80 ซม.\",\"70×90 ซม.\"],\"emulsions\":[\"Dual-cure ทั่วไป\",\"Dual-cure หนา\",\"SBQ บาง\",\"Capillary film\"],\"tolerance\":10}')",
   "INSERT OR IGNORE INTO users (id, name, role, pin_hash) VALUES ('admin', 'ผู้ดูแล', 'admin', '77df4be80359a6bf4ebce9d7839be8f2e5314c0866580fbcae01a5f90ea984a6')",
-  "CREATE TABLE IF NOT EXISTS files ( id TEXT PRIMARY KEY, kind TEXT NOT NULL, name TEXT NOT NULL, type TEXT, size INTEGER, by_name TEXT, t INTEGER NOT NULL )"
+  "CREATE TABLE IF NOT EXISTS files ( id TEXT PRIMARY KEY, kind TEXT NOT NULL, name TEXT NOT NULL, type TEXT, size INTEGER, by_name TEXT, t INTEGER NOT NULL )",
+  // ฟิล์ม positive (ย้ายมาจากแอป film-positive ตารางเดิมใช้ต่อได้เลย)
+  "CREATE TABLE IF NOT EXISTS film_outputs ( id TEXT PRIMARY KEY, name TEXT NOT NULL, created INTEGER NOT NULL, size INTEGER NOT NULL, info TEXT NOT NULL )",
+  "CREATE INDEX IF NOT EXISTS film_outputs_created ON film_outputs(created)",
+  // คลังลายของลูกค้า: 1 แถว = 1 ลาย (คู่ซ้าย-ขวา) จากไฟล์ลูกค้า; data = ชื่อลาย, Customer ID, ไฟล์ต้นฉบับ, หน้า, ตำแหน่งลาย, รูปตัวอย่าง
+  "CREATE TABLE IF NOT EXISTS artworks ( id TEXT PRIMARY KEY, customer TEXT NOT NULL, data TEXT NOT NULL, created INTEGER NOT NULL )",
+  "CREATE INDEX IF NOT EXISTS artworks_customer ON artworks(customer)"
 ];
