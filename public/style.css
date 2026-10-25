@@ -284,3 +284,4 @@ a.btn.primary{color:var(--on-emulsion)}
 .artedit{display:grid;grid-template-columns:200px minmax(0,1fr);gap:14px;align-items:start;padding:12px;border:1px solid var(--emulsion);border-radius:var(--r);background:var(--bg)}
 @media (max-width:520px){.artedit{grid-template-columns:minmax(0,1fr)}.artedit .pz{max-width:240px}}
 @media (max-width:420px){.artgrid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.oldtoggle{align-self:flex-start;color:var(--emulsion)}

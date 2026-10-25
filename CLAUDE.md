@@ -16,7 +16,8 @@ Main menu: ใบงาน (jobs) · คลังลาย (artwork library) · 
    - Images and other files become a single artwork with `filmable: false`.
    - Delete removes the row and its unused files, or hides the artwork (`hidden`) when a screen uses it.
 2. **New job**:
-   - Pick the customer; their library appears as tiles, and each ticked artwork = one screen (บล็อค).
+   - Pick the customer, then upload new files at the top. Newly uploaded artworks are ticked automatically, and each ticked artwork = one screen (บล็อค).
+   - Older library artworks of that customer are folded under "เลือกจากลายเก่าในคลัง (n)", which has a search box.
    - The screen gets `artworkId`, `originals: [artwork.file]`, `preview`, `design` (artwork name) and `customerRef`, plus the customer's default spec (frame, mesh, emulsion, target µm).
    - "+ เพิ่มบล็อคที่ไม่มีไฟล์ลาย" adds a manual screen without an artwork; it can't be filmed.
 3. **Film** (`public/film/`, built from the film app):

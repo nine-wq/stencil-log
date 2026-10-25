@@ -408,11 +408,19 @@ function newJobView() {
       return cs ? `<div class="spechint"><span class="label">สเปคประจำลูกค้า</span><span>${esc(specText(cs))}</span><span class="muted small">ใส่ให้ทุกบล็อคอัตโนมัติ เปลี่ยนเฉพาะงานนี้ได้ที่แต่ละบล็อค · แก้สเปคประจำได้ที่ ⚙ ตั้งค่า</span></div>` : ''; })()}
     <div class="field"><label for="f-note">รายละเอียด / ข้อควรระวัง</label><textarea id="f-note" data-d="note" placeholder="เช่น ชนิดหมึก งานเส้นเล็ก">${esc(d.note)}</textarea></div>
   </div>
-  ${cust ? `<div class="card" style="display:flex;flex-direction:column;gap:10px">
-    <div class="spread"><div><h3>เลือกลายของ ${esc(cust)}</h3><div class="muted small">แตะลายที่จะสั่งในใบงานนี้ · 1 ลาย = 1 บล็อค · ลายใหม่ที่อัปโหลดจะเก็บเข้าคลังลายของลูกค้าด้วย</div></div><span class="muted small"><span class="num">${picked.size}</span> ลายที่เลือก</span></div>
-    ${artGrid(arts, picked, 'pickart')}
+  ${cust ? (() => {
+    // ส่วนใหญ่เป็นลายใหม่: อัปโหลดก่อน แสดงเฉพาะลายที่เพิ่งอัปโหลด/เลือกไว้ ลายเก่าในคลังพับไว้ เปิดดูเมื่อต้องการ
+    const fresh = d.newArts || [], shown = arts.filter(a => picked.has(a.id) || fresh.includes(a.id));
+    const old = arts.filter(a => !shown.includes(a)), q = searchTerms(d.oldQ || '');
+    const oldHit = q.length ? old.filter(a => matches(norm([a.name, a.customerRef, a.fileName].join(' ')), q)) : old;
+    return `<div class="card" style="display:flex;flex-direction:column;gap:10px">
+    <div class="spread"><div><h3>ลายของงานนี้</h3><div class="muted small">อัปโหลดไฟล์ลายของ ${esc(cust)} · 1 ลาย = 1 บล็อค · ลายที่อัปโหลดเก็บเข้าคลังลายของลูกค้าด้วย</div></div><span class="muted small"><span class="num">${picked.size}</span> ลายที่เลือก</span></div>
     ${db.features.files ? uploadZone('nj') : ''}
-  </div>` : '<div class="card muted small">ใส่ชื่อลูกค้าก่อน แล้วเลือกลายจากคลังของลูกค้า หรืออัปโหลดไฟล์ลายใหม่</div>'}
+    ${shown.length ? artGrid(shown, picked, 'pickart') : ''}
+    ${old.length ? `<button class="btn sm ghost oldtoggle" data-a="toggleold" aria-expanded="${!!d.showOld}">${d.showOld ? '▾ ซ่อนลายเก่าในคลัง' : `▸ เลือกจากลายเก่าในคลัง (${old.length} ลาย)`}</button>
+      ${d.showOld ? `<div class="search"><input id="oldq" type="search" data-oldq="1" value="${esc(d.oldQ || '')}" placeholder="ค้นหาลายเก่า: ชื่อลาย Customer ID ชื่อไฟล์" autocomplete="off"></div>
+        <div id="oldgrid">${oldHit.length ? artGrid(oldHit, picked, 'pickart') : '<div class="muted small">ไม่พบลายที่ตรงกับคำค้น</div>'}</div>` : ''}` : ''}
+  </div>`; })() : '<div class="card muted small">ใส่ชื่อลูกค้าก่อน แล้วอัปโหลดไฟล์ลาย หรือเลือกจากลายเก่าในคลังของลูกค้า</div>'}
   <h3>บล็อคที่ต้องขึ้น (${d.screens.length} ลาย)</h3>
   ${d.screens.length ? d.screens.map((s, i) => draftRow(s, i)).join('') : '<div class="empty">ยังไม่ได้เลือกลาย</div>'}
   <button class="btn" data-a="addscreen">+ เพิ่มบล็อคที่ไม่มีไฟล์ลาย</button>
@@ -837,6 +845,7 @@ document.addEventListener('click', async e => {
         ui.lib.edit = null; toast(r.hidden ? 'ซ่อนลายจากคลังแล้ว (ใบงานเดิมยังเปิดได้)' : 'ลบลายแล้ว'); render(); } catch (x) { toast(x.message); }
       break;
     }
+    case 'toggleold': ui.draft.showOld = !ui.draft.showOld; render(); break;
     case 'pickart': {
       const d = ui.draft, a = artOf(v); if (!a) break;
       const has = d.screens.some(x => x.artworkId === v);
@@ -988,6 +997,14 @@ document.addEventListener('input', e => {
     clearTimeout(ui.qTimer); ui.qTimer = setTimeout(updateResults, 120);
     return;
   }
+  if (t.dataset.oldq) {   // ค้นหาลายเก่า: วาดเฉพาะผลค้นหา ช่องพิมพ์ไม่หลุด
+    ui.draft.oldQ = t.value; const box = document.getElementById('oldgrid'); if (!box) return;
+    const d = ui.draft, picked = new Set(d.screens.map(x => x.artworkId).filter(Boolean)), fresh = d.newArts || [], q = searchTerms(t.value);
+    const old = custArts(d.customer.trim()).filter(a => !picked.has(a.id) && !fresh.includes(a.id));
+    const hit = q.length ? old.filter(a => matches(norm([a.name, a.customerRef, a.fileName].join(' ')), q)) : old;
+    box.innerHTML = hit.length ? artGrid(hit, picked, 'pickart') : '<div class="muted small">ไม่พบลายที่ตรงกับคำค้น</div>';
+    return;
+  }
   if (t.dataset.d) {
     const k = t.dataset.d, d = ui.draft; d[k] = t.type === 'checkbox' ? t.checked : t.value;
     if (k === 'customer') {
@@ -1032,7 +1049,7 @@ document.addEventListener('change', async e => {
     const fs = [...t.files]; t.value = '';
     const cust = ui.view === 'newjob' ? ui.draft.customer.trim() : ui.lib.cust;
     const made = await addArtworkFiles(cust, fs);
-    if (ui.view === 'newjob' && ui.draft) { made.filter(a => !ui.draft.screens.some(x => x.artworkId === a.id)).forEach(a => ui.draft.screens.push(screenFromArt(a))); render(); }
+    if (ui.view === 'newjob' && ui.draft) { ui.draft.newArts = [...(ui.draft.newArts || []), ...made.map(a => a.id)]; made.filter(a => !ui.draft.screens.some(x => x.artworkId === a.id)).forEach(a => ui.draft.screens.push(screenFromArt(a))); render(); }
     return;
   }
   if (t.dataset.jf) {
@@ -1095,7 +1112,7 @@ document.addEventListener('drop', e => {
   const fs = [...e.dataTransfer.files]; if (!fs.length) return;
   if (z.dataset.drop === 'lib') {
     const cust = ui.view === 'newjob' ? ui.draft.customer.trim() : ui.lib.cust;
-    addArtworkFiles(cust, fs).then(made => { if (ui.view === 'newjob' && ui.draft) { made.filter(a => !ui.draft.screens.some(x => x.artworkId === a.id)).forEach(a => ui.draft.screens.push(screenFromArt(a))); render(); } });
+    addArtworkFiles(cust, fs).then(made => { if (ui.view === 'newjob' && ui.draft) { ui.draft.newArts = [...(ui.draft.newArts || []), ...made.map(a => a.id)]; made.filter(a => !ui.draft.screens.some(x => x.artworkId === a.id)).forEach(a => ui.draft.screens.push(screenFromArt(a))); render(); } });
   }
   else if (fs[0].type.startsWith('image/')) setPreview(z.dataset.zone, fs[0]);
   else previewFromFile(fs[0]).then(b => b ? setPreview(z.dataset.zone, new File([b], 'preview.jpg', { type: 'image/jpeg' })) : toast('ไฟล์นี้ทำรูปตัวอย่างไม่ได้ ลองวางภาพหน้าจอแทน'));
