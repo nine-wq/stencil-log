@@ -22,7 +22,8 @@ Main menu: ใบงาน (jobs) · คลังลาย (artwork library) · 
    - The screen gets `artworkId`, `originals: [artwork.file]`, `preview`, `design` (artwork name) and `customerRef`, plus the customer's default spec (frame, mesh, emulsion, target µm).
    - "+ เพิ่มบล็อคที่ไม่มีไฟล์ลาย" adds a manual screen without an artwork; it can't be filmed.
    - **Film check (ตรวจฟิล์ม)** happens here, per screen (also on the screen page while no film exists).
-     - It shows a black film preview of just that design, rendered in the browser from the original with compensation and labels off.
+     - It shows a black film preview of just that design, rendered in the browser from the original with compensation (labels off).
+     - The preview is laid exactly over the same area of the original. A slider (ต้นฉบับ ↔ ฟิล์ม, remembered per browser) sets the film's opacity.
      - It sets the compensation (auto = target × factor / manual µm / none) and the colours to leave out.
      - These are saved as `screen.filmPrep = {mode, manualUm, notArt[]}`. Thickness always comes from the screen's `target`.
 3. **Combine onto sheet** (`public/film/`):

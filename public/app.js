@@ -648,7 +648,11 @@ function filmPanel(t, s, a, customer) {
     if (!pv) queuePreview(t, s, a, customer);
     const cols = pv && pv.colours ? pv.colours : [];
     body = `<div class="fpbody">
-      <div class="fpimg">${pv && pv.img ? `<img src="${pv.img}" alt="ตัวอย่างฟิล์มของลายนี้">` : pv && pv.err ? `<span class="err small">${esc(pv.err)}</span>` : '<span class="muted small">กำลังทำตัวอย่างฟิล์ม…</span>'}</div>
+      <div class="fpview">${pv && pv.img ? `<div class="fpimg fpstack">
+          ${pv.orig ? `<img class="fporig" src="${pv.orig}" alt="ต้นฉบับ">` : ''}
+          <img class="fpfilm" src="${pv.img}" alt="ตัวอย่างฟิล์มของลายนี้" style="opacity:${pv.orig ? fpOpacity() / 100 : 1}"></div>
+        ${pv.orig ? `<label class="fpslide small"><span>ต้นฉบับ</span><input type="range" min="0" max="100" step="1" value="${fpOpacity()}" data-fpop="1" aria-label="ความชัดของฟิล์มที่วางทับต้นฉบับ"><span>ฟิล์ม</span></label>` : ''}`
+        : `<div class="fpimg">${pv && pv.err ? `<span class="err small">${esc(pv.err)}</span>` : '<span class="muted small">กำลังทำตัวอย่างฟิล์ม…</span>'}</div>`}</div>
       <div class="fpctl">
         <div class="grid2">
           <div class="field"><label for="fp-m-${pk}">ชดเชยขอบ</label><select id="fp-m-${pk}" data-fp="${t}" data-k="mode">${[['auto', 'อัตโนมัติ (ความหนา × ' + ((ui.filmSet || filmSetCache || FILM_DEF).factor ?? 0.5) + ')'], ['manual', 'ระบุค่าเอง'], ['none', 'ไม่ชดเชย']].map(([v, l]) => `<option value="${v}" ${p.mode === v ? 'selected' : ''}>${l}</option>`).join('')}</select></div>
@@ -720,10 +724,24 @@ function queuePreview(t, s, a, customer) {
       const g = c.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, c.width, c.height);
       await pg.render({ canvasContext: g, viewport: vp, transform: [1, 0, 0, 1, -it.x * k, -(H - it.y - it.H) * k] }).promise;
       doc.destroy(); out.img = c.toDataURL('image/png');
+      // the original, same area and same scale, to lay under the film (not for a block turned sideways on the sheet)
+      if (!it.rot) {
+        try {
+          const od = await lib.getDocument({ data: bytes.slice(0), isEvalSupported: false, verbosity: 0 }).promise;
+          const op = await od.getPage((a.page || 0) + 1), ov = op.getViewport({ scale: k }), bb = it.b.bbox;
+          const p1 = ov.convertToViewportPoint(bb[0], bb[1]), p2 = ov.convertToViewportPoint(bb[2], bb[3]);
+          const oc = document.createElement('canvas'); oc.width = c.width; oc.height = c.height;
+          const og = oc.getContext('2d'); og.fillStyle = '#fff'; og.fillRect(0, 0, oc.width, oc.height);
+          await op.render({ canvasContext: og, viewport: ov, transform: [1, 0, 0, 1, -Math.min(p1[0], p2[0]), -Math.min(p1[1], p2[1])] }).promise;
+          od.destroy(); out.orig = oc.toDataURL('image/jpeg', 0.85);
+        } catch (e) {}
+      }
     } catch (e) { out.err = 'ทำตัวอย่างฟิล์มไม่ได้: ' + e.message; }
     fpCache.set(key, out); render();
   });
 }
+// how strongly the film shows over the original (0 = only the original, 100 = only the film), remembered per browser
+function fpOpacity() { if (ui.fpOp == null) { let v = NaN; try { v = +localStorage.getItem('stencil-fpop'); } catch (e) {} ui.fpOp = isFinite(v) && v > 0 ? v : 70; } return ui.fpOp; }
 function prepTarget(t) { return targetObj(t); }
 function setPrep(t, patch) {
   const s = prepTarget(t); if (!s) return;
@@ -1117,6 +1135,12 @@ document.addEventListener('input', e => {
     const x = t.parentNode.querySelector('[data-a="clearq"]'); if (x) x.hidden = !ui.q;
     // อัปเดตเฉพาะผลค้นหา (ไม่วาดช่องพิมพ์ใหม่) จึงทำได้แม้คีย์บอร์ดยังขีดเส้นใต้คำที่กำลังพิมพ์อยู่
     clearTimeout(ui.qTimer); ui.qTimer = setTimeout(updateResults, 120);
+    return;
+  }
+  if (t.dataset.fpop) {
+    ui.fpOp = +t.value; try { localStorage.setItem('stencil-fpop', t.value); } catch (e) {}
+    document.querySelectorAll('.fpstack .fpfilm').forEach(im => { im.style.opacity = ui.fpOp / 100; });
+    document.querySelectorAll('[data-fpop]').forEach(r => { if (r !== t) r.value = t.value; });
     return;
   }
   if (t.dataset.oldq) {   // ค้นหาลายเก่า: วาดเฉพาะผลค้นหา ช่องพิมพ์ไม่หลุด
