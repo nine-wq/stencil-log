@@ -291,3 +291,15 @@ a.btn.primary{color:var(--on-emulsion)}
 .artrm:hover{border-color:var(--bad)}
 .artrm.armed{background:var(--bad);border-color:var(--bad);color:var(--surface)}
 .artrm:focus-visible{outline:2px solid var(--bad);outline-offset:2px}
+/* film check panel (new job rows, screen page) */
+.fprep{display:flex;flex-direction:column;gap:10px;border-top:1px dashed var(--line);padding-top:10px}
+.fpbody{display:grid;grid-template-columns:minmax(0,260px) minmax(0,1fr);gap:14px;align-items:start}
+@media (max-width:560px){.fpbody{grid-template-columns:minmax(0,1fr)}}
+.fpimg{background:#fff;border:1px solid var(--line);border-radius:8px;min-height:140px;display:grid;place-items:center;padding:6px}
+.fpimg img{max-width:100%;max-height:340px;display:block}
+.fpctl{display:flex;flex-direction:column;gap:10px;min-width:0}
+.fpcols{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+.fpcol{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--emulsion);background:var(--emulsion-soft);color:var(--fg);border-radius:99px;padding:3px 10px 3px 4px;font:500 .8rem var(--mono);cursor:pointer}
+.fpcol i{width:16px;height:16px;border-radius:50%;border:1px solid rgba(0,0,0,.2);flex:none}
+.fpcol.off{border-color:var(--line);background:var(--surface);color:var(--muted);text-decoration:line-through}
+.fpcol:focus-visible{outline:2px solid var(--emulsion);outline-offset:2px}

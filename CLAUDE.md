@@ -5,7 +5,7 @@ Owner: Nine. Staff use it on phones and desktop PCs. The former film-positive ap
 
 ## Workflow
 Everyone who logs in (name + PIN) can do everything. There are no role checks; the `users.role` column is kept but unused.
-Main menu: ใบงาน (jobs) · คลังลาย (artwork library) · ทำฟิล์ม (film page, with a count of screens waiting for film).
+Main menu: ใบงาน (jobs) · คลังลาย (artwork library) · รวมแผ่นฟิล์ม (combine-onto-sheet page, with a count of screens waiting for film).
 
 1. **Artwork library** (`artworks` table, one row = one design = one left/right pair from a customer file):
    - Upload a customer's files under a customer, from คลังลาย or inside the new-job form.
@@ -21,9 +21,14 @@ Main menu: ใบงาน (jobs) · คลังลาย (artwork library) · 
    - Older library artworks of that customer are folded under "เลือกจากลายเก่าในคลัง (n)", which has a search box.
    - The screen gets `artworkId`, `originals: [artwork.file]`, `preview`, `design` (artwork name) and `customerRef`, plus the customer's default spec (frame, mesh, emulsion, target µm).
    - "+ เพิ่มบล็อคที่ไม่มีไฟล์ลาย" adds a manual screen without an artwork; it can't be filmed.
-3. **Film** (`public/film/`, built from the film app):
-   - "บล็อครอทำฟิล์ม" lists screens with a filmable artwork, no `film`, and not sent.
-   - Adding a screen loads the artwork's original from R2, keeps only that design (nearest `box`), and sets the job's customer and the screen's `target` as stencil thickness.
+   - **Film check (ตรวจฟิล์ม)** happens here, per screen (also on the screen page while no film exists).
+     - It shows a black film preview of just that design, rendered in the browser from the original with compensation and labels off.
+     - It sets the compensation (auto = target × factor / manual µm / none) and the colours to leave out.
+     - These are saved as `screen.filmPrep = {mode, manualUm, notArt[]}`. Thickness always comes from the screen's `target`.
+3. **Combine onto sheet** (`public/film/`):
+   - "บล็อคที่รอลงแผ่นฟิล์ม" lists screens with a filmable artwork, no `film`, and not sent, from every job and customer. All are ticked at first; "รวมลงแผ่นฟิล์ม" lays them out.
+   - Each one loads the artwork's original from R2, keeps only that design (nearest `box`), and applies the job's customer, the screen's `target` and its `filmPrep`.
+   - Job screens show as compact cards with no controls; "แก้การตรวจฟิล์มที่ใบงาน" links to `/#screen=<id>`.
    - Files can also be dropped by hand for work without a job.
    - Saving always stores the history copy, then `POST /api/films/:id/link` sets `screen.film = {id, name, at, by, compUm, thick}` and adds a log line.
    - Deleting a film from history removes `film` from its screens again.

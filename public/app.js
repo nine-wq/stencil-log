@@ -252,7 +252,7 @@ function render() {
   <nav class="wrap tabs mainnav" aria-label="เมนูหลัก">
     <button data-a="nav" data-v="list" aria-current="${!['library', 'settings'].includes(ui.view)}">ใบงาน</button>
     <button data-a="nav" data-v="library" aria-current="${ui.view === 'library'}">คลังลาย</button>
-    <a href="/film/" class="navlink">ทำฟิล์ม${(() => { const n = allScreens().filter(x => needsFilm(x.s)).length; return n ? ` <span class="count">${n}</span>` : ''; })()}</a>
+    <a href="/film/" class="navlink">รวมแผ่นฟิล์ม${(() => { const n = allScreens().filter(x => needsFilm(x.s)).length; return n ? ` <span class="count">${n}</span>` : ''; })()}</a>
   </nav></header>
   <main class="wrap">${body()}</main>`;
   window.scrollTo(0, y);
@@ -444,7 +444,8 @@ function draftRow(s, i) {
       <div class="field"><label for="s-f-${s.key}">ขนาดเฟรม</label><select id="s-f-${s.key}" data-s="${i}" data-k="frame">${opt(m.frames, s.frame)}</select></div>
       <div class="field"><label for="s-e-${s.key}">ชนิดกาว</label><select id="s-e-${s.key}" data-s="${i}" data-k="emulsion">${opt(m.emulsions, s.emulsion)}</select></div>
       <div class="field"><label for="s-t-${s.key}">ความหนาที่ลูกค้าต้องการ</label><div class="unit"><input id="s-t-${s.key}" type="number" inputmode="numeric" value="${esc(s.target)}" data-s="${i}" data-k="target" placeholder="เช่น 120"><span>µm</span></div></div>
-    </div></div>`;
+    </div>
+    ${a && a.filmable ? filmPanel('d:' + i, s, a, d.customer.trim()) : ''}</div>`;
 }
 
 /* --- คลังลาย: ลายของลูกค้าแต่ละราย (1 ลาย = คู่ซ้าย-ขวา 1 ชุดจากไฟล์ลูกค้า) --- */
@@ -623,11 +624,114 @@ function filmCard(s) {
   const t = encodeURIComponent(token);
   return `<div class="card" style="display:flex;flex-direction:column;gap:10px">
     <div class="spread"><h3>ฟิล์ม</h3>${f ? '<span class="fstate ok">ทำฟิล์มแล้ว</span>' : '<span class="fstate">ยังไม่ทำฟิล์ม</span>'}</div>
-    ${f ? `<div class="small">${fmtT(f.at)} โดย ${esc(f.by)}${f.thick ? ` · ความหนาบล็อค <span class="num">${f.thick} µm</span>` : ''}${f.compUm != null ? ` · ชดเชยขอบ <span class="num">${f.compUm} µm</span>` : ''}<br><span class="muted">${esc(f.name)}</span></div>` : '<div class="muted small">ลายนี้ยังไม่ได้ลงแผ่นฟิล์ม</div>'}
+    ${a && a.filmable ? filmPanel('s', s, a, (find(ui.jobId).j || {}).customer || '') : ''}
+    ${f ? `<div class="small">${fmtT(f.at)} โดย ${esc(f.by)}${f.thick ? ` · ความหนาบล็อค <span class="num">${f.thick} µm</span>` : ''}${f.compUm != null ? ` · ชดเชยขอบ <span class="num">${f.compUm} µm</span>` : ''}<br><span class="muted">${esc(f.name)}</span></div>` : '<div class="muted small">ยังไม่ได้ลงแผ่นฟิล์ม · ลายที่ตรวจแล้วจะรอรวมลงแผ่นที่เมนู "รวมแผ่นฟิล์ม" พร้อมงานอื่น</div>'}
     <div class="row">${f ? `<a class="btn sm" href="/api/films/${f.id}?dl=1&t=${t}">ดาวน์โหลดแผ่นฟิล์ม</a><a class="btn sm ghost" href="/api/films/${f.id}?t=${t}" target="_blank" rel="noopener">เปิดดู</a>` : ''}
-      ${a && a.filmable ? `<a class="btn sm ${f ? 'ghost' : 'primary'}" href="/film/?add=${s.id}">${f ? 'ทำฟิล์มใหม่' : 'ทำฟิล์ม'}</a>` : ''}</div>
+      ${a && a.filmable && f ? `<a class="btn sm ghost" href="/film/?add=${s.id}">ลงแผ่นฟิล์มใหม่</a>` : ''}</div>
   </div>`;
 }
+/* --- ตรวจฟิล์มของแต่ละบล็อค: ตัวอย่างฟิล์มสีดำ การชดเชยขอบ สีที่ไม่ใช่ลาย -> screen.filmPrep --- */
+// filmPrep = { mode: 'auto'|'manual'|'none', manualUm, notArt: [colour keys] }; ความหนามาจากสเปคของบล็อค (target)
+const prepOf = s => ({ mode: 'auto', manualUm: 200, notArt: [], ...(s.filmPrep || {}) });
+const pkOf = (t, s) => s.id || s.key || t;
+function compText(s) {
+  const p = prepOf(s), f = (ui.filmSet || filmSetCache || FILM_DEF);
+  if (p.mode === 'none') return 'ไม่ชดเชยขอบ';
+  if (p.mode === 'manual') return `ชดเชยขอบ ${p.manualUm} µm (ระบุเอง)`;
+  return `ชดเชยขอบ ${Math.round((+s.target || 0) * (f.factor != null ? f.factor : 0.5))} µm (อัตโนมัติ)`;
+}
+function filmPanel(t, s, a, customer) {
+  const pk = pkOf(t, s), open = ui.fpOpen && ui.fpOpen[pk], p = prepOf(s), pv = fpCache.get(fpKey(s, a, customer));
+  const nOff = p.notArt.length;
+  let body = '';
+  if (open) {
+    if (!pv) queuePreview(t, s, a, customer);
+    const cols = pv && pv.colours ? pv.colours : [];
+    body = `<div class="fpbody">
+      <div class="fpimg">${pv && pv.img ? `<img src="${pv.img}" alt="ตัวอย่างฟิล์มของลายนี้">` : pv && pv.err ? `<span class="err small">${esc(pv.err)}</span>` : '<span class="muted small">กำลังทำตัวอย่างฟิล์ม…</span>'}</div>
+      <div class="fpctl">
+        <div class="grid2">
+          <div class="field"><label for="fp-m-${pk}">ชดเชยขอบ</label><select id="fp-m-${pk}" data-fp="${t}" data-k="mode">${[['auto', 'อัตโนมัติ (ความหนา × ' + ((ui.filmSet || filmSetCache || FILM_DEF).factor ?? 0.5) + ')'], ['manual', 'ระบุค่าเอง'], ['none', 'ไม่ชดเชย']].map(([v, l]) => `<option value="${v}" ${p.mode === v ? 'selected' : ''}>${l}</option>`).join('')}</select></div>
+          <div class="field"><label for="fp-u-${pk}">ค่าชดเชย</label><div class="unit"><input id="fp-u-${pk}" type="number" min="0" max="2000" step="10" data-fp="${t}" data-k="manualUm" value="${p.mode === 'manual' ? esc(p.manualUm) : esc(pv && pv.comp != null ? pv.comp : '')}" ${p.mode === 'manual' ? '' : 'disabled'}><span>µm</span></div></div>
+        </div>
+        ${cols.length ? `<div><span class="label">สีในลาย</span> <span class="muted small">ทุกสีเป็นสีดำในฟิล์ม แตะสีที่ไม่ใช่ลายเพื่อตัดออก</span>
+          <div class="fpcols">${cols.map(c => { const on = !p.notArt.includes(c.key);
+            return `<button class="fpcol ${on ? '' : 'off'}" data-a="fpcol" data-v="${t}" data-k="${esc(c.key)}" aria-pressed="${on}"><i style="background:${esc(c.css)}"></i>${esc(c.label)}</button>`; }).join('')}</div></div>` : ''}
+        ${pv && pv.notes ? `<div class="muted small">${esc(pv.notes)}</div>` : ''}
+      </div></div>`;
+  }
+  return `<div class="fprep">
+    <div class="spread"><span class="small"><b>ฟิล์ม</b> · ความหนา <span class="num">${esc(s.target || '-')} µm</span> · ${compText(s)}${nOff ? ` · ตัดสีออก ${nOff} สี` : ''}</span>
+      <button class="btn sm ${open ? '' : 'ghost'}" data-a="fpopen" data-v="${t}" aria-expanded="${!!open}">${open ? 'ซ่อน' : 'ตรวจฟิล์ม'}</button></div>${body}</div>`;
+}
+// preview: the original file -> this design only, black, with compensation (labels off), cut out of the rendered film
+const fpCache = new Map(), fileBytes = new Map(), jobCache = new Map();
+let filmSetCache = null, fpBusy = Promise.resolve();
+const fpKey = (s, a, customer) => JSON.stringify([a.id, +s.target || 0, prepOf(s), customer]);
+async function artBytes(a) {
+  if (!fileBytes.has(a.file)) {
+    const r = await fetch('/api/files/' + a.file, { headers: { Authorization: 'Bearer ' + token } });
+    if (!r.ok) throw new Error('เปิดไฟล์ต้นฉบับไม่ได้ (' + r.status + ')');
+    fileBytes.set(a.file, new Uint8Array(await r.arrayBuffer()));
+  }
+  return fileBytes.get(a.file);
+}
+function pickDesign(C, job, a, st) {
+  const ds = C.describe(job, st).designs; if (!ds.length) return null;
+  let pick = ds.find(d => d.index === a.design) || ds[0];
+  if (a.box) { const cx = (a.box[0] + a.box[2]) / 2, cy = (a.box[1] + a.box[3]) / 2; let best = Infinity;
+    ds.forEach(d => { const b = d.boxes.reduce((u, f) => [Math.min(u[0], f[0]), Math.min(u[1], f[1]), Math.max(u[2], f[2]), Math.max(u[3], f[3])]);
+      const dd = Math.hypot((b[0] + b[2]) / 2 - cx, (b[1] + b[3]) / 2 - cy); if (dd < best) { best = dd; pick = d; } }); }
+  return pick;
+}
+function queuePreview(t, s, a, customer) {
+  const key = fpKey(s, a, customer); if (fpCache.has(key)) return;
+  fpCache.set(key, null);
+  fpBusy = fpBusy.then(async () => {
+    const out = {};
+    try {
+      const C = await loadFilmTools(), f = filmSetCache || (filmSetCache = { ...FILM_DEF, ...(await filmSet()) });
+      const st = { ...f, autoFactor: f.factor, labels: false, cropMarks: false, dateText: '' };
+      const bytes = await artBytes(a), jk = a.file + ':' + (a.page || 0);
+      if (!jobCache.has(jk)) jobCache.set(jk, await C.analyze(bytes, a.customerRef || 'artwork', a.page || 0));
+      const job = jobCache.get(jk), p = prepOf(s);
+      job.notArt = new Set(p.notArt); job.excluded = new Set();
+      const pick = pickDesign(C, job, a, st); if (!pick) throw new Error('ไม่พบลายในไฟล์');
+      C.describe(job, st).designs.forEach(d => { if (d.index !== pick.index) job.excluded.add(d.index); });
+      const set = { customer, thick: +s.target || 0, thickSet: true, mode: p.mode, manualUm: +p.manualUm || 0 };
+      job.dset = { [pick.index]: set };
+      out.comp = C.compensation(set, st);
+      // colours of the whole file, with art = still part of the artwork
+      job.notArt = new Set(); const all = C.describe(job, st); job.notArt = new Set(p.notArt);
+      const d2 = C.describe(job, st);
+      const seen = new Map(); all.colours.forEach(c => { if (!seen.has(c.label)) seen.set(c.label, c); });
+      out.colours = [...seen.values()].filter(c => c.art || p.notArt.includes(c.key)).map(c => ({ key: c.key, label: c.label, css: c.css }));
+      const notes = [];
+      if (d2.guides) notes.push(`ตัดเส้นกรอบ/เส้นร่าง ${d2.guides} เส้น`);
+      if (d2.specks) notes.push(`ตัดเศษเล็ก ${d2.specks} ชิ้น`);
+      if (d2.nearWhite) notes.push(`สีเกือบขาว ${d2.nearWhite} ชิ้นถือเป็นสีขาว`);
+      out.notes = notes.join(' · ');
+      const blocks = C.blocksFor(job, st), res = await C.render(blocks, st), it = res.plan.sheets[0] && res.plan.sheets[0][0];
+      if (!it) throw new Error('ลายใหญ่เกินแผ่นฟิล์ม');
+      const lib = window.pdfjsLib, doc = await lib.getDocument({ data: res.bytes, isEvalSupported: false, verbosity: 0 }).promise;
+      const pg = await doc.getPage(1), H = res.plan.H, k = 420 / Math.max(it.W, it.H);
+      const vp = pg.getViewport({ scale: k }), c = document.createElement('canvas');
+      c.width = Math.round(it.W * k); c.height = Math.round(it.H * k);
+      const g = c.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, c.width, c.height);
+      await pg.render({ canvasContext: g, viewport: vp, transform: [1, 0, 0, 1, -it.x * k, -(H - it.y - it.H) * k] }).promise;
+      doc.destroy(); out.img = c.toDataURL('image/png');
+    } catch (e) { out.err = 'ทำตัวอย่างฟิล์มไม่ได้: ' + e.message; }
+    fpCache.set(key, out); render();
+  });
+}
+function prepTarget(t) { return targetObj(t); }
+function setPrep(t, patch) {
+  const s = prepTarget(t); if (!s) return;
+  s.filmPrep = { ...prepOf(s), ...patch };
+  if (t === 's') saveScreen(s);
+  render();
+}
+
 const FILM_DEF = { sheetW: 21, sheetH: 31, margin: 10, gap: 15, markArm: 5, markGrey: 25, labelGrey: 25, markWidthMm: 0.15, nearWhite: 5, speckMm: 0.2, factor: 0.5, defaultThick: 400, labels: true, cropMarks: false, thicknesses: [100, 200, 300, 400, 500, 600, 800] };
 const FILM_FIELDS = [['sheetW', 'ขนาดแผ่นฟิล์ม กว้าง', 'นิ้ว'], ['sheetH', 'ยาว', 'นิ้ว'], ['margin', 'ขอบแผ่น', 'mm'], ['gap', 'ช่องห่างระหว่างงาน', 'mm'],
   ['factor', 'ชดเชยขอบอัตโนมัติ = ความหนา ×', ''], ['defaultThick', 'ความหนาเมื่อไม่ระบุลูกค้า', 'µm'], ['markArm', 'ขนาดกากบาท (ครึ่งแขน)', 'mm'], ['markWidthMm', 'ความหนาเส้นกากบาท', 'mm'],
@@ -860,6 +964,9 @@ document.addEventListener('click', async e => {
       } catch (x) { toast('เอาลายออกไม่สำเร็จ: ' + x.message); }
       break;
     }
+    case 'fpopen': { const s = targetObj(v); if (!s) break; ui.fpOpen = ui.fpOpen || {}; const pk = pkOf(v, s); ui.fpOpen[pk] = !ui.fpOpen[pk]; render(); break; }
+    case 'fpcol': { const s = targetObj(v); if (!s) break; const k = el.dataset.k, p = prepOf(s);
+      setPrep(v, { notArt: p.notArt.includes(k) ? p.notArt.filter(x => x !== k) : [...p.notArt, k] }); break; }
     case 'toggleold': ui.draft.showOld = !ui.draft.showOld; render(); break;
     case 'pickart': {
       const d = ui.draft, a = artOf(v); if (!a) break;
@@ -1052,8 +1159,16 @@ document.addEventListener('input', e => {
 document.addEventListener('change', async e => {
   const t = e.target;
   if (t.dataset.u && ui.editUser) { ui.editUser[t.dataset.u] = t.type === 'checkbox' ? t.checked : t.value; return; }
-  if (t.dataset.s) { ui.draft.screens[+t.dataset.s][t.dataset.k] = t.value; if (t.tagName === 'SELECT') render(); return; }
+  if (t.dataset.s) { ui.draft.screens[+t.dataset.s][t.dataset.k] = t.value; if (t.tagName === 'SELECT' || t.dataset.k === 'target') render(); return; }
   if (t.dataset.d === 'customer') { render(); return; }
+  if (t.dataset.fp) {
+    const k = t.dataset.k, s = targetObj(t.dataset.fp); if (!s) return;
+    if (k === 'mode') { const p = prepOf(s); const patch = { mode: t.value };
+      if (t.value === 'manual' && p.mode !== 'manual') patch.manualUm = Math.round((+s.target || 0) * ((filmSetCache || FILM_DEF).factor ?? 0.5));
+      setPrep(t.dataset.fp, patch); }
+    else if (k === 'manualUm') { const v = +t.value; if (isFinite(v) && v >= 0) setPrep(t.dataset.fp, { manualUm: v }); }
+    return;
+  }
   if (t.dataset.libcust) { ui.lib.cust = t.value.trim(); ui.lib.edit = null; render(); return; }
   if (t.dataset.art && ui.lib.edit) {
     const a = artOf(ui.lib.edit), k = t.dataset.art; if (!a) return;
@@ -1181,5 +1296,13 @@ async function takeShared() {
 
 // เริ่มต้น
 try { ui.groupBy = localStorage.getItem('stencil-groupby') === 'customer' ? 'customer' : 'date'; } catch (e) {}
-if (token) loadData().then(() => { if (!ui.user) loadUsers(); else takeShared(); }); else loadUsers();
+// ลิงก์ตรงไปที่บล็อค: /#screen=<id> (จากหน้ารวมแผ่นฟิล์ม)
+function openFromHash() {
+  const m = location.hash.match(/^#screen=([\w-]+)$/); if (!m || !ui.user) return;
+  history.replaceState(null, '', location.pathname + location.search);
+  const x = allScreens().find(y => y.s.id === m[1]); if (!x) return;
+  ui.fpOpen = { ...(ui.fpOpen || {}), [x.s.id]: true };
+  go('screen', { jobId: x.j.id, screenId: x.s.id, backTo: 'job' });
+}
+if (token) loadData().then(() => { if (!ui.user) loadUsers(); else { takeShared(); openFromHash(); } }); else loadUsers();
 })();

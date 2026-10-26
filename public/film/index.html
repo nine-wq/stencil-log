@@ -68,6 +68,7 @@ h2 { font-size: .78rem; font-weight: 600; text-transform: uppercase; letter-spac
 .qrow.in { opacity: .55 }
 .qbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center }
 .qempty { font-size: .85rem; color: var(--muted) }
+.editlink { font-size: .82rem; color: var(--accent); font-weight: 600 }
 .jtag { display: inline-block; font-size: .72rem; font-weight: 600; color: var(--accent); background: var(--accent-soft); border-radius: 5px; padding: 1px 6px; margin-left: 6px; vertical-align: middle }
 
 .drop { border: 1.5px dashed var(--line); border-radius: 10px; padding: 18px; display: grid; gap: 6px; text-align: center;
@@ -254,7 +255,7 @@ details.settings summary { cursor: pointer; font-weight: 600; font-size: .9rem }
 
 <div class="wrap">
   <header>
-    <h1><a class="homelink" href="/">← ใบงาน</a>ฟิล์ม positive <small id="who"></small></h1>
+    <h1><a class="homelink" href="/">← ใบงาน</a>รวมแผ่นฟิล์ม <small id="who"></small></h1>
     <div class="headr">
     <button type="button" class="install" id="installBtn" hidden title="ติดตั้งเป็นแอปบนเครื่องนี้ รับไฟล์จากปุ่มแชร์ได้">ติดตั้งแอป</button>
     <nav class="tabs" role="tablist" aria-label="หน้า">
@@ -324,10 +325,10 @@ details.settings summary { cursor: pointer; font-weight: 600; font-size: .9rem }
   <div class="grid" id="viewWork" role="tabpanel" aria-labelledby="tabWork">
     <section class="rail" aria-label="งาน">
       <section class="queue" id="queueBox" aria-label="บล็อครอทำฟิล์ม">
-        <div class="qhead"><h2 class="sh">บล็อครอทำฟิล์ม</h2><span class="qempty" id="queueCount"></span></div>
+        <div class="qhead"><h2 class="sh">บล็อคที่รอลงแผ่นฟิล์ม</h2><span class="qempty" id="queueCount"></span></div>
         <div id="queueList"><div class="qempty">กำลังโหลด…</div></div>
         <div class="qbar" id="queueBar" hidden>
-          <button type="button" class="btn" id="queueAdd">ใส่ที่เลือกลงฟิล์ม</button>
+          <button type="button" class="btn" id="queueAdd">รวมลงแผ่นฟิล์ม</button>
           <button type="button" class="ghost" id="queueAll">เลือกทั้งหมด</button>
         </div>
       </section>
@@ -649,6 +650,17 @@ details.settings summary { cursor: pointer; font-weight: 600; font-size: .9rem }
       head.append(nm, x); body.appendChild(head);
       if (rec.error) { const e = document.createElement('div'); e.className = 'err'; e.textContent = rec.error; body.appendChild(e); card.appendChild(body); box.appendChild(card); continue; }
       const j = rec.job; const d = C.describe(j, st);
+      if (rec.screen) {   // job screen: film settings were checked in the job, here it is only shown
+        const ds = j.dset && j.dset[rec.screen.index] || {};
+        const m = document.createElement('div'); m.className = 'meta';
+        const um = C.compensation(ds, st);
+        m.textContent = `${rec.screen.customer} · ความหนา ${ds.thick != null ? ds.thick : '-'} µm · ${ds.mode === 'none' ? 'ไม่ชดเชยขอบ' : `ชดเชยขอบ ${um} µm${ds.mode === 'manual' ? ' (ระบุเอง)' : ''}`}${j.notArt.size ? ` · ตัดสีออก ${j.notArt.size} สี` : ''}`;
+        body.appendChild(m);
+        const a = document.createElement('a'); a.className = 'editlink'; a.href = '/#screen=' + encodeURIComponent(rec.screen.id); a.textContent = 'แก้การตรวจฟิล์มที่ใบงาน';
+        body.appendChild(a);
+        card.appendChild(body); box.appendChild(card); thumb(rec, th);
+        continue;
+      }
 
       const sum = document.createElement('div'); sum.className = 'meta';
       sum.textContent = d.designs.length ? `พบ ${d.designs.length} ลาย` + (d.framed ? ' จากกรอบแป้นในไฟล์' : '') : 'ไม่พบลายในไฟล์นี้';
@@ -1310,7 +1322,9 @@ details.settings summary { cursor: pointer; font-weight: 600; font-size: .9rem }
     try {
       const r = await apiFetch('/api/data'); const d = await r.json();
       if (!r.ok) throw new Error(d.error || r.status);
+      const first = !Q.data;
       Q.data = d; $('who').textContent = d.me ? d.me.name : '';
+      if (first) waiting(false).forEach(x => Q.sel.add(x.s.id));   // everything waiting is ticked at first
     } catch (e) { $('queueList').innerHTML = ''; const m = document.createElement('div'); m.className = 'qempty'; m.textContent = 'โหลดรายการใบงานไม่ได้: ' + e.message; $('queueList').appendChild(m); return; }
     renderQueue();
   }
@@ -1386,7 +1400,9 @@ details.settings summary { cursor: pointer; font-weight: 600; font-size: .9rem }
           }
           d.designs.forEach(ds => { if (ds.index !== pick.index) rec.job.excluded.add(ds.index); });
           rec.screen.index = pick.index;
-          rec.job.dset = { [pick.index]: { customer: j.customer, thick: rec.screen.thick != null ? rec.screen.thick : thickFor(j.customer), thickSet: true, mode: 'auto', manualUm: 200 } };
+          const prep = { mode: 'auto', manualUm: 200, notArt: [], ...(s.filmPrep || {}) };   // checked in the job (ตรวจฟิล์ม)
+          rec.job.dset = { [pick.index]: { customer: j.customer, thick: rec.screen.thick != null ? rec.screen.thick : thickFor(j.customer), thickSet: true, mode: prep.mode, manualUm: +prep.manualUm || 0 } };
+          rec.job.notArt = new Set(prep.notArt || []);
         }
         jobs.push(rec); Q.sel.delete(id);
       } catch (e) { fails.push((s.design || id) + ': ' + e.message); }

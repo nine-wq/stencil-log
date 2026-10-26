@@ -51,6 +51,15 @@ async function currentUser(req, env, url) {
   ).bind(token, since).first();
 }
 
+// การตรวจฟิล์มของบล็อค (ทำตอนสร้างใบงาน): วิธีชดเชยขอบ ค่าที่ระบุเอง และสีที่ตัดออกจากลาย
+function cleanPrep(p) {
+  if (!p || typeof p !== 'object') return null;
+  const mode = ['auto', 'manual', 'none'].includes(p.mode) ? p.mode : 'auto';
+  const um = Number(p.manualUm);
+  const notArt = Array.isArray(p.notArt) ? p.notArt.filter(k => typeof k === 'string').map(k => k.slice(0, 80)).slice(0, 50) : [];
+  return { mode, manualUm: Number.isFinite(um) && um >= 0 && um <= 5000 ? um : 200, notArt };
+}
+
 // ลาย 1 ชิ้นในคลัง (ค่าที่รับจากหน้าเว็บ ตัดให้อยู่ในขอบเขต)
 function cleanArt(it, me, now) {
   const str = (v, n) => String(v == null ? '' : v).slice(0, n);
@@ -173,7 +182,7 @@ async function api(req, env, url) {
     const stmts = [env.DB.prepare('INSERT INTO jobs (id, no, data, created) VALUES (?, ?, ?, ?)').bind(id, no, JSON.stringify(jobData), now)];
     b.screens.forEach((s, i) => {
       const sd = {
-        design: s.design, customerRef: s.customerRef || '', artworkId: typeof s.artworkId === 'string' ? s.artworkId.slice(0, 40) : null,
+        design: s.design, customerRef: s.customerRef || '', filmPrep: cleanPrep(s.filmPrep), artworkId: typeof s.artworkId === 'string' ? s.artworkId.slice(0, 40) : null,
         originals: Array.isArray(s.originals) ? s.originals : [], prepared: [], preview: s.preview || null,
         mesh: s.mesh, frame: s.frame, emulsion: s.emulsion, target: Number(s.target) || 0,
         status: 'ordered', coats: [], thBefore: '', thAfter: '', coatNote: '', qc: { checks: {}, note: '' },
