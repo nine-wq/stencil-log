@@ -65,6 +65,9 @@ Screen status flow: `ordered → coating → qc → ready → sent`, with `qc �
   - originals of hand-dropped film files at `film/orig/<sha256>`
 - Deleting a job removes only files that no other screen or artwork uses. `DELETE /api/files/:id` keeps files that an artwork uses.
 - Workers AI (`AI`): `/api/ai/name` tries llama-4-scout → mistral-small-3.1 → gemma-3-12b in order.
+  - Naming rules (in `AI_PROMPT`): text printed in the design goes into the name; never a colour; never the word "ลาย".
+  - `cleanName()` also strips a leading/standalone "ลาย", "สี<colour>" and standalone Thai colour words.
+  - English words are kept, because they are usually design text.
 - Auth: pick a name + 4-digit PIN; sha256(`<userId>:<pin>`); bearer-token sessions, 60 days; lockout after 5 failures.
   - The film page reads the same token (`localStorage['stencil-token']`).
   - `<img>`/download links pass `?t=<token>`.

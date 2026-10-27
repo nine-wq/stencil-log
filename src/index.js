@@ -14,7 +14,16 @@ const AI_MODELS = [
   '@cf/mistralai/mistral-small-3.1-24b-instruct',
   '@cf/google/gemma-3-12b-it'
 ];
-const AI_PROMPT = 'นี่คือภาพตัวอย่างลายสกรีนเสื้อ ตั้งชื่อลายนี้เป็นภาษาไทยสั้น ๆ 2–5 คำ ให้คนในโรงงานจำได้ทันทีว่าเป็นลายอะไร เช่น "แมวเล่นบอล" "โลโก้ร้านกาแฟ" "ตัวหนังสือ RUN 2026" ถ้ามีข้อความเด่นให้ใส่ข้อความนั้น ตอบเฉพาะชื่อลายบรรทัดเดียว ไม่ต้องอธิบาย';
+const AI_PROMPT = 'นี่คือภาพตัวอย่างลายสกรีน (เช่น ถุงเท้า เสื้อ) ตั้งชื่อเรียกลายนี้เป็นภาษาไทยสั้น ๆ 2–5 คำ ให้คนในโรงงานจำได้ทันทีว่าเป็นลายอะไร '
+  + 'กติกา: (1) ถ้าในลายมีข้อความ ตัวหนังสือ หรือชื่อแบรนด์ ต้องใส่ข้อความนั้นในชื่อตามที่เห็น '
+  + '(2) ห้ามใส่สีใด ๆ ในชื่อ เช่น แดง ดำ ขาว ชมพู สีแดง red เพราะงานพิมพ์ได้หลายสี '
+  + '(3) ห้ามขึ้นต้นหรือใส่คำว่า "ลาย" '
+  + 'ตัวอย่างชื่อที่ดี: "โลโก้ SKIMS" "แมวเล่นบอล" "จุดกลม BELLE" "อัศวิน PALLY" "ดาวพระจันทร์ Club Melani" '
+  + 'ตอบเฉพาะชื่อบรรทัดเดียว ไม่ต้องอธิบาย';
+// colour words are never part of a design name (the same design is printed in many colours)
+const COLOUR_WORDS = ['สีแดง', 'สีดำ', 'สีขาว', 'สีชมพู', 'สีฟ้า', 'สีน้ำเงิน', 'สีเขียว', 'สีเหลือง', 'สีส้ม', 'สีม่วง', 'สีเทา', 'สีน้ำตาล', 'สีทอง', 'สีเงิน', 'สีครีม', 'สีกรม', 'สีบานเย็น',
+  'แดง', 'ดำ', 'ขาว', 'ชมพู', 'ฟ้า', 'น้ำเงิน', 'เขียว', 'เหลือง', 'ส้ม', 'ม่วง', 'เทา', 'น้ำตาล', 'ทอง', 'กรม', 'บานเย็น', 'หลากสี', 'สีสัน',
+  'red', 'black', 'white', 'pink', 'blue', 'green', 'yellow', 'orange', 'purple', 'grey', 'gray', 'brown', 'gold', 'silver', 'navy'];
 
 function toBase64(bytes) {
   let s = '';
@@ -23,7 +32,16 @@ function toBase64(bytes) {
 }
 function cleanName(t) {
   const line = String(t).split('\n').map(x => x.trim()).find(Boolean) || '';
-  return line.replace(/^(ชื่อลาย|ชื่อ|name)\s*[:：]\s*/i, '').replace(/^["'“”‘’「『]+|["'“”‘’」』.。]+$/g, '').trim().slice(0, 50);
+  let n = line.replace(/^(ชื่อลาย|ชื่อ|name)\s*[:：]\s*/i, '').replace(/^["'“”‘’「『]+|["'“”‘’」』.。]+$/g, '').trim();
+  n = n.replace(/^ลาย\s*/, '').replace(/\s+ลาย(?=\s|$)/g, ' ');   // no "ลาย" (design) in the name
+  // colours out, without breaking other words ("ท้องฟ้า", "Redbull" stay):
+  // "สี<colour>" anywhere, and a colour word only when it is a whole word on its own
+  for (const w of COLOUR_WORDS) if (w.startsWith('สี')) n = n.split(w).join(' ');
+  // English colour words are left alone here: in a design they are usually printed text (e.g. "RED HEART"); the prompt keeps colours out
+  const bare = new Set(COLOUR_WORDS.filter(w => !/^[a-z]+$/.test(w)));
+  n = n.split(/\s+/).filter(tok => !bare.has(tok) && tok !== 'สี').join(' ');
+  n = n.replace(/\s+/g, ' ').replace(/^[\s,·-]+|[\s,·-]+$/g, '').trim();
+  return n.slice(0, 50);
 }
 function fileIdsOf(d) {
   return [...(d.originals || []), ...(d.prepared || []), ...(d.preview ? [d.preview] : [])];
