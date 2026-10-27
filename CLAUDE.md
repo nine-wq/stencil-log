@@ -21,7 +21,12 @@ Main menu: ใบงาน (jobs) · คลังลาย (artwork library) · 
    - Older library artworks of that customer are folded under "เลือกจากลายเก่าในคลัง (n)", which has a search box.
    - **Stencil ID**: every new screen gets `stencilId` = `ST-<Thai YY><MM>-<NNNN>` from the `settings.sseq` counter when the job is saved. The form shows the predicted number (`/api/data` returns `stencilNext`). It appears on rows, the screen page, the film queue and cards, the film label (stencil ID + Customer REF), search and CSV.
    - The screen gets `artworkId`, `originals: [artwork.file]`, `preview`, `design` (artwork name) and `customerRef`, plus the customer's default spec (frame, mesh, emulsion, target µm).
-   - "+ เพิ่มบล็อคที่ไม่มีไฟล์ลาย" adds a manual screen without an artwork; it can't be filmed.
+   - **Waiting for the customer's file**: "+ เพิ่มบล็อครอไฟล์จากลูกค้า" adds a screen with no artwork yet. Its name may be empty, and the job can be saved so stencil prep starts in parallel.
+     - The row shows a "รอไฟล์จากลูกค้า" box with an upload button. Home rows show the badge `waitingFile(s)`.
+     - Later, on the screen page, the "ไฟล์ลายของบล็อคนี้" card uploads the file into the customer's library, or picks an existing library artwork.
+       - A file with several designs asks which one belongs to this screen.
+       - `attachArt()` sets `artworkId`, `preview`, `originals`, Customer REF and the name if it is empty, then logs it. The AI name fills it in later if needed.
+     - From then on the screen gets the viewer/film group and appears in the film queue.
    - Each block row: header (บล็อคที่ n, predicted Stencil ID, buttons), one viewer on the left, and groups on the right: ลาย (name, Customer REF) · สเปคบล็อค (mesh, frame, emulsion, thickness) · ฟิล์ม.
    - **Viewer** (`makeViewer`, shown at once, no toggle; it loads when scrolled into view):
      - The same area of the original with the design's film laid over it. The slider (ต้นฉบับ ↔ ฟิล์ม, remembered per browser) sets the film's opacity.

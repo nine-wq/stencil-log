@@ -358,3 +358,6 @@ span.szchip{display:inline-flex;align-items:center;min-height:26px;margin:2px 4p
 .fsrc{color:var(--warn);font-weight:600}
 .stack{display:flex;flex-direction:column;gap:10px;min-width:0}
 .stack .ro-v{min-height:0;padding:2px}
+.waitfile{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;text-align:center;min-height:220px;padding:16px;border:2px dashed color-mix(in srgb,var(--warn) 55%,var(--line));border-radius:var(--r);background:var(--warn-soft)}
+.waitfile b{color:var(--warn)}
+.fstate.wait{background:var(--warn-soft);color:var(--warn)}
