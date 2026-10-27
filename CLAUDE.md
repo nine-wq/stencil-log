@@ -32,6 +32,9 @@ Main menu: ใบงาน (jobs) · คลังลาย (artwork library) · 
    - **Sizes**: `screen.sizes = []` (several or none) are picked as chips in the ลาย group and on the screen page.
      - The list is `master.sizes`, edited in ⚙ (รายการให้เลือก → ไซส์). Default: FREE SIZE, XS–XXL.
      - Shown on home rows, in search and in CSV.
+   - **New or the customer's own stencil**: `screen.frameSource = 'new' | 'customer'` (บล็อคใหม่ / บล็อคเดิมลูกค้า).
+     - Set with a two-button switch at the top of สเปคบล็อค and on the screen page. Default: new.
+     - Shown on home rows when it is the customer's, and included in search and CSV.
    - **Film group**: compensation and the colours to leave out.
      - It sets the compensation (auto = target × factor / manual µm / none) and the colours to leave out.
      - These are saved as `screen.filmPrep = {mode, manualUm, notArt[]}`. Thickness always comes from the screen's `target`.

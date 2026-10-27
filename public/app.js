@@ -355,7 +355,7 @@ function jobText(j) {
 function screenText(s) {
   const files = [...(s.originals || []), ...(s.prepared || [])].map(id => (db.files[id] || {}).name);
   const people = [...(s.coats || []).map(c => c.by), ...(s.log || []).map(l => l[1]), s.qc && s.qc.by];
-  return norm([s.stencilId, s.design, s.customerRef, ...(s.sizes || []), s.mesh, s.frame, s.emulsion, s.target && s.target + 'µm', STATUS[s.status], s.coatNote, s.qc && s.qc.note, ...files, ...people].join(' '));
+  return norm([s.stencilId, frameSrcText(s), s.design, s.customerRef, ...(s.sizes || []), s.mesh, s.frame, s.emulsion, s.target && s.target + 'µm', STATUS[s.status], s.coatNote, s.qc && s.qc.note, ...files, ...people].join(' '));
 }
 const RECENT_DAYS = 3;
 const localDate = (t = Date.now()) => { const d = new Date(t); return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`; };
@@ -378,7 +378,7 @@ function blockRow(j, s) {
   return `<button class="brow" data-a="openscreen" data-j="${j.id}" data-v="${s.id}">
     ${s.preview ? `<img class="thumb" src="${fileUrl(s.preview, true)}" alt="" loading="lazy">` : '<span class="thumb none" aria-hidden="true"></span>'}
     <span class="bt">${s.stencilId ? `<span class="sid sm">${esc(s.stencilId)}</span>` : ''}<b>${esc(s.design || '(ยังไม่ตั้งชื่อ)')}</b>
-      <span class="muted small">${(s.sizes || []).length ? `ไซส์ ${esc(s.sizes.join(', '))} · ` : ''}<span class="num">${esc(s.mesh)}</span> · สเปค <span class="num">${esc(s.target)} µm</span>${s.coats.length ? ` · กาว ${s.coats.length} รอบ` : ''}${th}</span>
+      <span class="muted small">${s.frameSource === 'customer' ? '<span class="fsrc">บล็อคเดิมลูกค้า</span> · ' : ''}${(s.sizes || []).length ? `ไซส์ ${esc(s.sizes.join(', '))} · ` : ''}<span class="num">${esc(s.mesh)}</span> · สเปค <span class="num">${esc(s.target)} µm</span>${s.coats.length ? ` · กาว ${s.coats.length} รอบ` : ''}${th}</span>
       ${needsFilm(s) ? '<span class="fstate">ยังไม่ทำฟิล์ม</span>' : !s.film && !s.artworkId && db.features.files && !prep && ['ordered', 'coating'].includes(s.status) ? '<span class="fstate">ยังไม่มีไฟล์เตรียม</span>' : ''}</span>
     ${chip(s.status)}
   </button>`;
@@ -392,6 +392,14 @@ function sizeChips(t, s, edit) {
   return `<div class="szchips" role="group" aria-label="ไซส์">${list.map(x => { const on = sel.includes(x);
     return `<button type="button" class="szchip ${on ? 'on' : ''}" data-a="size" data-v="${t}" data-k="${esc(x)}" aria-pressed="${on}">${esc(x)}</button>`; }).join('')}
     <span class="muted small">${sel.length ? `${sel.length} ไซส์` : 'ไม่ระบุไซส์'}</span></div>`;
+}
+// บล็อคใหม่ หรือ บล็อคเดิมของลูกค้า (ลูกค้าส่งเฟรมมาให้ขึ้นกาวใหม่)
+const FRAME_SRC = [['new', 'บล็อคใหม่'], ['customer', 'บล็อคเดิมลูกค้า']];
+const frameSrcText = s => s.frameSource === 'customer' ? 'บล็อคเดิมลูกค้า' : 'บล็อคใหม่';
+function frameSrcPicker(t, s) {
+  const cur = s.frameSource === 'customer' ? 'customer' : 'new';
+  return `<div class="seg" role="radiogroup" aria-label="บล็อคใหม่หรือบล็อคเดิมลูกค้า">${FRAME_SRC.map(([v, l]) =>
+    `<button type="button" role="radio" aria-checked="${cur === v}" class="${cur === v ? 'on' : ''}" data-a="framesrc" data-v="${t}" data-k="${v}">${l}</button>`).join('')}</div>`;
 }
 function blankScreen() {
   const m = db.master, cs = custSpec(ui.draft && ui.draft.customer) || {};
@@ -468,6 +476,7 @@ function draftRow(s, i) {
           ${a && !a.filmable ? '<span class="fstate">ไฟล์นี้ทำฟิล์มในแอปไม่ได้</span>' : ''}
         </fieldset>
         <fieldset class="grp"><legend>สเปคบล็อค</legend>
+          ${frameSrcPicker('d:' + i, s)}
           <div class="grid4">
             <div class="field"><label for="s-m-${s.key}">เบอร์ผ้าสกรีน</label><select id="s-m-${s.key}" data-s="${i}" data-k="mesh">${opt(m.mesh, s.mesh)}</select></div>
             <div class="field"><label for="s-f-${s.key}">ขนาดเฟรม</label><select id="s-f-${s.key}" data-s="${i}" data-k="frame">${opt(m.frames, s.frame)}</select></div>
@@ -938,6 +947,7 @@ function screenView() {
   const nextSide = s.coats.length && s.coats[s.coats.length - 1].side === 'ด้านพิมพ์' ? 'ด้านปาด' : 'ด้านพิมพ์';
   let h = `<button class="btn ghost back" data-a="back">← กลับ</button>
   <div class="spread"><div><div class="jobno">${esc(j.no)} · ${esc(j.customer)}${s.stencilId ? ` · <span class="sid">${esc(s.stencilId)}</span>` : ''}</div><h2>${esc(s.design || '(ยังไม่ตั้งชื่อ)')}</h2>${s.customerRef ? `<div class="jobno">Customer REF: ${esc(s.customerRef)}</div>` : ''}</div>${chip(s.status)}</div>
+  ${frameSrcPicker('s', s)}
   <div class="spec">
     <div><div class="label">ผ้าสกรีน</div><div class="v num">${esc(s.mesh)}</div></div>
     <div><div class="label">เฟรม</div><div class="v">${esc(s.frame)}</div></div>
@@ -1126,6 +1136,10 @@ document.addEventListener('click', async e => {
     }
     case 'fpcol': { const s = targetObj(v); if (!s) break; const k = el.dataset.k, p = prepOf(s);
       setPrep(v, { notArt: p.notArt.includes(k) ? p.notArt.filter(x => x !== k) : [...p.notArt, k] }); break; }
+    case 'framesrc': { const o = targetObj(v); if (!o || (o.frameSource || 'new') === el.dataset.k) break;
+      o.frameSource = el.dataset.k;
+      if (v === 's') { logEv(o, 'เปลี่ยนเป็น' + frameSrcText(o)); saveScreen(o); }
+      render(); break; }
     case 'size': { const o = targetObj(v); if (!o) break; const k = el.dataset.k, cur = o.sizes || [];
       o.sizes = cur.includes(k) ? cur.filter(x => x !== k) : sizeList().filter(x => x === k || cur.includes(x)).concat(cur.filter(x => !sizeList().includes(x)));
       if (v === 's') { logEv(o, 'แก้ไซส์: ' + (o.sizes.join(', ') || 'ไม่ระบุ')); saveScreen(o); }
