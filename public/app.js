@@ -467,7 +467,7 @@ function draftRow(s, i) {
         : db.features.files ? previewZone('d:' + i, s, true) : '<span></span>'}
       <div class="srfields">
         <fieldset class="grp"><legend>ลาย</legend>
-          <div class="grid2">
+          <div class="stack">
             ${!a && db.features.ai && db.features.files ? nameField('d:' + i, s, `s-d-${s.key}`, `data-s="${i}" data-k="design"`) : `<div class="field"><label for="s-d-${s.key}">ชื่อลาย</label><input id="s-d-${s.key}" value="${esc(s.design)}" data-s="${i}" data-k="design" placeholder="${a && !a.name ? 'AI กำลังตั้งชื่อ…' : 'เช่น โลโก้หน้าอก (ขาว)'}"></div>`}
             ${a ? `<div class="field"><span class="flabel">Customer REF</span><div class="ro-v" title="${esc(s.customerRef || '')}">${esc(s.customerRef || '-')}</div></div>`
               : `<div class="field"><label for="s-c-${s.key}">Customer REF</label><input id="s-c-${s.key}" value="${esc(s.customerRef)}" data-s="${i}" data-k="customerRef"></div>`}
