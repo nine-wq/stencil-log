@@ -850,18 +850,13 @@ function makeViewer() {
     if (z === 'in') zoomAt(v.scale * 1.6); else if (z === 'out') zoomAt(v.scale / 1.6); else if (z === 'fit') fit();
     else if (z === 'full') { const on = !el.classList.contains('full'); el.classList.toggle('full', on); document.body.style.overflow = on ? 'hidden' : ''; b.textContent = on ? 'ย่อกลับ' : 'ขยาย'; area.style.height = on ? '' : area.style.height; requestAnimationFrame(fit); }
   });
-  // the mouse wheel zooms at the pointer. So scrolling the page is not caught by a viewer passing under the pointer:
-  // - a wheel that keeps going from a page scroll (less than 0.4 s since the last page wheel) still scrolls the page
-  // - zooming out stops at "fit"; one more wheel step out then scrolls the page again
+  // inside the picture the mouse wheel always zooms (at the pointer); outside it scrolls the page as usual
   area.addEventListener('wheel', e => {
     if (!v.data || !v.data.film) return;
-    const full = el.classList.contains('full'), pinch = e.ctrlKey || e.metaKey;
-    if (!full && !pinch && Date.now() - lastPageWheel < 400) { lastPageWheel = Date.now(); return; }
-    const dy = e.deltaY * (e.deltaMode === 1 ? 16 : 1);
-    if (!full && !pinch && dy > 0 && v.scale <= v.fitScale * 1.001) { lastPageWheel = Date.now(); return; }
-    e.preventDefault(); const r = area.getBoundingClientRect();
-    let next = v.scale * Math.exp(-dy * (pinch ? 0.01 : 0.002));
-    if (!full && next < v.fitScale) { fit(); return; }
+    e.preventDefault();
+    const r = area.getBoundingClientRect(), dy = e.deltaY * (e.deltaMode === 1 ? 16 : 1);
+    const next = v.scale * Math.exp(-dy * (e.ctrlKey || e.metaKey ? 0.01 : 0.002));
+    if (next <= v.fitScale) { if (v.zoomed) fit(); return; }   // zooming out stops at "fit"
     zoomAt(next, e.clientX - r.left, e.clientY - r.top);
   }, { passive: false });
   area.addEventListener('dblclick', e => { const r = area.getBoundingClientRect(); zoomAt(v.scale * 2.5, e.clientX - r.left, e.clientY - r.top); });
@@ -883,9 +878,6 @@ function makeViewer() {
   new ResizeObserver(() => { if (!v.data || !v.data.film) return; const ow = v.w; size(); if (!v.zoomed) fit(); else { v.tx += (v.w - ow) / 2; changed(true); } }).observe(area);
   return v;
 }
-// wheels outside the viewers scroll the page; remember when, so a scroll passing over a viewer keeps scrolling
-let lastPageWheel = 0;
-window.addEventListener('wheel', e => { if (!(e.target.closest && e.target.closest('.fvarea'))) lastPageWheel = Date.now(); }, { passive: true });
 document.addEventListener('keydown', e => { if (e.key !== 'Escape') return; const f = document.querySelector('.fv.full'); if (f) f.querySelector('[data-z="full"]').click(); });
 
 const FILM_DEF = { sheetW: 21, sheetH: 31, margin: 10, gap: 15, markArm: 5, markGrey: 25, labelGrey: 25, markWidthMm: 0.15, nearWhite: 5, speckMm: 0.2, factor: 0.5, defaultThick: 400, labels: true, cropMarks: false, thicknesses: [100, 200, 300, 400, 500, 600, 800] };

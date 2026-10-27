@@ -26,7 +26,7 @@ Main menu: ใบงาน (jobs) · คลังลาย (artwork library) · 
    - **Viewer** (`makeViewer`, shown at once, no toggle; it loads when scrolled into view):
      - The same area of the original with the design's film laid over it. The slider (ต้นฉบับ ↔ ฟิล์ม, remembered per browser) sets the film's opacity.
      - Zoom with +/−/พอดี, the mouse wheel, pinch or double-click; drag to pan; "ขยาย" goes full screen.
-     - Wheel guard: a wheel within 0.4 s of a page scroll keeps scrolling the page, and wheeling out at "fit" scrolls the page.
+     - Inside the picture the wheel always zooms (it never scrolls the page; zooming out stops at "fit"). Outside the picture the wheel scrolls the page.
      - Both layers are re-rendered from the PDFs (pdf.js pages are kept) for the visible area, so zoom stays sharp.
      - The viewer DOM lives in `viewers` (Map by screen id/key) and is re-attached to its `[data-fv]` slot after every render().
    - **Film group**: compensation and the colours to leave out.
