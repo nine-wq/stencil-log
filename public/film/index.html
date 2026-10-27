@@ -654,7 +654,7 @@ details.settings summary { cursor: pointer; font-weight: 600; font-size: .9rem }
         const ds = j.dset && j.dset[rec.screen.index] || {};
         const m = document.createElement('div'); m.className = 'meta';
         const um = C.compensation(ds, st);
-        m.textContent = `${rec.screen.customer} · ความหนา ${ds.thick != null ? ds.thick : '-'} µm · ${ds.mode === 'none' ? 'ไม่ชดเชยขอบ' : `ชดเชยขอบ ${um} µm${ds.mode === 'manual' ? ' (ระบุเอง)' : ''}`}${j.notArt.size ? ` · ตัดสีออก ${j.notArt.size} สี` : ''}`;
+        m.textContent = `${rec.screen.stencilId ? rec.screen.stencilId + ' · ' : ''}${rec.screen.customer} · ความหนา ${ds.thick != null ? ds.thick : '-'} µm · ${ds.mode === 'none' ? 'ไม่ชดเชยขอบ' : `ชดเชยขอบ ${um} µm${ds.mode === 'manual' ? ' (ระบุเอง)' : ''}`}${j.notArt.size ? ` · ตัดสีออก ${j.notArt.size} สี` : ''}`;
         body.appendChild(m);
         const a = document.createElement('a'); a.className = 'editlink'; a.href = '/#screen=' + encodeURIComponent(rec.screen.id); a.textContent = 'แก้การตรวจฟิล์มที่ใบงาน';
         body.appendChild(a);
@@ -1359,7 +1359,7 @@ details.settings summary { cursor: pointer; font-weight: 600; font-size: .9rem }
         if (a.preview) { pic = document.createElement('img'); pic.loading = 'lazy'; pic.alt = ''; pic.src = tq('/api/files/' + a.preview + '?inline=1'); }
         else { pic = document.createElement('span'); pic.className = 'noimg'; }
         const t = document.createElement('span'); t.className = 'qt'; t.textContent = s.design || a.name || '(ยังไม่ตั้งชื่อ)';
-        const sm = document.createElement('small'); sm.textContent = `${s.target || '-'} µm · ${s.mesh || ''}${inFilm(s.id) ? ' · อยู่ในฟิล์มนี้แล้ว' : a.customerRef ? ' · ' + a.customerRef : ''}`; t.appendChild(sm);
+        const sm = document.createElement('small'); sm.textContent = `${s.stencilId ? s.stencilId + ' · ' : ''}${s.target || '-'} µm · ${s.mesh || ''}${inFilm(s.id) ? ' · อยู่ในฟิล์มนี้แล้ว' : a.customerRef ? ' · ' + a.customerRef : ''}`; t.appendChild(sm);
         lab.append(cb, pic, t); g.appendChild(lab);
       }
       box.appendChild(g);
@@ -1385,9 +1385,10 @@ details.settings summary { cursor: pointer; font-weight: 600; font-size: .9rem }
           const r = await apiFetch('/api/files/' + a.file); if (!r.ok) throw new Error('เปิดไฟล์ไม่ได้ (' + r.status + ')');
           bytes = new Uint8Array(await r.arrayBuffer()); Q.files.set(a.file, bytes);
         }
-        const label = a.customerRef || String(a.fileName || 'artwork').replace(/\.(ai|pdf)$/i, '');
+        // label under the design on the film: stencil ID + customer REF, so the film piece can be matched to its stencil
+        const ref = a.customerRef || String(a.fileName || 'artwork').replace(/\.(ai|pdf)$/i, ''), label = s.stencilId ? `${s.stencilId} ${ref}` : ref;
         const rec = { id: ++seq, name: `${s.design || a.name || label}`, bytes: bytes.slice(0), page: a.page || 0, src: a.fileName || label, srcBytes: bytes,
-          screen: { id: s.id, jobNo: j.no, design: s.design || a.name || '', customer: j.customer, thick: Number(s.target) || null } };
+          screen: { id: s.id, stencilId: s.stencilId || '', jobNo: j.no, design: s.design || a.name || '', customer: j.customer, thick: Number(s.target) || null } };
         rec.job = await C.analyze(bytes, label, a.page || 0);
         const d = C.describe(rec.job, st);
         if (d.designs.length) {

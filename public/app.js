@@ -48,7 +48,7 @@ async function loadUsers() { try { db.users = await api('GET', '/users'); } catc
 async function loadData(quiet) {
   try {
     const d = await api('GET', '/data');
-    db.master = d.master; db.jobs = d.jobs; db.artworks = d.artworks || []; ui.user = d.me;
+    db.master = d.master; db.jobs = d.jobs; db.artworks = d.artworks || []; db.stencilNext = d.stencilNext || 1; ui.user = d.me;
     Object.assign(db.files, d.files || {}); db.features = d.features || {};
     if (!quiet || !isEditing()) render();
   } catch (e) { if (!quiet && e.status !== 401) toast('โหลดข้อมูลไม่สำเร็จ: ' + e.message); }
@@ -147,7 +147,7 @@ async function aiName(t) {
   } catch (e) { toast(e.message); }
   delete ui.aiBusy[t]; render();
 }
-// แปะไฟล์ลูกค้าหลายไฟล์ลงใบงานใหม่: ไฟล์ละ 1 ลาย, Customer ID มาจากชื่อไฟล์
+// แปะไฟล์ลูกค้าหลายไฟล์ลงใบงานใหม่: ไฟล์ละ 1 ลาย, Customer REF มาจากชื่อไฟล์
 async function addCustomerFiles(files, rowIndex) {
   for (const file of files) {
     let f;
@@ -227,7 +227,7 @@ const logEv = (s, msg) => s.log.push([Date.now(), ui.user.name, msg]);
 
 /* ---------- render ---------- */
 function render() {
-  const app = $('#app');
+  const app = $('#app'); slotInfo.clear();
   if (!ui.user) { app.innerHTML = loginView(); return; }
   if (!db.master) { app.innerHTML = '<div class="loading">กำลังโหลดข้อมูล…</div>'; return; }
   if (!ui.tab || !FILTERS.some(f => f[0] === ui.tab)) ui.tab = 'all';
@@ -255,6 +255,7 @@ function render() {
     <a href="/film/" class="navlink">รวมแผ่นฟิล์ม${(() => { const n = allScreens().filter(x => needsFilm(x.s)).length; return n ? ` <span class="count">${n}</span>` : ''; })()}</a>
   </nav></header>
   <main class="wrap">${body()}</main>`;
+  mountViewers();
   window.scrollTo(0, y);
 }
 function body() {
@@ -290,7 +291,7 @@ function loginView() {
 /* --- หน้าแรก: ใบงานทั้งหมด กรองตามขั้นตอน --- */
 function homeView() {
   return `<div class="spread"><h2>ใบงาน</h2><button class="btn primary" data-a="newjob">+ สร้างใบงาน</button></div>
-  <div class="search"><input id="q" type="search" data-search="1" value="${esc(ui.q || '')}" placeholder="ค้นหา ลูกค้า เลขใบงาน ชื่อลาย Customer ID เบอร์ผ้า ชื่อคน…" autocomplete="off" enterkeyhint="search">
+  <div class="search"><input id="q" type="search" data-search="1" value="${esc(ui.q || '')}" placeholder="ค้นหา ลูกค้า เลขใบงาน ชื่อลาย Customer REF เบอร์ผ้า ชื่อคน…" autocomplete="off" enterkeyhint="search">
     <button class="btn sm ghost" data-a="clearq" aria-label="ล้างคำค้น" ${ui.q ? '' : 'hidden'}>✕</button></div>
   <div id="homeres">${homeResults()}</div>`;
 }
@@ -354,7 +355,7 @@ function jobText(j) {
 function screenText(s) {
   const files = [...(s.originals || []), ...(s.prepared || [])].map(id => (db.files[id] || {}).name);
   const people = [...(s.coats || []).map(c => c.by), ...(s.log || []).map(l => l[1]), s.qc && s.qc.by];
-  return norm([s.design, s.customerRef, s.mesh, s.frame, s.emulsion, s.target && s.target + 'µm', STATUS[s.status], s.coatNote, s.qc && s.qc.note, ...files, ...people].join(' '));
+  return norm([s.stencilId, s.design, s.customerRef, s.mesh, s.frame, s.emulsion, s.target && s.target + 'µm', STATUS[s.status], s.coatNote, s.qc && s.qc.note, ...files, ...people].join(' '));
 }
 const RECENT_DAYS = 3;
 const localDate = (t = Date.now()) => { const d = new Date(t); return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`; };
@@ -376,7 +377,7 @@ function blockRow(j, s) {
   const th = s.thAfter !== '' ? ` · หลังถ่าย <span class="num">${s.thAfter}</span>` : '';
   return `<button class="brow" data-a="openscreen" data-j="${j.id}" data-v="${s.id}">
     ${s.preview ? `<img class="thumb" src="${fileUrl(s.preview, true)}" alt="" loading="lazy">` : '<span class="thumb none" aria-hidden="true"></span>'}
-    <span class="bt"><b>${esc(s.design || '(ยังไม่ตั้งชื่อ)')}</b>
+    <span class="bt">${s.stencilId ? `<span class="sid sm">${esc(s.stencilId)}</span>` : ''}<b>${esc(s.design || '(ยังไม่ตั้งชื่อ)')}</b>
       <span class="muted small"><span class="num">${esc(s.mesh)}</span> · สเปค <span class="num">${esc(s.target)} µm</span>${s.coats.length ? ` · กาว ${s.coats.length} รอบ` : ''}${th}</span>
       ${needsFilm(s) ? '<span class="fstate">ยังไม่ทำฟิล์ม</span>' : !s.film && !s.artworkId && db.features.files && !prep && ['ordered', 'coating'].includes(s.status) ? '<span class="fstate">ยังไม่มีไฟล์เตรียม</span>' : ''}</span>
     ${chip(s.status)}
@@ -418,7 +419,7 @@ function newJobView() {
     ${db.features.files ? uploadZone('nj') : ''}
     ${shown.length ? artGrid(shown, picked, 'pickart', fresh) : ''}
     ${old.length ? `<button class="btn sm ghost oldtoggle" data-a="toggleold" aria-expanded="${!!d.showOld}">${d.showOld ? '▾ ซ่อนลายเก่าในคลัง' : `▸ เลือกจากลายเก่าในคลัง (${old.length} ลาย)`}</button>
-      ${d.showOld ? `<div class="search"><input id="oldq" type="search" data-oldq="1" value="${esc(d.oldQ || '')}" placeholder="ค้นหาลายเก่า: ชื่อลาย Customer ID ชื่อไฟล์" autocomplete="off"></div>
+      ${d.showOld ? `<div class="search"><input id="oldq" type="search" data-oldq="1" value="${esc(d.oldQ || '')}" placeholder="ค้นหาลายเก่า: ชื่อลาย Customer REF ชื่อไฟล์" autocomplete="off"></div>
         <div id="oldgrid">${oldHit.length ? artGrid(oldHit, picked, 'pickart') : '<div class="muted small">ไม่พบลายที่ตรงกับคำค้น</div>'}</div>` : ''}` : ''}
   </div>`; })() : '<div class="card muted small">ใส่ชื่อลูกค้าก่อน แล้วอัปโหลดไฟล์ลาย หรือเลือกจากลายเก่าในคลังของลูกค้า</div>'}
   <h3>บล็อคที่ต้องขึ้น (${d.screens.length} ลาย)</h3>
@@ -426,26 +427,46 @@ function newJobView() {
   <button class="btn" data-a="addscreen">+ เพิ่มบล็อคที่ไม่มีไฟล์ลาย</button>
   <div class="row" style="justify-content:flex-end"><span class="err" id="jerr"></span><button class="btn primary" data-a="savejob" ${ui.busy ? 'disabled' : ''}>บันทึกและส่งให้ฝ่ายขึ้นบล็อค</button></div>`;
 }
+// เลขบล็อค: ตัวอย่างเลขที่จะได้ (เลขจริงออกให้ตอนบันทึกใบงาน)
+function stencilPreview(i) {
+  const d = new Date(), yymm = `${pad2((d.getFullYear() + 543) % 100)}${pad2(d.getMonth() + 1)}`;
+  return `ST-${yymm}-${String((db.stencilNext || 1) + i).padStart(4, '0')}`;
+}
 function draftRow(s, i) {
-  const d = ui.draft, m = db.master, a = s.artworkId ? artOf(s.artworkId) : null;
-  return `<div class="screenrow">
-    <div class="spread"><b>บล็อคที่ ${i + 1}${custSpec(d.customer) && !sameSpec(s, custSpec(d.customer)) ? ' <span class="fstate">ต่างจากสเปคประจำ</span>' : ''}</b><span class="row"><button class="btn sm" data-a="dupscreen" data-v="${i}" title="ลายเดียวกันแต่ต่างสี/ต่างบล็อค">ทำซ้ำ</button><button class="btn sm bad" data-a="delscreen" data-v="${i}">ลบ</button></span></div>
-    <div class="idrow">
-      ${a ? `<div class="pz ro">${a.preview ? `<img src="${fileUrl(a.preview, true)}" alt="รูปตัวอย่างลาย" data-a="zoomfile" data-v="${a.preview}">` : '<span class="muted small">ไม่มีรูป</span>'}</div>` : db.features.files ? previewZone('d:' + i, s, true) : '<span></span>'}
-      <div class="idfields">
-        ${a ? `<div><span class="label">Customer ID</span><div>${esc(s.customerRef || '-')}</div></div>`
-          : `<div class="field"><label for="s-c-${s.key}">Customer ID</label><input id="s-c-${s.key}" value="${esc(s.customerRef)}" data-s="${i}" data-k="customerRef"></div>`}
-        ${!a && db.features.ai && db.features.files ? nameField('d:' + i, s, `s-d-${s.key}`, `data-s="${i}" data-k="design"`) : `<div class="field"><label for="s-d-${s.key}">ชื่อลาย</label><input id="s-d-${s.key}" value="${esc(s.design)}" data-s="${i}" data-k="design" placeholder="${a && !a.name ? 'AI กำลังตั้งชื่อ…' : 'เช่น โลโก้หน้าอก (ขาว)'}"></div>`}
-        ${a && !a.filmable ? '<span class="fstate">ไฟล์นี้ทำฟิล์มในแอปไม่ได้</span>' : ''}
+  const d = ui.draft, m = db.master, a = s.artworkId ? artOf(s.artworkId) : null, cust = d.customer.trim();
+  const diff = custSpec(d.customer) && !sameSpec(s, custSpec(d.customer));
+  return `<div class="screenrow sr">
+    <div class="srhead">
+      <b>บล็อคที่ ${i + 1}</b>
+      <span class="sid pending" title="เลขบล็อค (Stencil ID) ออกให้อัตโนมัติตอนบันทึกใบงาน">${stencilPreview(i)}</span>
+      ${diff ? '<span class="fstate">ต่างจากสเปคประจำ</span>' : ''}
+      <span class="srsp"></span>
+      <button class="btn sm" data-a="dupscreen" data-v="${i}" title="ลายเดียวกันแต่ต่างสี/ต่างบล็อค">ทำซ้ำ</button><button class="btn sm bad" data-a="delscreen" data-v="${i}">ลบ</button>
+    </div>
+    <div class="srbody">
+      ${a && a.filmable ? viewerSlot(pkOf('d:' + i, s), s, a, cust)
+        : a ? `<div class="pz ro">${a.preview ? `<img src="${fileUrl(a.preview, true)}" alt="รูปตัวอย่างลาย" data-a="zoomfile" data-v="${a.preview}">` : '<span class="muted small">ไม่มีรูป</span>'}</div>`
+        : db.features.files ? previewZone('d:' + i, s, true) : '<span></span>'}
+      <div class="srfields">
+        <fieldset class="grp"><legend>ลาย</legend>
+          <div class="grid2">
+            ${!a && db.features.ai && db.features.files ? nameField('d:' + i, s, `s-d-${s.key}`, `data-s="${i}" data-k="design"`) : `<div class="field"><label for="s-d-${s.key}">ชื่อลาย</label><input id="s-d-${s.key}" value="${esc(s.design)}" data-s="${i}" data-k="design" placeholder="${a && !a.name ? 'AI กำลังตั้งชื่อ…' : 'เช่น โลโก้หน้าอก (ขาว)'}"></div>`}
+            ${a ? `<div class="field"><span class="flabel">Customer REF</span><div class="ro-v" title="${esc(s.customerRef || '')}">${esc(s.customerRef || '-')}</div></div>`
+              : `<div class="field"><label for="s-c-${s.key}">Customer REF</label><input id="s-c-${s.key}" value="${esc(s.customerRef)}" data-s="${i}" data-k="customerRef"></div>`}
+          </div>
+          ${a && !a.filmable ? '<span class="fstate">ไฟล์นี้ทำฟิล์มในแอปไม่ได้</span>' : ''}
+        </fieldset>
+        <fieldset class="grp"><legend>สเปคบล็อค</legend>
+          <div class="grid4">
+            <div class="field"><label for="s-m-${s.key}">เบอร์ผ้าสกรีน</label><select id="s-m-${s.key}" data-s="${i}" data-k="mesh">${opt(m.mesh, s.mesh)}</select></div>
+            <div class="field"><label for="s-f-${s.key}">ขนาดเฟรม</label><select id="s-f-${s.key}" data-s="${i}" data-k="frame">${opt(m.frames, s.frame)}</select></div>
+            <div class="field"><label for="s-e-${s.key}">ชนิดกาว</label><select id="s-e-${s.key}" data-s="${i}" data-k="emulsion">${opt(m.emulsions, s.emulsion)}</select></div>
+            <div class="field"><label for="s-t-${s.key}">ความหนาที่ต้องการ</label><div class="unit"><input id="s-t-${s.key}" type="number" inputmode="numeric" value="${esc(s.target)}" data-s="${i}" data-k="target" placeholder="เช่น 120"><span>µm</span></div></div>
+          </div>
+        </fieldset>
+        ${a && a.filmable ? filmGroup('d:' + i, s, a, cust) : ''}
       </div>
-    </div>
-    <div class="grid2">
-      <div class="field"><label for="s-m-${s.key}">เบอร์ผ้าสกรีน</label><select id="s-m-${s.key}" data-s="${i}" data-k="mesh">${opt(m.mesh, s.mesh)}</select></div>
-      <div class="field"><label for="s-f-${s.key}">ขนาดเฟรม</label><select id="s-f-${s.key}" data-s="${i}" data-k="frame">${opt(m.frames, s.frame)}</select></div>
-      <div class="field"><label for="s-e-${s.key}">ชนิดกาว</label><select id="s-e-${s.key}" data-s="${i}" data-k="emulsion">${opt(m.emulsions, s.emulsion)}</select></div>
-      <div class="field"><label for="s-t-${s.key}">ความหนาที่ลูกค้าต้องการ</label><div class="unit"><input id="s-t-${s.key}" type="number" inputmode="numeric" value="${esc(s.target)}" data-s="${i}" data-k="target" placeholder="เช่น 120"><span>µm</span></div></div>
-    </div>
-    ${a && a.filmable ? filmPanel('d:' + i, s, a, d.customer.trim()) : ''}</div>`;
+    </div></div>`;
 }
 
 /* --- คลังลาย: ลายของลูกค้าแต่ละราย (1 ลาย = คู่ซ้าย-ขวา 1 ชุดจากไฟล์ลูกค้า) --- */
@@ -507,7 +528,7 @@ function artEditor(a) {
     <div class="idfields">
       <div class="field"><label for="ae-name">ชื่อลาย (Artwork ID)</label><div class="aiwrap"><input id="ae-name" data-art="name" value="${esc(a.name)}">
         <button class="btn sm" data-a="artai" data-v="${a.id}" ${ui.aiBusy['a:' + a.id] || !a.preview || !db.features.ai ? 'disabled' : ''}>${ui.aiBusy['a:' + a.id] ? 'กำลังคิด…' : '✨ AI'}</button></div></div>
-      <div class="field"><label for="ae-ref">Customer ID</label><input id="ae-ref" data-art="customerRef" value="${esc(a.customerRef)}"></div>
+      <div class="field"><label for="ae-ref">Customer REF</label><input id="ae-ref" data-art="customerRef" value="${esc(a.customerRef)}"></div>
       <div class="small">${a.w ? `แป้นคู่ ${a.w.toFixed(0)} × ${a.h.toFixed(0)} mm · ` : ''}${a.filmable ? 'ทำฟิล์มได้' : 'ทำฟิล์มในแอปไม่ได้ (ไม่ใช่ไฟล์ PDF/AI แบบ PDF-compatible)'}</div>
       ${a.file ? `<div class="flist">${fileChip(a.file, false)}</div>` : ''}
       <div class="muted small">${used.length ? `ใช้ใน ${used.length} บล็อค: ${[...new Set(used.map(x => x.j.no))].map(esc).join(', ')}` : 'ยังไม่มีใบงานใช้ลายนี้'}</div>
@@ -621,57 +642,42 @@ function screenFromArt(a) { return { ...blankScreen(), artworkId: a.id, design: 
 function filmCard(s) {
   const a = s.artworkId ? artOf(s.artworkId) : null, f = s.film;
   if (!f && !(a && a.filmable)) return '';
-  const t = encodeURIComponent(token);
-  return `<div class="card" style="display:flex;flex-direction:column;gap:10px">
+  const t = encodeURIComponent(token), cust = (find(ui.jobId).j || {}).customer || '';
+  return `<div class="card" style="display:flex;flex-direction:column;gap:12px">
     <div class="spread"><h3>ฟิล์ม</h3>${f ? '<span class="fstate ok">ทำฟิล์มแล้ว</span>' : '<span class="fstate">ยังไม่ทำฟิล์ม</span>'}</div>
-    ${a && a.filmable ? filmPanel('s', s, a, (find(ui.jobId).j || {}).customer || '') : ''}
-    ${f ? `<div class="small">${fmtT(f.at)} โดย ${esc(f.by)}${f.thick ? ` · ความหนาบล็อค <span class="num">${f.thick} µm</span>` : ''}${f.compUm != null ? ` · ชดเชยขอบ <span class="num">${f.compUm} µm</span>` : ''}<br><span class="muted">${esc(f.name)}</span></div>` : '<div class="muted small">ยังไม่ได้ลงแผ่นฟิล์ม · ลายที่ตรวจแล้วจะรอรวมลงแผ่นที่เมนู "รวมแผ่นฟิล์ม" พร้อมงานอื่น</div>'}
+    ${a && a.filmable ? `<div class="srbody">${viewerSlot(pkOf('s', s), s, a, cust)}<div class="srfields">${filmGroup('s', s, a, cust)}</div></div>` : ''}
+    ${f ? `<div class="small">${fmtT(f.at)} โดย ${esc(f.by)}${f.thick ? ` · ความหนาบล็อค <span class="num">${f.thick} µm</span>` : ''}${f.compUm != null ? ` · ชดเชยขอบ <span class="num">${f.compUm} µm</span>` : ''}<br><span class="muted">${esc(f.name)}</span></div>` : '<div class="muted small">ยังไม่ได้ลงแผ่นฟิล์ม · จะรอรวมลงแผ่นที่เมนู "รวมแผ่นฟิล์ม" พร้อมงานอื่น</div>'}
     <div class="row">${f ? `<a class="btn sm" href="/api/films/${f.id}?dl=1&t=${t}">ดาวน์โหลดแผ่นฟิล์ม</a><a class="btn sm ghost" href="/api/films/${f.id}?t=${t}" target="_blank" rel="noopener">เปิดดู</a>` : ''}
       ${a && a.filmable && f ? `<a class="btn sm ghost" href="/film/?add=${s.id}">ลงแผ่นฟิล์มใหม่</a>` : ''}</div>
   </div>`;
 }
-/* --- ตรวจฟิล์มของแต่ละบล็อค: ตัวอย่างฟิล์มสีดำ การชดเชยขอบ สีที่ไม่ใช่ลาย -> screen.filmPrep --- */
+/* --- ฟิล์มของแต่ละบล็อค: การชดเชยขอบ สีที่ไม่ใช่ลาย -> screen.filmPrep --- */
 // filmPrep = { mode: 'auto'|'manual'|'none', manualUm, notArt: [colour keys] }; ความหนามาจากสเปคของบล็อค (target)
 const prepOf = s => ({ mode: 'auto', manualUm: 200, notArt: [], ...(s.filmPrep || {}) });
 const pkOf = (t, s) => s.id || s.key || t;
-function compText(s) {
-  const p = prepOf(s), f = (ui.filmSet || filmSetCache || FILM_DEF);
-  if (p.mode === 'none') return 'ไม่ชดเชยขอบ';
-  if (p.mode === 'manual') return `ชดเชยขอบ ${p.manualUm} µm (ระบุเอง)`;
-  return `ชดเชยขอบ ${Math.round((+s.target || 0) * (f.factor != null ? f.factor : 0.5))} µm (อัตโนมัติ)`;
+const filmFactor = () => { const f = ui.filmSet || filmSetCache || FILM_DEF; return f.factor != null ? f.factor : 0.5; };
+function filmGroup(t, s, a, customer) {
+  const pk = pkOf(t, s), p = prepOf(s), pv = previewNow(s, a, customer);
+  const auto = Math.round((+s.target || 0) * filmFactor());
+  const cols = pv && pv.colours;
+  return `<fieldset class="grp"><legend>ฟิล์ม</legend>
+    <div class="grid2">
+      <div class="field"><label for="fp-m-${pk}">ชดเชยขอบ</label><select id="fp-m-${pk}" data-fp="${t}" data-k="mode">${[['auto', `อัตโนมัติ (ความหนา × ${filmFactor()})`], ['manual', 'ระบุค่าเอง'], ['none', 'ไม่ชดเชย']].map(([v, l]) => `<option value="${v}" ${p.mode === v ? 'selected' : ''}>${l}</option>`).join('')}</select></div>
+      <div class="field"><label for="fp-u-${pk}">ค่าชดเชย (ต่อด้าน)</label><div class="unit"><input id="fp-u-${pk}" type="number" min="0" max="2000" step="10" data-fp="${t}" data-k="manualUm" value="${p.mode === 'manual' ? esc(p.manualUm) : p.mode === 'none' ? 0 : auto}" ${p.mode === 'manual' ? '' : 'disabled'}><span>µm</span></div></div>
+    </div>
+    <div><span class="label">สีในลาย</span> <span class="muted small">ทุกสีเป็นสีดำในฟิล์ม แตะสีที่ไม่ใช่ลายเพื่อตัดออก</span>
+      <div class="fpcols">${cols ? cols.map(c => { const on = !p.notArt.includes(c.key);
+        return `<button class="fpcol ${on ? '' : 'off'}" data-a="fpcol" data-v="${t}" data-k="${esc(c.key)}" aria-pressed="${on}"><i style="background:${esc(c.css)}"></i>${esc(c.label)}</button>`; }).join('')
+        : `<span class="muted small">${pv && pv.err ? esc(pv.err) : 'กำลังอ่านสีจากไฟล์…'}</span>`}</div></div>
+    ${pv && pv.notes ? `<div class="muted small">${esc(pv.notes)}</div>` : ''}
+  </fieldset>`;
 }
-function filmPanel(t, s, a, customer) {
-  const pk = pkOf(t, s), open = ui.fpOpen && ui.fpOpen[pk], p = prepOf(s), pv = fpCache.get(fpKey(s, a, customer));
-  const nOff = p.notArt.length;
-  let body = '';
-  if (open) {
-    if (!pv) queuePreview(t, s, a, customer);
-    const cols = pv && pv.colours ? pv.colours : [];
-    body = `<div class="fpbody">
-      <div class="fpview">${pv && pv.img ? `<div class="fpimg fpstack">
-          ${pv.orig ? `<img class="fporig" src="${pv.orig}" alt="ต้นฉบับ">` : ''}
-          <img class="fpfilm" src="${pv.img}" alt="ตัวอย่างฟิล์มของลายนี้" style="opacity:${pv.orig ? fpOpacity() / 100 : 1}"></div>
-        ${pv.orig ? `<label class="fpslide small"><span>ต้นฉบับ</span><input type="range" min="0" max="100" step="1" value="${fpOpacity()}" data-fpop="1" aria-label="ความชัดของฟิล์มที่วางทับต้นฉบับ"><span>ฟิล์ม</span></label>` : ''}`
-        : `<div class="fpimg">${pv && pv.err ? `<span class="err small">${esc(pv.err)}</span>` : '<span class="muted small">กำลังทำตัวอย่างฟิล์ม…</span>'}</div>`}</div>
-      <div class="fpctl">
-        <div class="grid2">
-          <div class="field"><label for="fp-m-${pk}">ชดเชยขอบ</label><select id="fp-m-${pk}" data-fp="${t}" data-k="mode">${[['auto', 'อัตโนมัติ (ความหนา × ' + ((ui.filmSet || filmSetCache || FILM_DEF).factor ?? 0.5) + ')'], ['manual', 'ระบุค่าเอง'], ['none', 'ไม่ชดเชย']].map(([v, l]) => `<option value="${v}" ${p.mode === v ? 'selected' : ''}>${l}</option>`).join('')}</select></div>
-          <div class="field"><label for="fp-u-${pk}">ค่าชดเชย</label><div class="unit"><input id="fp-u-${pk}" type="number" min="0" max="2000" step="10" data-fp="${t}" data-k="manualUm" value="${p.mode === 'manual' ? esc(p.manualUm) : esc(pv && pv.comp != null ? pv.comp : '')}" ${p.mode === 'manual' ? '' : 'disabled'}><span>µm</span></div></div>
-        </div>
-        ${cols.length ? `<div><span class="label">สีในลาย</span> <span class="muted small">ทุกสีเป็นสีดำในฟิล์ม แตะสีที่ไม่ใช่ลายเพื่อตัดออก</span>
-          <div class="fpcols">${cols.map(c => { const on = !p.notArt.includes(c.key);
-            return `<button class="fpcol ${on ? '' : 'off'}" data-a="fpcol" data-v="${t}" data-k="${esc(c.key)}" aria-pressed="${on}"><i style="background:${esc(c.css)}"></i>${esc(c.label)}</button>`; }).join('')}</div></div>` : ''}
-        ${pv && pv.notes ? `<div class="muted small">${esc(pv.notes)}</div>` : ''}
-      </div></div>`;
-  }
-  return `<div class="fprep">
-    <div class="spread"><span class="small"><b>ฟิล์ม</b> · ความหนา <span class="num">${esc(s.target || '-')} µm</span> · ${compText(s)}${nOff ? ` · ตัดสีออก ${nOff} สี` : ''}</span>
-      <button class="btn sm ${open ? '' : 'ghost'}" data-a="fpopen" data-v="${t}" aria-expanded="${!!open}">${open ? 'ซ่อน' : 'ตรวจฟิล์ม'}</button></div>${body}</div>`;
-}
-// preview: the original file -> this design only, black, with compensation (labels off), cut out of the rendered film
-const fpCache = new Map(), fileBytes = new Map(), jobCache = new Map();
+
+/* --- preview data: the design's film (black, with compensation, labels off) and the same area of the original --- */
+const fpCache = new Map(), fileBytes = new Map(), jobCache = new Map(), origDocs = new Map();
 let filmSetCache = null, fpBusy = Promise.resolve();
 const fpKey = (s, a, customer) => JSON.stringify([a.id, +s.target || 0, prepOf(s), customer]);
+const previewNow = (s, a, customer) => { const e = fpCache.get(fpKey(s, a, customer)); return e && e.data; };
 async function artBytes(a) {
   if (!fileBytes.has(a.file)) {
     const r = await fetch('/api/files/' + a.file, { headers: { Authorization: 'Bearer ' + token } });
@@ -688,10 +694,12 @@ function pickDesign(C, job, a, st) {
       const dd = Math.hypot((b[0] + b[2]) / 2 - cx, (b[1] + b[3]) / 2 - cy); if (dd < best) { best = dd; pick = d; } }); }
   return pick;
 }
-function queuePreview(t, s, a, customer) {
-  const key = fpKey(s, a, customer); if (fpCache.has(key)) return;
-  fpCache.set(key, null);
-  fpBusy = fpBusy.then(async () => {
+// one preview at a time; the result stays in the cache (pdf.js pages are kept so zooming re-renders sharp vectors)
+function getPreview(s, a, customer) {
+  const key = fpKey(s, a, customer);
+  if (fpCache.has(key)) return fpCache.get(key).p;
+  const entry = { data: null };
+  entry.p = fpBusy = fpBusy.then(async () => {
     const out = {};
     try {
       const C = await loadFilmTools(), f = filmSetCache || (filmSetCache = { ...FILM_DEF, ...(await filmSet()) });
@@ -705,7 +713,6 @@ function queuePreview(t, s, a, customer) {
       const set = { customer, thick: +s.target || 0, thickSet: true, mode: p.mode, manualUm: +p.manualUm || 0 };
       job.dset = { [pick.index]: set };
       out.comp = C.compensation(set, st);
-      // colours of the whole file, with art = still part of the artwork
       job.notArt = new Set(); const all = C.describe(job, st); job.notArt = new Set(p.notArt);
       const d2 = C.describe(job, st);
       const seen = new Map(); all.colours.forEach(c => { if (!seen.has(c.label)) seen.set(c.label, c); });
@@ -715,33 +722,29 @@ function queuePreview(t, s, a, customer) {
       if (d2.specks) notes.push(`ตัดเศษเล็ก ${d2.specks} ชิ้น`);
       if (d2.nearWhite) notes.push(`สีเกือบขาว ${d2.nearWhite} ชิ้นถือเป็นสีขาว`);
       out.notes = notes.join(' · ');
-      const blocks = C.blocksFor(job, st), res = await C.render(blocks, st), it = res.plan.sheets[0] && res.plan.sheets[0][0];
+      const res = await C.render(C.blocksFor(job, st), st), it = res.plan.sheets[0] && res.plan.sheets[0][0];
       if (!it) throw new Error('ลายใหญ่เกินแผ่นฟิล์ม');
       const lib = window.pdfjsLib, doc = await lib.getDocument({ data: res.bytes, isEvalSupported: false, verbosity: 0 }).promise;
-      const pg = await doc.getPage(1), H = res.plan.H, k = 420 / Math.max(it.W, it.H);
-      const vp = pg.getViewport({ scale: k }), c = document.createElement('canvas');
-      c.width = Math.round(it.W * k); c.height = Math.round(it.H * k);
-      const g = c.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, c.width, c.height);
-      await pg.render({ canvasContext: g, viewport: vp, transform: [1, 0, 0, 1, -it.x * k, -(H - it.y - it.H) * k] }).promise;
-      doc.destroy(); out.img = c.toDataURL('image/png');
-      // the original, same area and same scale, to lay under the film (not for a block turned sideways on the sheet)
+      out.film = { page: await doc.getPage(1), box: [it.x, it.y, it.x + it.W, it.y + it.H] };
+      // the original, same area (not for a block turned sideways on the sheet)
       if (!it.rot) {
         try {
-          const od = await lib.getDocument({ data: bytes.slice(0), isEvalSupported: false, verbosity: 0 }).promise;
-          const op = await od.getPage((a.page || 0) + 1), ov = op.getViewport({ scale: k }), bb = it.b.bbox;
-          const p1 = ov.convertToViewportPoint(bb[0], bb[1]), p2 = ov.convertToViewportPoint(bb[2], bb[3]);
-          const oc = document.createElement('canvas'); oc.width = c.width; oc.height = c.height;
-          const og = oc.getContext('2d'); og.fillStyle = '#fff'; og.fillRect(0, 0, oc.width, oc.height);
-          await op.render({ canvasContext: og, viewport: ov, transform: [1, 0, 0, 1, -Math.min(p1[0], p2[0]), -Math.min(p1[1], p2[1])] }).promise;
-          od.destroy(); out.orig = oc.toDataURL('image/jpeg', 0.85);
+          if (!origDocs.has(a.file)) origDocs.set(a.file, lib.getDocument({ data: bytes.slice(0), isEvalSupported: false, verbosity: 0 }).promise);
+          const od = await origDocs.get(a.file);
+          out.orig = { page: await od.getPage((a.page || 0) + 1), box: it.b.bbox };
         } catch (e) {}
       }
     } catch (e) { out.err = 'ทำตัวอย่างฟิล์มไม่ได้: ' + e.message; }
-    fpCache.set(key, out); render();
+    entry.data = out;
+    return out;
   });
+  fpCache.set(key, entry);
+  entry.p.then(() => { if (!isTyping()) render(); else setTimeout(() => render(), 600); });
+  return entry.p;
 }
+const isTyping = () => { const el = document.activeElement; return el && el.tagName === 'INPUT' && el.type !== 'range' && el.type !== 'checkbox'; };
 // how strongly the film shows over the original (0 = only the original, 100 = only the film), remembered per browser
-function fpOpacity() { if (ui.fpOp == null) { let v = NaN; try { v = +localStorage.getItem('stencil-fpop'); } catch (e) {} ui.fpOp = isFinite(v) && v > 0 ? v : 70; } return ui.fpOp; }
+function fpOpacity() { if (ui.fpOp == null) { let v = NaN; try { const r = localStorage.getItem('stencil-fpop'); if (r !== null && r !== '') v = +r; } catch (e) {} ui.fpOp = isFinite(v) && v >= 0 && v <= 100 ? v : 70; } return ui.fpOp; }
 function prepTarget(t) { return targetObj(t); }
 function setPrep(t, patch) {
   const s = prepTarget(t); if (!s) return;
@@ -749,6 +752,130 @@ function setPrep(t, patch) {
   if (t === 's') saveScreen(s);
   render();
 }
+
+/* --- ตัวดูลาย: ส่วนของต้นฉบับเฉพาะลายนี้ + ฟิล์มวางทับ (ปรับความชัด) ซูม/เลื่อนได้ วาดใหม่จากเวกเตอร์ให้คมทุกระดับ --- */
+// the viewer's DOM stays alive between renders (render() rebuilds the page as HTML text): a slot is filled after each render
+const viewers = new Map(), slotInfo = new Map();
+function viewerSlot(pk, s, a, customer) { slotInfo.set(String(pk), { s, a, customer }); return `<div class="fvslot" data-fv="${esc(pk)}"></div>`; }
+function mountViewers() {
+  document.querySelectorAll('[data-fv]').forEach(slot => {
+    const pk = slot.dataset.fv, info = slotInfo.get(pk); if (!info) return;
+    let v = viewers.get(pk); if (!v) { v = makeViewer(); viewers.set(pk, v); }
+    slot.appendChild(v.el); v.show(info);
+  });
+}
+const dprV = () => Math.min(3, window.devicePixelRatio || 1);
+function makeViewer() {
+  const el = document.createElement('div'); el.className = 'fv';
+  el.innerHTML = `<div class="fvarea"><img class="fvph" alt=""><canvas class="fvo"></canvas><canvas class="fvf"></canvas><span class="fvmsg"></span></div>
+    <div class="fvbar"><button type="button" data-z="out" aria-label="ซูมออก">−</button><span class="fvpct num">100%</span><button type="button" data-z="in" aria-label="ซูมเข้า">+</button><button type="button" data-z="fit" title="พอดีกรอบ">พอดี</button>
+      <span class="fvsp"></span><button type="button" data-z="full" title="ขยายเต็มจอ (Esc เพื่อออก)">ขยาย</button></div>
+    <label class="fvslide small"><span>ต้นฉบับ</span><input type="range" min="0" max="100" step="1" aria-label="ความชัดของฟิล์มที่วางทับต้นฉบับ"><span>ฟิล์ม</span></label>`;
+  const area = el.querySelector('.fvarea'), ph = el.querySelector('.fvph'), co = el.querySelector('.fvo'), cf = el.querySelector('.fvf'), msg = el.querySelector('.fvmsg');
+  const slide = el.querySelector('input[type=range]'), pct = el.querySelector('.fvpct');
+  const v = { el, key: null, data: null, scale: 1, tx: 0, ty: 0, fitScale: 1, drawn: null, gen: 0, tasks: [], timer: 0, w: 0, h: 0, pointers: new Map(), drag: null, pinch: null, zoomed: false };
+  const boxW = () => { const b = v.data.film.box; return b[2] - b[0]; }, boxH = () => { const b = v.data.film.box; return b[3] - b[1]; };
+  function size() {
+    const w = area.clientWidth || 280;
+    let h = 260;
+    if (v.data && v.data.film && !el.classList.contains('full')) h = Math.max(180, Math.min(440, Math.round(w * boxH() / boxW())));
+    if (!el.classList.contains('full')) area.style.height = h + 'px';
+    v.w = area.clientWidth; v.h = area.clientHeight;
+  }
+  function fit() {
+    if (!v.data || !v.data.film) return;
+    size(); v.fitScale = Math.min(v.w / boxW(), v.h / boxH()) * 0.97;
+    v.scale = v.fitScale; v.tx = (v.w - boxW() * v.scale) / 2; v.ty = (v.h - boxH() * v.scale) / 2; v.zoomed = false; changed(true);
+  }
+  function zoomAt(scale, cx, cy) {
+    if (!v.data || !v.data.film) return;
+    if (cx == null) { cx = v.w / 2; cy = v.h / 2; }
+    scale = Math.max(v.fitScale * 0.5, Math.min(scale, v.fitScale * 40));
+    v.tx = cx - (cx - v.tx) * scale / v.scale; v.ty = cy - (cy - v.ty) * scale / v.scale; v.scale = scale; v.zoomed = true; changed();
+  }
+  function changed(now) {
+    pct.textContent = Math.round(v.scale / v.fitScale * 100) + '%';
+    area.style.touchAction = v.scale > v.fitScale * 1.01 ? 'none' : 'pan-y';
+    const r = v.drawn;   // quick: move the last sharp drawing with CSS until the new one is ready
+    if (r) { const f = v.scale / r.scale, tf = `translate(${v.tx - r.tx * f}px,${v.ty - r.ty * f}px) scale(${f})`; co.style.transform = cf.style.transform = tf; }
+    clearTimeout(v.timer); v.timer = setTimeout(draw, now ? 0 : 130);
+  }
+  async function layer(L, g, k) {
+    const vp = L.page.getViewport({ scale: v.scale * k }), p0 = vp.convertToViewportPoint(L.box[0], L.box[3]);
+    const t = L.page.render({ canvasContext: g, viewport: vp, transform: [1, 0, 0, 1, v.tx * k - p0[0], v.ty * k - p0[1]], background: 'rgba(0,0,0,0)' });
+    v.tasks.push(t); await t.promise;
+  }
+  async function draw() {
+    if (!v.data || !v.data.film || !el.isConnected) return;
+    const gen = ++v.gen; v.tasks.forEach(t => { try { t.cancel(); } catch (e) {} }); v.tasks = [];
+    size(); const k = dprV(), W = Math.max(1, Math.round(v.w * k)), H = Math.max(1, Math.round(v.h * k));
+    const want = { scale: v.scale, tx: v.tx, ty: v.ty };
+    const mk = () => { const c = document.createElement('canvas'); c.width = W; c.height = H; const g = c.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, W, H); return [c, g]; };
+    const [fo, go] = mk(), [ff, gf] = mk();
+    try {
+      if (v.data.orig) await layer(v.data.orig, go, k);
+      await layer(v.data.film, gf, k);
+    } catch (e) { if (!(e && e.name === 'RenderingCancelledException')) console.warn('viewer draw', e); return; }   // cancelled by a newer move
+    if (gen !== v.gen) return;
+    for (const [c, src] of [[co, fo], [cf, ff]]) { c.width = W; c.height = H; c.style.width = v.w + 'px'; c.style.height = v.h + 'px'; c.style.transform = ''; c.getContext('2d').drawImage(src, 0, 0); }
+    v.drawn = want; ph.hidden = true; msg.hidden = true;
+  }
+  function opacity() { const o = fpOpacity(); slide.value = o; cf.style.opacity = v.data && v.data.orig ? o / 100 : 1; }
+  v.show = (info) => {
+    const { s, a, customer } = info, key = fpKey(s, a, customer);
+    if (key === v.key) { opacity(); return; }
+    v.key = key; const keepView = v.data && v.zoomed ? { scale: v.scale, tx: v.tx, ty: v.ty } : null;
+    const cached = previewNow(s, a, customer);
+    if (!v.data) { ph.src = a.preview ? fileUrl(a.preview, true) : ''; ph.hidden = !a.preview; }
+    msg.hidden = false; msg.textContent = 'กำลังทำตัวอย่างฟิล์ม…';
+    const use = (d) => {
+      if (v.key !== key) return;
+      if (d.err) { msg.hidden = false; msg.textContent = d.err; return; }
+      v.data = d; el.querySelector('.fvslide').hidden = !d.orig; opacity();
+      if (keepView) { size(); v.fitScale = Math.min(v.w / boxW(), v.h / boxH()) * 0.97; Object.assign(v, keepView, { zoomed: true }); changed(true); } else fit();
+    };
+    if (cached) use(cached);
+    else if (!v.io) {   // start when it scrolls into view
+      v.io = new IntersectionObserver(es => { if (es.some(e => e.isIntersecting)) { v.io.disconnect(); v.io = null; const k2 = v.key; getPreview(s, a, customer).then(d => { if (v.key === k2) use(d); }); } });
+      v.io.observe(el);
+    } else { v.io.disconnect(); v.io = null; v.show(info); }
+  };
+  slide.addEventListener('input', () => {
+    ui.fpOp = +slide.value; try { localStorage.setItem('stencil-fpop', slide.value); } catch (e) {}
+    viewers.forEach(o => { const r = o.el.querySelector('input[type=range]'); if (r !== slide) r.value = slide.value; o.el.querySelector('.fvf').style.opacity = ui.fpOp / 100; });
+  });
+  el.querySelector('.fvbar').addEventListener('click', e => {
+    const b = e.target.closest('[data-z]'); if (!b) return;
+    const z = b.dataset.z;
+    if (z === 'in') zoomAt(v.scale * 1.6); else if (z === 'out') zoomAt(v.scale / 1.6); else if (z === 'fit') fit();
+    else if (z === 'full') { const on = !el.classList.contains('full'); el.classList.toggle('full', on); document.body.style.overflow = on ? 'hidden' : ''; b.textContent = on ? 'ย่อกลับ' : 'ขยาย'; area.style.height = on ? '' : area.style.height; requestAnimationFrame(fit); }
+  });
+  // ctrl/⌘ + wheel or trackpad pinch zooms; a plain wheel scrolls the page as usual
+  area.addEventListener('wheel', e => {
+    if (!(e.ctrlKey || e.metaKey || el.classList.contains('full')) || !v.data) return;
+    e.preventDefault(); const r = area.getBoundingClientRect();
+    zoomAt(v.scale * Math.exp(-e.deltaY * (e.deltaMode === 1 ? 16 : 1) * (e.ctrlKey ? 0.01 : 0.002)), e.clientX - r.left, e.clientY - r.top);
+  }, { passive: false });
+  area.addEventListener('dblclick', e => { const r = area.getBoundingClientRect(); zoomAt(v.scale * 2.5, e.clientX - r.left, e.clientY - r.top); });
+  area.addEventListener('pointerdown', e => {
+    if (!v.data || e.button > 0) return;
+    v.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (v.pointers.size === 2) { const [p, q] = [...v.pointers.values()]; v.pinch = { d: Math.max(1, Math.hypot(p.x - q.x, p.y - q.y)), scale: v.scale }; v.drag = null; area.setPointerCapture(e.pointerId); }
+    else if (v.scale > v.fitScale * 1.01 || e.pointerType === 'mouse') { v.drag = { x: e.clientX, y: e.clientY, tx: v.tx, ty: v.ty }; area.setPointerCapture(e.pointerId); area.classList.add('grab'); }
+  });
+  area.addEventListener('pointermove', e => {
+    if (!v.pointers.has(e.pointerId)) return;
+    v.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    const r = area.getBoundingClientRect();
+    if (v.pointers.size === 2 && v.pinch) { const [p, q] = [...v.pointers.values()]; zoomAt(v.pinch.scale * Math.hypot(p.x - q.x, p.y - q.y) / v.pinch.d, (p.x + q.x) / 2 - r.left, (p.y + q.y) / 2 - r.top); }
+    else if (v.drag) { v.tx = v.drag.tx + e.clientX - v.drag.x; v.ty = v.drag.ty + e.clientY - v.drag.y; v.zoomed = true; changed(); }
+  });
+  const end = e => { v.pointers.delete(e.pointerId); if (v.pointers.size < 2) v.pinch = null; if (!v.pointers.size) { v.drag = null; area.classList.remove('grab'); } };
+  area.addEventListener('pointerup', end); area.addEventListener('pointercancel', end);
+  new ResizeObserver(() => { if (!v.data || !v.data.film) return; const ow = v.w; size(); if (!v.zoomed) fit(); else { v.tx += (v.w - ow) / 2; changed(true); } }).observe(area);
+  return v;
+}
+document.addEventListener('keydown', e => { if (e.key !== 'Escape') return; const f = document.querySelector('.fv.full'); if (f) f.querySelector('[data-z="full"]').click(); });
 
 const FILM_DEF = { sheetW: 21, sheetH: 31, margin: 10, gap: 15, markArm: 5, markGrey: 25, labelGrey: 25, markWidthMm: 0.15, nearWhite: 5, speckMm: 0.2, factor: 0.5, defaultThick: 400, labels: true, cropMarks: false, thicknesses: [100, 200, 300, 400, 500, 600, 800] };
 const FILM_FIELDS = [['sheetW', 'ขนาดแผ่นฟิล์ม กว้าง', 'นิ้ว'], ['sheetH', 'ยาว', 'นิ้ว'], ['margin', 'ขอบแผ่น', 'mm'], ['gap', 'ช่องห่างระหว่างงาน', 'mm'],
@@ -796,7 +923,7 @@ function screenView() {
   const canQC = s.status === 'qc';
   const nextSide = s.coats.length && s.coats[s.coats.length - 1].side === 'ด้านพิมพ์' ? 'ด้านปาด' : 'ด้านพิมพ์';
   let h = `<button class="btn ghost back" data-a="back">← กลับ</button>
-  <div class="spread"><div><div class="jobno">${esc(j.no)} · ${esc(j.customer)}</div><h2>${esc(s.design || '(ยังไม่ตั้งชื่อ)')}</h2>${s.customerRef ? `<div class="jobno">Customer ID: ${esc(s.customerRef)}</div>` : ''}</div>${chip(s.status)}</div>
+  <div class="spread"><div><div class="jobno">${esc(j.no)} · ${esc(j.customer)}${s.stencilId ? ` · <span class="sid">${esc(s.stencilId)}</span>` : ''}</div><h2>${esc(s.design || '(ยังไม่ตั้งชื่อ)')}</h2>${s.customerRef ? `<div class="jobno">Customer REF: ${esc(s.customerRef)}</div>` : ''}</div>${chip(s.status)}</div>
   <div class="spec">
     <div><div class="label">ผ้าสกรีน</div><div class="v num">${esc(s.mesh)}</div></div>
     <div><div class="label">เฟรม</div><div class="v">${esc(s.frame)}</div></div>
@@ -815,9 +942,9 @@ function screenView() {
       <div class="idrow">
         ${previewZone('s', s, art)}
         <div class="idfields">
-          ${art ? `<div class="field"><label for="e-cref">Customer ID</label><input id="e-cref" data-f="customerRef" value="${esc(s.customerRef || '')}"></div>
+          ${art ? `<div class="field"><label for="e-cref">Customer REF</label><input id="e-cref" data-f="customerRef" value="${esc(s.customerRef || '')}"></div>
             ${db.features.ai ? nameField('s', s, 'e-name', 'data-f="design"') : `<div class="field"><label for="e-name">ชื่อลาย</label><input id="e-name" data-f="design" value="${esc(s.design)}"></div>`}`
-          : `<div><span class="label">Customer ID</span><div>${esc(s.customerRef || '-')}</div></div><div><span class="label">ชื่อลาย</span><div>${esc(s.design || '-')}</div></div>`}
+          : `<div><span class="label">Customer REF</span><div>${esc(s.customerRef || '-')}</div></div><div><span class="label">ชื่อลาย</span><div>${esc(s.design || '-')}</div></div>`}
         </div>
       </div>
       <div class="fsec"><div class="spread"><span class="label">ไฟล์ต้นฉบับจากลูกค้า (${s.originals.length})</span>
@@ -982,7 +1109,6 @@ document.addEventListener('click', async e => {
       } catch (x) { toast('เอาลายออกไม่สำเร็จ: ' + x.message); }
       break;
     }
-    case 'fpopen': { const s = targetObj(v); if (!s) break; ui.fpOpen = ui.fpOpen || {}; const pk = pkOf(v, s); ui.fpOpen[pk] = !ui.fpOpen[pk]; render(); break; }
     case 'fpcol': { const s = targetObj(v); if (!s) break; const k = el.dataset.k, p = prepOf(s);
       setPrep(v, { notArt: p.notArt.includes(k) ? p.notArt.filter(x => x !== k) : [...p.notArt, k] }); break; }
     case 'toggleold': ui.draft.showOld = !ui.draft.showOld; render(); break;
@@ -1135,12 +1261,6 @@ document.addEventListener('input', e => {
     const x = t.parentNode.querySelector('[data-a="clearq"]'); if (x) x.hidden = !ui.q;
     // อัปเดตเฉพาะผลค้นหา (ไม่วาดช่องพิมพ์ใหม่) จึงทำได้แม้คีย์บอร์ดยังขีดเส้นใต้คำที่กำลังพิมพ์อยู่
     clearTimeout(ui.qTimer); ui.qTimer = setTimeout(updateResults, 120);
-    return;
-  }
-  if (t.dataset.fpop) {
-    ui.fpOp = +t.value; try { localStorage.setItem('stencil-fpop', t.value); } catch (e) {}
-    document.querySelectorAll('.fpstack .fpfilm').forEach(im => { im.style.opacity = ui.fpOp / 100; });
-    document.querySelectorAll('[data-fpop]').forEach(r => { if (r !== t) r.value = t.value; });
     return;
   }
   if (t.dataset.oldq) {   // ค้นหาลายเก่า: วาดเฉพาะผลค้นหา ช่องพิมพ์ไม่หลุด
@@ -1325,7 +1445,6 @@ function openFromHash() {
   const m = location.hash.match(/^#screen=([\w-]+)$/); if (!m || !ui.user) return;
   history.replaceState(null, '', location.pathname + location.search);
   const x = allScreens().find(y => y.s.id === m[1]); if (!x) return;
-  ui.fpOpen = { ...(ui.fpOpen || {}), [x.s.id]: true };
   go('screen', { jobId: x.j.id, screenId: x.s.id, backTo: 'job' });
 }
 if (token) loadData().then(() => { if (!ui.user) loadUsers(); else { takeShared(); openFromHash(); } }); else loadUsers();

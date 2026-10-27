@@ -147,13 +147,14 @@ async function api(req, env, url) {
   }
 
   if (m === 'GET' && p === '/data') {
-    const [master, jobsR, screensR, photosR, filesR, artR] = await Promise.all([
+    const [master, jobsR, screensR, photosR, filesR, artR, sseq] = await Promise.all([
       getSetting(env, 'master'),
       env.DB.prepare('SELECT id, no, data, created FROM jobs ORDER BY created DESC').all(),
       env.DB.prepare('SELECT id, job_id, idx, data, rev FROM screens ORDER BY job_id, idx').all(),
       env.DB.prepare('SELECT id, screen_id, by_name, t FROM photos ORDER BY t').all(),
       env.DB.prepare('SELECT id, kind, name, type, size, by_name, t FROM files').all(),
-      env.DB.prepare('SELECT id, customer, data, created FROM artworks ORDER BY created DESC').all()
+      env.DB.prepare('SELECT id, customer, data, created FROM artworks ORDER BY created DESC').all(),
+      getSetting(env, 'sseq')
     ]);
     const files = {};
     for (const f of filesR.results) files[f.id] = { id: f.id, kind: f.kind, name: f.name, type: f.type, size: f.size, by: f.by_name, t: f.t };
@@ -166,7 +167,7 @@ async function api(req, env, url) {
     const artworks = artR.results.map(a => ({ ...JSON.parse(a.data), id: a.id, customer: a.customer, created: a.created }));
     const used = new Set([...jobs.flatMap(j => j.screens.flatMap(fileIdsOf)), ...artworks.flatMap(artFileIds)]);
     const fileMap = Object.fromEntries(Object.entries(files).filter(([k]) => used.has(k)));
-    return json({ master, jobs, artworks, files: fileMap, features: { files: !!env.FILES, ai: !!env.AI }, me: { id: me.id, name: me.name, role: me.role } });
+    return json({ master, jobs, artworks, stencilNext: Number(sseq) || 1, files: fileMap, features: { files: !!env.FILES, ai: !!env.AI }, me: { id: me.id, name: me.name, role: me.role } });
   }
 
   if (m === 'POST' && p === '/jobs') {
@@ -177,11 +178,16 @@ async function api(req, env, url) {
     const n = Number(seqRow.value) - 1;
     const d = new Date(Date.now() + 7 * 3600e3); // เวลาไทย
     const no = `JB-${String((d.getUTCFullYear() + 543) % 100).padStart(2, '0')}${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(n).padStart(3, '0')}`;
+    // เลขบล็อคให้ทุกบล็อคในใบงานนี้ (จองช่วงเลขครั้งเดียว)
+    const ss = await env.DB.prepare("UPDATE settings SET value = CAST(value AS INTEGER) + ? WHERE key = 'sseq' RETURNING value").bind(b.screens.length).first();
+    const sFirst = Number(ss.value) - b.screens.length;
+    const yymm = `${String((d.getUTCFullYear() + 543) % 100).padStart(2, '0')}${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
     const id = uid(), now = Date.now();
     const jobData = { customer: String(b.customer).trim(), date: /^\d{4}-\d{2}-\d{2}$/.test(b.date || '') ? b.date : new Date(now + 7 * 3600e3).toISOString().slice(0, 10), due: b.due, note: b.note || '', createdBy: me.name, createdAt: now };
     const stmts = [env.DB.prepare('INSERT INTO jobs (id, no, data, created) VALUES (?, ?, ?, ?)').bind(id, no, JSON.stringify(jobData), now)];
     b.screens.forEach((s, i) => {
       const sd = {
+        stencilId: `ST-${yymm}-${String(sFirst + i).padStart(4, '0')}`,
         design: s.design, customerRef: s.customerRef || '', filmPrep: cleanPrep(s.filmPrep), artworkId: typeof s.artworkId === 'string' ? s.artworkId.slice(0, 40) : null,
         originals: Array.isArray(s.originals) ? s.originals : [], prepared: [], preview: s.preview || null,
         mesh: s.mesh, frame: s.frame, emulsion: s.emulsion, target: Number(s.target) || 0,
@@ -402,11 +408,11 @@ async function api(req, env, url) {
     const jobs = Object.fromEntries(jobsR.results.map(j => [j.id, { no: j.no, ...JSON.parse(j.data) }]));
     const fname = Object.fromEntries(filesR.results.map(f => [f.id, `${f.name} (${f.by_name})`]));
     const q = v => `"${String(v ?? '').replace(/"/g, '""')}"`;
-    const rows = [['เลขใบงาน', 'ลูกค้า', 'สั่งโดย', 'วันที่รับงาน', 'บันทึกเข้าระบบ', 'กำหนดส่ง', 'Customer ID', 'ไฟล์ต้นฉบับ', 'ไฟล์ที่เตรียม', 'ลาย', 'ผ้า', 'เฟรม', 'กาว', 'สเปค µm', 'จำนวนรอบกาว', 'รอบกาว (เวลา/ด้าน/คน)', 'ก่อนถ่าย µm', 'หลังถ่าย µm', 'สถานะ', 'หมายเหตุขึ้นบล็อค', 'หมายเหตุตรวจ', 'ผู้ตรวจ']];
+    const rows = [['เลขใบงาน', 'ลูกค้า', 'สั่งโดย', 'วันที่รับงาน', 'บันทึกเข้าระบบ', 'กำหนดส่ง', 'Stencil ID', 'Customer REF', 'ไฟล์ต้นฉบับ', 'ไฟล์ที่เตรียม', 'ลาย', 'ผ้า', 'เฟรม', 'กาว', 'สเปค µm', 'จำนวนรอบกาว', 'รอบกาว (เวลา/ด้าน/คน)', 'ก่อนถ่าย µm', 'หลังถ่าย µm', 'สถานะ', 'หมายเหตุขึ้นบล็อค', 'หมายเหตุตรวจ', 'ผู้ตรวจ']];
     const th = t => new Date(t + 7 * 3600e3).toISOString().replace('T', ' ').slice(0, 16);
     for (const s of screensR.results) {
       const j = jobs[s.job_id] || {}, d = JSON.parse(s.data);
-      rows.push([j.no, j.customer, j.createdBy, j.date || (j.createdAt ? th(j.createdAt).slice(0, 10) : ''), j.createdAt ? th(j.createdAt) : '', j.due, d.customerRef,
+      rows.push([j.no, j.customer, j.createdBy, j.date || (j.createdAt ? th(j.createdAt).slice(0, 10) : ''), j.createdAt ? th(j.createdAt) : '', j.due, d.stencilId || '', d.customerRef,
         (d.originals || []).map(f => fname[f] || f).join(' | '), (d.prepared || []).map(f => fname[f] || f).join(' | '), d.design, d.mesh, d.frame, d.emulsion, d.target,
         d.coats.length, d.coats.map(c => `${th(c.t)} ${c.side} ${c.by}`).join(' | '), d.thBefore, d.thAfter, d.status, d.coatNote, d.qc?.note, d.qc?.by]);
     }

@@ -10,7 +10,7 @@ Main menu: ใบงาน (jobs) · คลังลาย (artwork library) · 
 1. **Artwork library** (`artworks` table, one row = one design = one left/right pair from a customer file):
    - Upload a customer's files under a customer, from คลังลาย or inside the new-job form.
    - The browser runs the film core on .ai (PDF-compatible) / .pdf files and makes one artwork per design found in the platen frames, on every page.
-   - Each artwork has a picture cut out of the page (preview file), a Customer ID (file stem plus "หน้า n" / "ลาย k"), and `{page, design, box}` locating it in the file.
+   - Each artwork has a picture cut out of the page (preview file), a Customer REF (file stem plus "หน้า n" / "ลาย k"), and `{page, design, box}` locating it in the file.
    - Workers AI names each artwork in the background.
    - The original is uploaded once per content (sha256, reused across artworks).
    - Images and other files become a single artwork with `filmable: false`.
@@ -19,11 +19,16 @@ Main menu: ใบงาน (jobs) · คลังลาย (artwork library) · 
    - Pick the customer, then upload new files at the top. Newly uploaded artworks are ticked automatically, and each ticked artwork = one screen (บล็อค).
    - Artworks uploaded in this form get a ✕ (tap twice) that removes them from the job and deletes them from the library.
    - Older library artworks of that customer are folded under "เลือกจากลายเก่าในคลัง (n)", which has a search box.
+   - **Stencil ID**: every new screen gets `stencilId` = `ST-<Thai YY><MM>-<NNNN>` from the `settings.sseq` counter when the job is saved. The form shows the predicted number (`/api/data` returns `stencilNext`). It appears on rows, the screen page, the film queue and cards, the film label (stencil ID + Customer REF), search and CSV.
    - The screen gets `artworkId`, `originals: [artwork.file]`, `preview`, `design` (artwork name) and `customerRef`, plus the customer's default spec (frame, mesh, emulsion, target µm).
    - "+ เพิ่มบล็อคที่ไม่มีไฟล์ลาย" adds a manual screen without an artwork; it can't be filmed.
-   - **Film check (ตรวจฟิล์ม)** happens here, per screen (also on the screen page while no film exists).
-     - It shows a black film preview of just that design, rendered in the browser from the original with compensation (labels off).
-     - The preview is laid exactly over the same area of the original. A slider (ต้นฉบับ ↔ ฟิล์ม, remembered per browser) sets the film's opacity.
+   - Each block row: header (บล็อคที่ n, predicted Stencil ID, buttons), one viewer on the left, and groups on the right: ลาย (name, Customer REF) · สเปคบล็อค (mesh, frame, emulsion, thickness) · ฟิล์ม.
+   - **Viewer** (`makeViewer`, shown at once, no toggle; it loads when scrolled into view):
+     - The same area of the original with the design's film laid over it. The slider (ต้นฉบับ ↔ ฟิล์ม, remembered per browser) sets the film's opacity.
+     - Zoom with +/−/พอดี, ctrl+wheel, pinch or double-click; drag to pan; "ขยาย" goes full screen.
+     - Both layers are re-rendered from the PDFs (pdf.js pages are kept) for the visible area, so zoom stays sharp.
+     - The viewer DOM lives in `viewers` (Map by screen id/key) and is re-attached to its `[data-fv]` slot after every render().
+   - **Film group**: compensation and the colours to leave out.
      - It sets the compensation (auto = target × factor / manual µm / none) and the colours to leave out.
      - These are saved as `screen.filmPrep = {mode, manualUm, notArt[]}`. Thickness always comes from the screen's `target`.
 3. **Combine onto sheet** (`public/film/`):

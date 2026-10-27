@@ -16,7 +16,9 @@ export const SCHEMA = [
   // ฟิล์ม positive (ย้ายมาจากแอป film-positive ตารางเดิมใช้ต่อได้เลย)
   "CREATE TABLE IF NOT EXISTS film_outputs ( id TEXT PRIMARY KEY, name TEXT NOT NULL, created INTEGER NOT NULL, size INTEGER NOT NULL, info TEXT NOT NULL )",
   "CREATE INDEX IF NOT EXISTS film_outputs_created ON film_outputs(created)",
-  // คลังลายของลูกค้า: 1 แถว = 1 ลาย (คู่ซ้าย-ขวา) จากไฟล์ลูกค้า; data = ชื่อลาย, Customer ID, ไฟล์ต้นฉบับ, หน้า, ตำแหน่งลาย, รูปตัวอย่าง
+  // คลังลายของลูกค้า: 1 แถว = 1 ลาย (คู่ซ้าย-ขวา) จากไฟล์ลูกค้า; data = ชื่อลาย, Customer REF, ไฟล์ต้นฉบับ, หน้า, ตำแหน่งลาย, รูปตัวอย่าง
   "CREATE TABLE IF NOT EXISTS artworks ( id TEXT PRIMARY KEY, customer TEXT NOT NULL, data TEXT NOT NULL, created INTEGER NOT NULL )",
-  "CREATE INDEX IF NOT EXISTS artworks_customer ON artworks(customer)"
+  "CREATE INDEX IF NOT EXISTS artworks_customer ON artworks(customer)",
+  // เลขบล็อค (Stencil ID) ST-ปปดด-NNNN: ตัวนับต่อเนื่อง ออกให้ทุกบล็อคใหม่ตอนบันทึกใบงาน
+  "INSERT OR IGNORE INTO settings (key, value) VALUES ('sseq', '1')"
 ];
