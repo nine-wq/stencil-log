@@ -491,7 +491,7 @@ function artGrid(arts, picked, action, removable) {
     return `<div class="artcell">${rm}<button class="arttile ${on ? 'on' : ''}" data-a="${action}" data-v="${a.id}" aria-pressed="${on}">
       ${a.preview ? `<img src="${fileUrl(a.preview, true)}" alt="" loading="lazy">` : '<span class="noimg" aria-hidden="true"></span>'}
       <b>${esc(a.name || (ui.aiBusy['a:' + a.id] ? 'AI กำลังตั้งชื่อ…' : '(ยังไม่ตั้งชื่อ)'))}</b>
-      <span class="muted small">${esc(a.customerRef || '')}</span>
+      <span class="muted small" title="${esc(a.customerRef || '')}">${esc(a.customerRef || '')}</span>
       ${a.filmable ? '' : '<span class="fstate">ทำฟิล์มในแอปไม่ได้</span>'}${picked && on ? '<span class="tick" aria-hidden="true">✓</span>' : ''}</button></div>`; }).join('')}</div>`;
 }
 function uploadZone(id) {
