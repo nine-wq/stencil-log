@@ -25,7 +25,8 @@ Main menu: ใบงาน (jobs) · คลังลาย (artwork library) · 
    - Each block row: header (บล็อคที่ n, predicted Stencil ID, buttons), one viewer on the left, and groups on the right: ลาย (name, Customer REF) · สเปคบล็อค (mesh, frame, emulsion, thickness) · ฟิล์ม.
    - **Viewer** (`makeViewer`, shown at once, no toggle; it loads when scrolled into view):
      - The same area of the original with the design's film laid over it. The slider (ต้นฉบับ ↔ ฟิล์ม, remembered per browser) sets the film's opacity.
-     - Zoom with +/−/พอดี, ctrl+wheel, pinch or double-click; drag to pan; "ขยาย" goes full screen.
+     - Zoom with +/−/พอดี, the mouse wheel, pinch or double-click; drag to pan; "ขยาย" goes full screen.
+     - Wheel guard: a wheel within 0.4 s of a page scroll keeps scrolling the page, and wheeling out at "fit" scrolls the page.
      - Both layers are re-rendered from the PDFs (pdf.js pages are kept) for the visible area, so zoom stays sharp.
      - The viewer DOM lives in `viewers` (Map by screen id/key) and is re-attached to its `[data-fv]` slot after every render().
    - **Film group**: compensation and the colours to leave out.
