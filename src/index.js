@@ -206,7 +206,7 @@ async function api(req, env, url) {
     b.screens.forEach((s, i) => {
       const sd = {
         stencilId: `ST-${yymm}-${String(sFirst + i).padStart(4, '0')}`,
-        design: s.design, customerRef: s.customerRef || '', filmPrep: cleanPrep(s.filmPrep), artworkId: typeof s.artworkId === 'string' ? s.artworkId.slice(0, 40) : null,
+        design: s.design, customerRef: s.customerRef || '', sizes: Array.isArray(s.sizes) ? s.sizes.filter(x => typeof x === 'string').map(x => x.slice(0, 30)).slice(0, 30) : [], filmPrep: cleanPrep(s.filmPrep), artworkId: typeof s.artworkId === 'string' ? s.artworkId.slice(0, 40) : null,
         originals: Array.isArray(s.originals) ? s.originals : [], prepared: [], preview: s.preview || null,
         mesh: s.mesh, frame: s.frame, emulsion: s.emulsion, target: Number(s.target) || 0,
         status: 'ordered', coats: [], thBefore: '', thAfter: '', coatNote: '', qc: { checks: {}, note: '' },
@@ -426,11 +426,11 @@ async function api(req, env, url) {
     const jobs = Object.fromEntries(jobsR.results.map(j => [j.id, { no: j.no, ...JSON.parse(j.data) }]));
     const fname = Object.fromEntries(filesR.results.map(f => [f.id, `${f.name} (${f.by_name})`]));
     const q = v => `"${String(v ?? '').replace(/"/g, '""')}"`;
-    const rows = [['เลขใบงาน', 'ลูกค้า', 'สั่งโดย', 'วันที่รับงาน', 'บันทึกเข้าระบบ', 'กำหนดส่ง', 'Stencil ID', 'Customer REF', 'ไฟล์ต้นฉบับ', 'ไฟล์ที่เตรียม', 'ลาย', 'ผ้า', 'เฟรม', 'กาว', 'สเปค µm', 'จำนวนรอบกาว', 'รอบกาว (เวลา/ด้าน/คน)', 'ก่อนถ่าย µm', 'หลังถ่าย µm', 'สถานะ', 'หมายเหตุขึ้นบล็อค', 'หมายเหตุตรวจ', 'ผู้ตรวจ']];
+    const rows = [['เลขใบงาน', 'ลูกค้า', 'สั่งโดย', 'วันที่รับงาน', 'บันทึกเข้าระบบ', 'กำหนดส่ง', 'Stencil ID', 'Customer REF', 'ไซส์', 'ไฟล์ต้นฉบับ', 'ไฟล์ที่เตรียม', 'ลาย', 'ผ้า', 'เฟรม', 'กาว', 'สเปค µm', 'จำนวนรอบกาว', 'รอบกาว (เวลา/ด้าน/คน)', 'ก่อนถ่าย µm', 'หลังถ่าย µm', 'สถานะ', 'หมายเหตุขึ้นบล็อค', 'หมายเหตุตรวจ', 'ผู้ตรวจ']];
     const th = t => new Date(t + 7 * 3600e3).toISOString().replace('T', ' ').slice(0, 16);
     for (const s of screensR.results) {
       const j = jobs[s.job_id] || {}, d = JSON.parse(s.data);
-      rows.push([j.no, j.customer, j.createdBy, j.date || (j.createdAt ? th(j.createdAt).slice(0, 10) : ''), j.createdAt ? th(j.createdAt) : '', j.due, d.stencilId || '', d.customerRef,
+      rows.push([j.no, j.customer, j.createdBy, j.date || (j.createdAt ? th(j.createdAt).slice(0, 10) : ''), j.createdAt ? th(j.createdAt) : '', j.due, d.stencilId || '', d.customerRef, (d.sizes || []).join(' '),
         (d.originals || []).map(f => fname[f] || f).join(' | '), (d.prepared || []).map(f => fname[f] || f).join(' | '), d.design, d.mesh, d.frame, d.emulsion, d.target,
         d.coats.length, d.coats.map(c => `${th(c.t)} ${c.side} ${c.by}`).join(' | '), d.thBefore, d.thAfter, d.status, d.coatNote, d.qc?.note, d.qc?.by]);
     }

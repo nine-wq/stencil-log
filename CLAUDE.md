@@ -29,6 +29,9 @@ Main menu: ใบงาน (jobs) · คลังลาย (artwork library) · 
      - Inside the picture the wheel always zooms (it never scrolls the page; zooming out stops at "fit"). Outside the picture the wheel scrolls the page.
      - Both layers are re-rendered from the PDFs (pdf.js pages are kept) for the visible area, so zoom stays sharp.
      - The viewer DOM lives in `viewers` (Map by screen id/key) and is re-attached to its `[data-fv]` slot after every render().
+   - **Sizes**: `screen.sizes = []` (several or none) are picked as chips in the ลาย group and on the screen page.
+     - The list is `master.sizes`, edited in ⚙ (รายการให้เลือก → ไซส์). Default: FREE SIZE, XS–XXL.
+     - Shown on home rows, in search and in CSV.
    - **Film group**: compensation and the colours to leave out.
      - It sets the compensation (auto = target × factor / manual µm / none) and the colours to leave out.
      - These are saved as `screen.filmPrep = {mode, manualUm, notArt[]}`. Thickness always comes from the screen's `target`.

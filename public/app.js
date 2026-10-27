@@ -355,7 +355,7 @@ function jobText(j) {
 function screenText(s) {
   const files = [...(s.originals || []), ...(s.prepared || [])].map(id => (db.files[id] || {}).name);
   const people = [...(s.coats || []).map(c => c.by), ...(s.log || []).map(l => l[1]), s.qc && s.qc.by];
-  return norm([s.stencilId, s.design, s.customerRef, s.mesh, s.frame, s.emulsion, s.target && s.target + 'µm', STATUS[s.status], s.coatNote, s.qc && s.qc.note, ...files, ...people].join(' '));
+  return norm([s.stencilId, s.design, s.customerRef, ...(s.sizes || []), s.mesh, s.frame, s.emulsion, s.target && s.target + 'µm', STATUS[s.status], s.coatNote, s.qc && s.qc.note, ...files, ...people].join(' '));
 }
 const RECENT_DAYS = 3;
 const localDate = (t = Date.now()) => { const d = new Date(t); return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`; };
@@ -378,10 +378,20 @@ function blockRow(j, s) {
   return `<button class="brow" data-a="openscreen" data-j="${j.id}" data-v="${s.id}">
     ${s.preview ? `<img class="thumb" src="${fileUrl(s.preview, true)}" alt="" loading="lazy">` : '<span class="thumb none" aria-hidden="true"></span>'}
     <span class="bt">${s.stencilId ? `<span class="sid sm">${esc(s.stencilId)}</span>` : ''}<b>${esc(s.design || '(ยังไม่ตั้งชื่อ)')}</b>
-      <span class="muted small"><span class="num">${esc(s.mesh)}</span> · สเปค <span class="num">${esc(s.target)} µm</span>${s.coats.length ? ` · กาว ${s.coats.length} รอบ` : ''}${th}</span>
+      <span class="muted small">${(s.sizes || []).length ? `ไซส์ ${esc(s.sizes.join(', '))} · ` : ''}<span class="num">${esc(s.mesh)}</span> · สเปค <span class="num">${esc(s.target)} µm</span>${s.coats.length ? ` · กาว ${s.coats.length} รอบ` : ''}${th}</span>
       ${needsFilm(s) ? '<span class="fstate">ยังไม่ทำฟิล์ม</span>' : !s.film && !s.artworkId && db.features.files && !prep && ['ordered', 'coating'].includes(s.status) ? '<span class="fstate">ยังไม่มีไฟล์เตรียม</span>' : ''}</span>
     ${chip(s.status)}
   </button>`;
+}
+// ไซส์ที่ลูกค้าระบุ: เลือกได้หลายไซส์ หรือไม่ระบุ (รายการแก้ได้ที่ ⚙ ตั้งค่า)
+const DEFAULT_SIZES = ['FREE SIZE', 'XS', 'S', 'M', 'L', 'XL', 'XXL'];
+const sizeList = () => (db.master && Array.isArray(db.master.sizes) && db.master.sizes.length ? db.master.sizes : DEFAULT_SIZES);
+function sizeChips(t, s, edit) {
+  const sel = s.sizes || [], list = [...sizeList(), ...sel.filter(x => !sizeList().includes(x))];
+  if (!edit) return sel.length ? sel.map(x => `<span class="szchip on">${esc(x)}</span>`).join('') : '<span class="muted small">ไม่ระบุไซส์</span>';
+  return `<div class="szchips" role="group" aria-label="ไซส์">${list.map(x => { const on = sel.includes(x);
+    return `<button type="button" class="szchip ${on ? 'on' : ''}" data-a="size" data-v="${t}" data-k="${esc(x)}" aria-pressed="${on}">${esc(x)}</button>`; }).join('')}
+    <span class="muted small">${sel.length ? `${sel.length} ไซส์` : 'ไม่ระบุไซส์'}</span></div>`;
 }
 function blankScreen() {
   const m = db.master, cs = custSpec(ui.draft && ui.draft.customer) || {};
@@ -454,6 +464,7 @@ function draftRow(s, i) {
             ${a ? `<div class="field"><span class="flabel">Customer REF</span><div class="ro-v" title="${esc(s.customerRef || '')}">${esc(s.customerRef || '-')}</div></div>`
               : `<div class="field"><label for="s-c-${s.key}">Customer REF</label><input id="s-c-${s.key}" value="${esc(s.customerRef)}" data-s="${i}" data-k="customerRef"></div>`}
           </div>
+          <div class="field"><span class="flabel">ไซส์ <span class="muted small">(เลือกได้หลายไซส์ หรือไม่ต้องเลือก)</span></span>${sizeChips('d:' + i, s, true)}</div>
           ${a && !a.filmable ? '<span class="fstate">ไฟล์นี้ทำฟิล์มในแอปไม่ได้</span>' : ''}
         </fieldset>
         <fieldset class="grp"><legend>สเปคบล็อค</legend>
@@ -948,6 +959,7 @@ function screenView() {
           ${art ? `<div class="field"><label for="e-cref">Customer REF</label><input id="e-cref" data-f="customerRef" value="${esc(s.customerRef || '')}"></div>
             ${db.features.ai ? nameField('s', s, 'e-name', 'data-f="design"') : `<div class="field"><label for="e-name">ชื่อลาย</label><input id="e-name" data-f="design" value="${esc(s.design)}"></div>`}`
           : `<div><span class="label">Customer REF</span><div>${esc(s.customerRef || '-')}</div></div><div><span class="label">ชื่อลาย</span><div>${esc(s.design || '-')}</div></div>`}
+          <div class="field"><span class="flabel">ไซส์</span>${sizeChips('s', s, art)}</div>
         </div>
       </div>
       <div class="fsec"><div class="spread"><span class="label">ไฟล์ต้นฉบับจากลูกค้า (${s.originals.length})</span>
@@ -1034,7 +1046,7 @@ function settingsView() {
   <div class="card" style="display:flex;flex-direction:column;gap:12px">
     <h3>รายการให้เลือก</h3><div class="muted small">พิมพ์บรรทัดละ 1 รายการ</div>
     <div class="grid2">
-      ${[['mesh', 'เบอร์ผ้าสกรีน'], ['frames', 'ขนาดเฟรม'], ['emulsions', 'ชนิดกาว'], ['customers', 'ลูกค้า']].map(([k, l]) => `<div class="field"><label for="ms-${k}">${l}</label><textarea id="ms-${k}" data-m="${k}" rows="6">${esc(m[k].join('\n'))}</textarea></div>`).join('')}
+      ${[['mesh', 'เบอร์ผ้าสกรีน'], ['frames', 'ขนาดเฟรม'], ['emulsions', 'ชนิดกาว'], ['sizes', 'ไซส์'], ['customers', 'ลูกค้า']].map(([k, l]) => `<div class="field"><label for="ms-${k}">${l}</label><textarea id="ms-${k}" data-m="${k}" rows="6">${esc((k === 'sizes' ? sizeList() : m[k]).join('\n'))}</textarea></div>`).join('')}
       <div class="field"><label for="ms-def">ความหนาเริ่มต้นของบล็อคใหม่</label><div class="unit"><input id="ms-def" type="number" data-m="defaultTarget" value="${esc(defTarget())}"><span>µm</span></div></div>
       <div class="field"><label for="ms-tol">ค่าความหนาที่ยอมรับได้ (±)</label><div class="unit"><input id="ms-tol" type="number" data-m="tolerance" value="${esc(tol())}"><span>µm</span></div></div>
     </div>
@@ -1114,6 +1126,10 @@ document.addEventListener('click', async e => {
     }
     case 'fpcol': { const s = targetObj(v); if (!s) break; const k = el.dataset.k, p = prepOf(s);
       setPrep(v, { notArt: p.notArt.includes(k) ? p.notArt.filter(x => x !== k) : [...p.notArt, k] }); break; }
+    case 'size': { const o = targetObj(v); if (!o) break; const k = el.dataset.k, cur = o.sizes || [];
+      o.sizes = cur.includes(k) ? cur.filter(x => x !== k) : sizeList().filter(x => x === k || cur.includes(x)).concat(cur.filter(x => !sizeList().includes(x)));
+      if (v === 's') { logEv(o, 'แก้ไซส์: ' + (o.sizes.join(', ') || 'ไม่ระบุ')); saveScreen(o); }
+      render(); break; }
     case 'toggleold': ui.draft.showOld = !ui.draft.showOld; render(); break;
     case 'pickart': {
       const d = ui.draft, a = artOf(v); if (!a) break;
@@ -1236,7 +1252,7 @@ document.addEventListener('click', async e => {
     }
     case 'msave': {
       const m = { ...db.master };
-      for (const k of ['mesh', 'frames', 'emulsions', 'customers']) m[k] = $('#ms-' + k).value.split('\n').map(x => x.trim()).filter(Boolean);
+      for (const k of ['mesh', 'frames', 'emulsions', 'sizes', 'customers']) m[k] = $('#ms-' + k).value.split('\n').map(x => x.trim()).filter(Boolean);
       m.tolerance = Number($('#ms-tol').value) || 10;
       m.defaultTarget = Number($('#ms-def').value) || 400;
       // สเปคประจำลูกค้า: อ่านจากตาราง แล้วเก็บเฉพาะลูกค้าที่ยังอยู่ในรายการ

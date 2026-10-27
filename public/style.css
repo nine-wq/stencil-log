@@ -344,3 +344,9 @@ a.btn.primary{color:var(--on-emulsion)}
 .fvslide input{width:100%;accent-color:var(--emulsion)}
 .fv.full{position:fixed;inset:0;z-index:60;background:var(--bg);padding:max(12px,env(safe-area-inset-top,0px)) 12px 12px}
 .fv.full .fvarea{flex:1;height:auto}
+.szchips{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:2px}
+.szchip{border:1px solid var(--line);background:var(--surface);color:var(--muted);border-radius:99px;padding:4px 12px;font:600 .82rem var(--mono);cursor:pointer;min-height:32px}
+.szchip:hover{border-color:var(--muted);color:var(--fg)}
+.szchip.on{background:var(--emulsion);border-color:var(--emulsion);color:var(--on-emulsion)}
+span.szchip{display:inline-flex;align-items:center;min-height:26px;margin:2px 4px 0 0;cursor:default}
+.szchip:focus-visible{outline:2px solid var(--emulsion);outline-offset:2px}
