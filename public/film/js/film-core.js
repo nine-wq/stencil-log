@@ -4,7 +4,7 @@
   else root.FilmCore = factory(root.PDFLib);
 })(typeof self !== 'undefined' ? self : this, function (PDFLib) {
   'use strict';
-  const { PDFDocument, PDFName, PDFArray, PDFRawStream, PDFStream, PDFDict, PDFRef, StandardFonts, cmyk, degrees, decodePDFRawStream } = PDFLib;
+  const { PDFDocument, PDFName, PDFArray, PDFRawStream, PDFStream, PDFDict, PDFRef, StandardFonts, cmyk, grayscale, degrees, decodePDFRawStream } = PDFLib;
   const MM = 72 / 25.4;
 
   /* ---------- bytes <-> latin1 ---------- */
@@ -691,17 +691,17 @@
         const F = hasFill && fillMode !== 'drop';
         let T = hasStroke && strokeMode !== 'drop';
         let pre = '', paint;
-        if (F) pre += fillMode === 'ink' ? '0 0 0 1 k ' : '0 0 0 0 k ';
+        if (F) pre += fillMode === 'ink' ? '0 g ' : '1 g ';   // pure black (DeviceGray): K 100% shows and prints as dark grey
         if (r > 0 && (F || T) && e) {
           const sc = e.s || 1, grow = 2 * r / sc;
-          if (T) { pre += `0 0 0 1 K ${f((e.stroke.lwUser || 0) + grow)} w 1 j `; }   // keep the line's own end caps
-          else { pre += `0 0 0 1 K ${f(grow)} w 1 j 0 J [] 0 d `; }   // outline the filled shape (black grows, white shrinks)
+          if (T) { pre += `0 G ${f((e.stroke.lwUser || 0) + grow)} w 1 j `; }   // keep the line's own end caps
+          else { pre += `0 G ${f(grow)} w 1 j 0 J [] 0 d `; }   // outline the filled shape (black grows, white shrinks)
           paint = F ? (star ? 'b*' : 'b') : (close ? 's' : 'S');
           if (F && T) paint = close ? (star ? 'b*' : 'b') : (star ? 'B*' : 'B');
           if (!T && F && !close) paint = star ? 'b*' : 'b';
           T = true;
         } else {
-          if (T) pre += '0 0 0 1 K ';
+          if (T) pre += '0 G ';
           paint = F && T ? op : F ? (close ? 'h ' : '') + (star ? 'f*' : 'f') : T ? (close ? 's' : 'S') : (op === 's' || op === 'b' || op === 'b*' ? 'h n' : 'n');
         }
         const wrap = r > 0 && (F || T) && !clipInPath && pathStart >= 0;
@@ -712,8 +712,8 @@
       if (TEXT_OPS.has(o.op)) {
         const a = role.get(i), e = elBy.get(i);
         if (a && a.fill) {
-          if (r > 0) out.push(`0 0 0 1 k 0 0 0 1 K 2 Tr ${f(2 * r / ((e && e.s) || 1))} w 1 j`);
-          else out.push('0 0 0 1 k');
+          if (r > 0) out.push(`0 g 0 G 2 Tr ${f(2 * r / ((e && e.s) || 1))} w 1 j`);
+          else out.push('0 g');
           out.push(o.args.map(x => x.raw).concat(o.op).join(' '));
         }
         else if (o.op === "'") out.push('T*');
@@ -735,7 +735,7 @@
   }
   function markOps(layout, grey, lw) {
     const { L } = layout, f = (v) => v.toFixed(2);
-    let s = `q 0 0 0 ${grey} K ${lw} w [] 0 d 0 J\n`;
+    let s = `q ${+(1 - grey).toFixed(3)} G ${lw} w [] 0 d 0 J\n`;
     for (const [x, y] of layout.pts) s += `${f(x - L)} ${f(y)} m ${f(x + L)} ${f(y)} l S ${f(x)} ${f(y - L)} m ${f(x)} ${f(y + L)} l S\n`;
     return s + 'Q\n';
   }
@@ -865,13 +865,13 @@
               else { const o = map(lb.x - img.w / 2, ly); pg.drawImage(im, { x: o.x, y: o.y - img.h * 0.25, width: img.w, height: img.h }); }
             } else {
               const t = asciiLabel(text, 'job ' + (it.i + 1)), w = font.widthOfTextAtSize(t, lb.size);
-              if (it.rot) { const o = map(lb.x, ly); pg.drawText(t, { x: o.x, y: o.y - w / 2, size: lb.size, font, color: cmyk(0, 0, 0, lk), rotate: degrees(90) }); }
-              else { const o = map(lb.x - w / 2, ly); pg.drawText(t, { x: o.x, y: o.y, size: lb.size, font, color: cmyk(0, 0, 0, lk) }); }
+              if (it.rot) { const o = map(lb.x, ly); pg.drawText(t, { x: o.x, y: o.y - w / 2, size: lb.size, font, color: grayscale(1 - lk), rotate: degrees(90) }); }
+              else { const o = map(lb.x - w / 2, ly); pg.drawText(t, { x: o.x, y: o.y, size: lb.size, font, color: grayscale(1 - lk) }); }
             }
           }
         }
         if (st.cropMarks) {
-          const x0 = it.x, y0 = it.y, x1 = it.x + it.W, y1 = it.y + it.H, o = 2 * MM, l = 4 * MM, c = cmyk(0, 0, 0, 1);
+          const x0 = it.x, y0 = it.y, x1 = it.x + it.W, y1 = it.y + it.H, o = 2 * MM, l = 4 * MM, c = grayscale(0);
           for (const [cx, cy, sx, sy] of [[x0, y0, -1, -1], [x1, y0, 1, -1], [x0, y1, -1, 1], [x1, y1, 1, 1]]) {
             pg.drawLine({ start: { x: cx + sx * o, y: cy }, end: { x: cx + sx * (o + l), y: cy }, thickness: 0.3, color: c });
             pg.drawLine({ start: { x: cx, y: cy + sy * o }, end: { x: cx, y: cy + sy * (o + l) }, thickness: 0.3, color: c });

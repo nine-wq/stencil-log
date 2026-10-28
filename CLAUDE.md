@@ -92,7 +92,7 @@ Screen status flow: `ordered → coating → qc → ready → sent`, with `qc �
 ## Film core rules (public/film/js/film-core.js; edit it and public/film/index.html directly, there is no build step)
 - Designs are found from platen frames (dashed/solid rectangles, closed sock outlines, outlined rings). Same-size frames side by side = one design (left + right).
 - Artwork = printable elements inside a frame. Guides are decided by role, not by line weight.
-- Single-colour film: every artwork colour → black; white and near-white knock out.
+- Single-colour film: every artwork colour → black; white and near-white knock out. Black is written as DeviceGray `0 g`/`0 G` (white `1 g`), not CMYK K 100%, which PDF.js and ordinary printer drivers show and print as dark grey. Marks, crop marks and labels are gray too.
 - Spot colours (Separation/DeviceN) count as ink tints.
 - Form XObjects (Illustrator groups, symbols, transparency groups) are spliced into the operator list (`flatten()`: q, Matrix, BBox clip, content, Q; a marker `_grp` for analysis only). Forms with their own resources get prefixed names (`X<n>_`) and `render()` copies those resources into the page (`job.merges`).
 - Clipping masks are tracked: an element's box is cut to its clip, so clipped line art counts by its visible part. Clipped or open fills never count as ring frames; a ring frame needs a hole inset evenly by the line width (`isRing`).
