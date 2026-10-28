@@ -94,6 +94,9 @@ Screen status flow: `ordered → coating → qc → ready → sent`, with `qc �
 - Artwork = printable elements inside a frame. Guides are decided by role, not by line weight.
 - Single-colour film: every artwork colour → black; white and near-white knock out.
 - Spot colours (Separation/DeviceN) count as ink tints.
+- Form XObjects (Illustrator groups, symbols, transparency groups) are spliced into the operator list (`flatten()`: q, Matrix, BBox clip, content, Q; a marker `_grp` for analysis only). Forms with their own resources get prefixed names (`X<n>_`) and `render()` copies those resources into the page (`job.merges`).
+- Clipping masks are tracked: an element's box is cut to its clip, so clipped line art counts by its visible part. Clipped or open fills never count as ring frames; a ring frame needs a hole inset evenly by the line width (`isRing`).
+- Objects drawn at 0 % opacity (ExtGState `ca`/`CA` 0, or inside a group drawn at 0 %) are invisible and ignored.
 - Edge compensation: auto = thickness × factor (default 0.5), or a manual µm value, or none.
 - Marks: 3 faint crosses plus a 2-line faint label.
 

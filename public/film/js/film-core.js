@@ -4,7 +4,7 @@
   else root.FilmCore = factory(root.PDFLib);
 })(typeof self !== 'undefined' ? self : this, function (PDFLib) {
   'use strict';
-  const { PDFDocument, PDFName, PDFArray, PDFRawStream, PDFStream, PDFDict, StandardFonts, cmyk, degrees, decodePDFRawStream } = PDFLib;
+  const { PDFDocument, PDFName, PDFArray, PDFRawStream, PDFStream, PDFDict, PDFRef, StandardFonts, cmyk, degrees, decodePDFRawStream } = PDFLib;
   const MM = 72 / 25.4;
 
   /* ---------- bytes <-> latin1 ---------- */
@@ -146,15 +146,15 @@
   /* Colour spaces named in the page resources. Spot colours (Separation / DeviceN) set ink TINTS with sc/scn,
      so "1 scn" there is full ink, not gray 1 (= white). ICCBased spaces behave like Device gray/RGB/CMYK. */
   const spotCss = {};
-  function colourSpaces(doc, page) {
-    const out = {};
-    const res = page.node.Resources(); if (!res) return out;
+  function colourSpaces(doc, res, prefix) {
+    const out = {}; prefix = prefix || '';
+    if (!res) return out;
     const cs = res.has(PDFName.of('ColorSpace')) ? res.lookup(PDFName.of('ColorSpace')) : null; if (!(cs instanceof PDFDict)) return out;
     const L = (o) => doc.context.lookup(o);
     const nm = (o) => { o = L(o); return o instanceof PDFName ? decodeURIComponent(o.asString().slice(1).replace(/#([0-9a-f]{2})/gi, '%$1')) : null; };
     const num = (o) => { o = L(o); return o && typeof o.asNumber === 'function' ? o.asNumber() : NaN; };
     for (const [k, v] of cs.entries()) {
-      const key = k.asString().slice(1), o = L(v);
+      const key = prefix + k.asString().slice(1), o = L(v);
       if (!(o instanceof PDFArray) || !o.size()) continue;
       const fam = nm(o.get(0));
       if (fam === 'Separation' || fam === 'DeviceN') {
@@ -191,14 +191,14 @@
     if (name === 'DeviceCMYK' || (space && space.dev === 'cmyk')) return 'cmyk:0 0 0 1';
     return 'gray:0';
   }
-  function xobjectKinds(doc, page) {
-    const out = {};
-    const res = page.node.Resources(); if (!res) return out;
+  function xobjectKinds(doc, res, prefix) {
+    const out = {}; prefix = prefix || '';
+    if (!res) return out;
     const xo = res.has(PDFName.of('XObject')) ? res.lookup(PDFName.of('XObject')) : null; if (!(xo instanceof PDFDict)) return out;
     for (const [k, v] of xo.entries()) {
       const o = doc.context.lookup(v);
       const st = o && o.dict ? o.dict.get(PDFName.of('Subtype')) : null;
-      out[k.asString().slice(1)] = st ? st.asString().slice(1) : '?';
+      out[prefix + k.asString().slice(1)] = st ? st.asString().slice(1) : '?';
     }
     return out;
   }
@@ -236,6 +236,74 @@
     }
     return Math.max(0, ink) / (W_(bb) * H_(bb));
   }
+  /* Illustrator often keeps groups, symbols and transparency groups as Form XObjects ("/Fm0 Do").
+     Their content is spliced into the page's operator list (q, Matrix cm, BBox clip, content, Q), so the
+     frames and artwork inside them are found and rewritten like everything else. A form with its own
+     resources gets its names prefixed (X<n>_); render() copies those resources into the page under the
+     same prefixed names (job.merges). */
+  const RES_CATS = ['Font', 'ExtGState', 'ColorSpace', 'Pattern', 'Shading', 'XObject', 'Properties'];
+  const RES_OF_OP = { Tf: 'Font', gs: 'ExtGState', cs: 'ColorSpace', CS: 'ColorSpace', scn: 'Pattern', SCN: 'Pattern', sh: 'Shading', Do: 'XObject', BDC: 'Properties', DP: 'Properties' };
+  function streamText(s) { return toLatin1(s instanceof PDFRawStream ? decodePDFRawStream(s).decode() : s.getContents()); }
+  function flatten(doc, page) {
+    const L = (o) => doc.context.lookup(o);
+    const ops = [], merges = [], spaces = {}, xk = {}, alpha = {};
+    const num = (o) => { o = L(o); return o && typeof o.asNumber === 'function' ? o.asNumber() : null; };
+    function alphas(res, prefix) {   // ExtGState opacity: objects drawn at 0 % are invisible in the file
+      const g = sub(res, 'ExtGState'); if (!g) return;
+      for (const [k, v] of g.entries()) { const d = L(v); if (!(d instanceof PDFDict)) continue;
+        alpha[prefix + k.asString().slice(1)] = { ca: num(d.get(PDFName.of('ca'))), CA: num(d.get(PDFName.of('CA'))) }; }
+    }
+    const sub = (res, cat) => { const d = res && res.lookup(PDFName.of(cat)); return d instanceof PDFDict ? d : null; };
+    const numTok = (v) => ({ type: 'num', num: v, raw: String(+v.toFixed(6)) });
+    let n = 0, budget = 4000;   // forms spliced in (guards against huge or looping files)
+    function walk(src, res, prefix, depth, seen) {
+      Object.assign(spaces, colourSpaces(doc, res, prefix)); Object.assign(xk, xobjectKinds(doc, res, prefix)); alphas(res, prefix);
+      for (const o of tokenize(src)) {
+        const cat = RES_OF_OP[o.op];
+        const ai = o.op === 'BDC' || o.op === 'DP' ? 1 : o.op === 'scn' || o.op === 'SCN' ? o.args.length - 1 : 0;
+        const t = cat && o.args[ai] && o.args[ai].type === 'name' ? o.args[ai] : null;
+        if (o.op === 'Do' && t) {
+          const xo = sub(res, 'XObject'), ref = xo && xo.get(PDFName.of(t.name)), f = ref && L(ref);
+          const st = f && f.dict && f.dict.get(PDFName.of('Subtype'));
+          if (st && st.asString() === '/Form' && depth < 12 && budget > 0 && !(ref instanceof PDFRef && seen.has(ref.tag))) {
+            budget--;
+            const m = f.dict.lookup(PDFName.of('Matrix')), bb = f.dict.lookup(PDFName.of('BBox'));
+            const mv = m instanceof PDFArray ? m.asArray().map(x => L(x).asNumber()) : [1, 0, 0, 1, 0, 0];
+            const fr = f.dict.lookup(PDFName.of('Resources'));
+            let fres = res, fpre = prefix;
+            if (fr instanceof PDFDict && ref instanceof PDFRef) { fres = fr; fpre = 'X' + (++n) + '_'; merges.push({ prefix: fpre, n: ref.objectNumber, g: ref.generationNumber }); }
+            ops.push({ op: 'q', args: [] }, { op: '_grp', args: [] }, { op: 'cm', args: mv.map(numTok) });   // _grp: analysis-only marker
+            if (bb instanceof PDFArray) {
+              const b = bb.asArray().map(x => L(x).asNumber());
+              ops.push({ op: 're', args: [b[0], b[1], b[2] - b[0], b[3] - b[1]].map(numTok) }, { op: 'W', args: [] }, { op: 'n', args: [] });
+            }
+            const s2 = new Set(seen); if (ref instanceof PDFRef) s2.add(ref.tag);
+            try { walk(streamText(f), fres, fpre, depth + 1, s2); } catch (e) {}
+            ops.push({ op: 'Q', args: [] });
+            continue;
+          }
+        }
+        if (t && prefix && sub(res, cat) && sub(res, cat).has(PDFName.of(t.name))) {
+          const nt = { ...t, name: prefix + t.name, raw: '/' + prefix + t.raw.slice(1) };
+          o.args = o.args.slice(); o.args[ai] = nt;
+        }
+        ops.push(o);
+      }
+    }
+    return { walk, ops, merges, spaces, xk, alpha };
+  }
+  /* an outlined stroke of a closed shape (a sock outline saved as a filled ring): the largest subpath is the
+     whole shape and another subpath is a hole inset evenly on all four sides by the line width */
+  function isRing(subs, bb) {
+    const bs = subs.filter(p => p.length > 2).map(bboxOf);
+    const outer = bs.find(b => Math.abs(b[0] - bb[0]) < 1 && Math.abs(b[1] - bb[1]) < 1 && Math.abs(b[2] - bb[2]) < 1 && Math.abs(b[3] - bb[3]) < 1);
+    if (!outer) return false;
+    return bs.some(b => {
+      if (b === outer) return false;
+      const ins = [b[0] - outer[0], b[1] - outer[1], outer[2] - b[2], outer[3] - b[3]];
+      return Math.min(...ins) > 0.05 && Math.max(...ins) < 4 * MM && Math.max(...ins) - Math.min(...ins) < 1.5 * MM;
+    });
+  }
   async function pageCount(bytes) { const d = await PDFDocument.load(bytes, { ignoreEncryption: true, updateMetadata: false }); return d.getPageCount(); }
   async function analyze(bytes, name, pageIndex) {
     const pi = pageIndex || 0;
@@ -243,12 +311,14 @@
     if (head.indexOf('%PDF') < 0) throw new Error('ไฟล์นี้ไม่ได้บันทึกแบบ PDF-compatible (ต้องติ๊ก Create PDF Compatible File ตอน Save ใน Illustrator)');
     const doc = await PDFDocument.load(bytes, { ignoreEncryption: true, updateMetadata: false });
     const page = doc.getPage(pi);
-    const ops = tokenize(await readContents(doc, page));
-    const xk = xobjectKinds(doc, page);
-    const spaces = colourSpaces(doc, page);
+    const fl = flatten(doc, page);
+    fl.walk(await readContents(doc, page), page.node.Resources() || null, '', 0, new Set());
+    const { ops, xk, spaces } = fl;
     const { width, height } = page.getSize();
     const warn = new Set(); const els = [];
-    let gs = { ctm: [1, 0, 0, 1, 0, 0], fill: 'gray:0', stroke: 'gray:0', lw: 1, dash: false }; const stack = [];
+    let gs = { ctm: [1, 0, 0, 1, 0, 0], fill: 'gray:0', stroke: 'gray:0', lw: 1, dash: false, clip: null }; const stack = [];
+    let clipNext = false;   // W / W*: the current path becomes a clip at its painting operator
+    const cut = (b, c) => [Math.max(b[0], c[0]), Math.max(b[1], c[1]), Math.min(b[2], c[2]), Math.min(b[3], c[3])];
     let path = [], sub = [], subs = [], segs = [], cur = [0, 0], start = [0, 0], closed = false;
     let tm = [1, 0, 0, 1, 0, 0], tlm = [1, 0, 0, 1, 0, 0], fsz = 12, lead = 0;
     const P = (x, y) => tx(gs.ctm, x, y);
@@ -260,6 +330,8 @@
         case 'Q': if (stack.length) gs = stack.pop(); break;
         case 'cm': gs.ctm = mul(a, gs.ctm); break;
         case 'w': gs.lw = a[0]; break;
+        case '_grp': if (gs.fa === 0) gs.hide = true; break;   // a group drawn at 0 % opacity stays invisible whatever it sets inside
+        case 'gs': { const g = fl.alpha[o.args[0] && o.args[0].name]; if (g) { if (g.ca != null) gs.fa = g.ca; if (g.CA != null) gs.sa = g.CA; } break; }
         case 'd': gs.dash = !!(o.args[0] && o.args[0].items && o.args[0].items.length); break;
         case 'k': case 'rg': case 'g': gs.fill = colourKey(o.op, o.args); gs.fcs = null; break;
         case 'K': case 'RG': case 'G': gs.stroke = colourKey(o.op, o.args); gs.scs = null; break;
@@ -281,17 +353,25 @@
           c.forEach(p => path.push(p)); subs.push(c.slice()); for (let k = 0; k < 4; k++) addSeg(c[k], c[(k + 1) % 4]);
           sub = [c[0]]; cur = [a[0], a[1]]; closed = true; break; }
         case 'h': if (sub.length > 1) addSeg(sub[sub.length - 1], sub[0]); cur = start; closed = true; break;
+        case 'W': case 'W*': clipNext = true; break;
         case 'f': case 'F': case 'f*': case 'B': case 'B*': case 'b': case 'b*': case 'S': case 's': case 'n': {
+          if (clipNext && path.length) { const cb = bboxOf(path); gs.clip = gs.clip ? cut(gs.clip, cb) : cb; }
+          clipNext = false;
           if (path.length && o.op !== 'n') {
-            const bb = bboxOf(path);
-            const doFill = o.op !== 'S' && o.op !== 's', doStroke = /^[SsBb]/.test(o.op);
+            const full = bboxOf(path), bb = gs.clip ? cut(full, gs.clip) : full;
+            if (gs.clip && (bb[2] < bb[0] - 0.01 || bb[3] < bb[1] - 0.01)) { path = []; sub = []; subs = []; segs = []; closed = false; break; }   // clipped away entirely
+            const clipped = bb !== full && (bb[0] - full[0] > MM || bb[1] - full[1] > MM || full[2] - bb[2] > MM || full[3] - bb[3] > MM);
+            const doFill = o.op !== 'S' && o.op !== 's' && gs.fa !== 0 && !gs.hide, doStroke = /^[SsBb]/.test(o.op) && gs.sa !== 0 && !gs.hide;
+            if (!doFill && !doStroke) { path = []; sub = []; subs = []; segs = []; closed = false; break; }   // 0 % opacity: invisible
             if ((o.op === 's' || o.op[0] === 'b') && sub.length > 1) { addSeg(sub[sub.length - 1], sub[0]); closed = true; }
             if (sub.length > 2 && Math.hypot(sub[0][0] - sub[sub.length - 1][0], sub[0][1] - sub[sub.length - 1][1]) < 0.5) closed = true;
             const lwPt = gs.lw * Math.sqrt(Math.abs(gs.ctm[0] * gs.ctm[3] - gs.ctm[1] * gs.ctm[2])) || gs.lw;
             const el = { i, bb, s: Math.sqrt(Math.abs(gs.ctm[0] * gs.ctm[3] - gs.ctm[1] * gs.ctm[2])) || 1 };
-            if (doFill) { el.fill = { key: gs.fill }; if (W_(bb) > 20 * MM && H_(bb) > 20 * MM) el.fill.ratio = inkRatio(subs, bb); }
+            if (clipped) el.clipped = true;
+            if (doFill) { el.fill = { key: gs.fill }; if (!clipped && W_(bb) > 20 * MM && H_(bb) > 20 * MM) { el.fill.ratio = inkRatio(subs, bb); el.fill.ring = isRing(subs, bb); } }
             if (subs.length > 1) el.subMm = subs.map(p => { const q = bboxOf(p); return Math.max(W_(q), H_(q)) / MM; });
-            if (doStroke) el.stroke = { key: gs.stroke, lw: lwPt, lwUser: gs.lw, dash: gs.dash, segs, closed, bb: [bb[0] - lwPt / 2, bb[1] - lwPt / 2, bb[2] + lwPt / 2, bb[3] + lwPt / 2] };
+            if (doStroke) { const sb = [full[0] - lwPt / 2, full[1] - lwPt / 2, full[2] + lwPt / 2, full[3] + lwPt / 2];
+              el.stroke = { key: gs.stroke, lw: lwPt, lwUser: gs.lw, dash: gs.dash, segs, closed: closed && !clipped, bb: gs.clip ? cut(sb, gs.clip) : sb }; }
             els.push(el);
           }
           path = []; sub = []; subs = []; segs = []; closed = false; break; }
@@ -303,7 +383,8 @@
         case 'T*': tlm = mul([1, 0, 0, 1, 0, -lead], tlm); tm = tlm.slice(); break;
         case 'Tj': case 'TJ': case "'": case '"': {
           const m = mul(tm, gs.ctm); const p = tx(m, 0, 0); const h = fsz * Math.hypot(m[2], m[3]);
-          els.push({ i, text: true, s: Math.sqrt(Math.abs(gs.ctm[0] * gs.ctm[3] - gs.ctm[1] * gs.ctm[2])) || 1, bb: [p[0], p[1], p[0] + h * 0.6, p[1] + h * 0.8], fill: { key: gs.fill } });
+          let tb = [p[0], p[1], p[0] + h * 0.6, p[1] + h * 0.8]; if (gs.clip) tb = cut(tb, gs.clip);
+          if (gs.fa !== 0 && !gs.hide && tb[2] >= tb[0] && tb[3] >= tb[1]) els.push({ i, text: true, s: Math.sqrt(Math.abs(gs.ctm[0] * gs.ctm[3] - gs.ctm[1] * gs.ctm[2])) || 1, bb: tb, fill: { key: gs.fill } });
           break; }
         case 'sh': warn.add('มีสีไล่ระดับ (gradient) ซึ่งทำเป็นฟิล์มอัตโนมัติไม่ได้ ส่วนนั้นจะถูกตัดออก'); break;
         case 'BI': warn.add('มีรูปภาพแบบ raster ฝังอยู่ ส่วนนั้นจะถูกตัดออก'); break;
@@ -311,7 +392,7 @@
           warn.add(xk[nm] === 'Image' ? 'มีรูปภาพแบบ raster ฝังอยู่ ส่วนนั้นจะถูกตัดออก' : 'มีกลุ่มวัตถุซ้อน (symbol / transparency group) ที่อ่านไม่ได้ ส่วนนั้นจะถูกตัดออก'); break; }
       }
     }
-    const job = { name, page: pi, bytes, ops, els, warnings: [...warn], width, height, excluded: new Set(), notArt: new Set() };
+    const job = { name, page: pi, bytes, ops, merges: fl.merges, els, warnings: [...warn], width, height, excluded: new Set(), notArt: new Set() };
     return job;
   }
 
@@ -382,7 +463,7 @@
     for (const e of job.els) {
       if (e.text) continue;
       const strokeOutline = e.stroke && e.stroke.closed && e.stroke.lw <= 3 * MM && !(e.fill && !keyInfo(e.fill.key).white);
-      const ring = e.fill && !e.stroke && e.fill.ratio != null && e.fill.ratio < 0.15;   // outlined stroke saved as a filled ring
+      const ring = e.fill && !e.stroke && !e.clipped && e.fill.ring && e.fill.ratio != null && e.fill.ratio < 0.15;   // outlined stroke saved as a filled ring
       if (!strokeOutline && !ring) continue;
       const b = e.bb, w = W_(b), h = H_(b);
       if (w < 30 * MM || w > 320 * MM || h < 40 * MM || h > 520 * MM) continue;
@@ -578,7 +659,7 @@
     let depth = 0;
     for (let i = 0; i < job.ops.length; i++) {
       const o = job.ops[i];
-      if (COLOUR.has(o.op) || o.op === 'sh' || o.op === 'BI' || o.op === 'Do') continue;
+      if (COLOUR.has(o.op) || o.op === 'sh' || o.op === 'BI' || o.op === 'Do' || o.op === '_grp') continue;
       if (o.op === 'q') depth++;
       if (o.op === 'Q') { if (depth === 0) continue; depth--; }
       if (PATH.has(o.op) && pathStart < 0) { pathStart = out.length; clipInPath = false; pathOps = []; }
@@ -735,6 +816,20 @@
 
   /* ---------- output PDF ---------- */
   function asciiLabel(s, fallback) { const t = s.replace(/[^\x20-\x7e]/g, '').replace(/\s+/g, ' ').trim(); return t || fallback; }
+  // resources of the forms spliced into the content (see flatten), under their prefixed names
+  function mergeResources(src, p, merges) {
+    if (!merges || !merges.length) return;
+    let res = p.node.Resources(); if (!res) { res = src.context.obj({}); p.node.set(PDFName.of('Resources'), res); }
+    for (const m of merges) {
+      const fo = src.context.lookup(PDFRef.of(m.n, m.g)), fr = fo && fo.dict && fo.dict.lookup(PDFName.of('Resources'));
+      if (!(fr instanceof PDFDict)) continue;
+      for (const cat of RES_CATS) {
+        const d = fr.lookup(PDFName.of(cat)); if (!(d instanceof PDFDict)) continue;
+        let pd = res.lookup(PDFName.of(cat)); if (!(pd instanceof PDFDict)) { pd = src.context.obj({}); res.set(PDFName.of(cat), pd); }
+        for (const [k, v] of d.entries()) pd.set(PDFName.of(m.prefix + k.asString().slice(1)), v);
+      }
+    }
+  }
   async function render(blocks, st) {
     const plan = pack(blocks, st);
     const out = await PDFDocument.create();
@@ -753,6 +848,7 @@
         if (cref instanceof PDFArray) cref = cref.get(0);
         if (cref && cref.objectNumber != null) { src.context.assign(cref, stream); p.node.set(PDFName.of('Contents'), cref); }
         else p.node.set(PDFName.of('Contents'), src.context.register(stream));
+        mergeResources(src, p, b.job.merges);
         const emb = await out.embedPage(p, { left: b.bbox[0], bottom: b.bbox[1], right: b.bbox[2], top: b.bbox[3] });
         const map = it.rot ? (x, y) => ({ x: it.x + it.h - (y - b.bbox[1]), y: it.y + (x - b.bbox[0]) })
                            : (x, y) => ({ x: it.x + (x - b.bbox[0]), y: it.y + (y - b.bbox[1]) });
