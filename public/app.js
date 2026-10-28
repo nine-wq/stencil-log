@@ -432,13 +432,12 @@ function jobCard(j, ss) {
   </div>`;
 }
 function blockRow(j, s) {
-  const prep = (s.prepared || []).length;
   const th = s.thAfter !== '' ? ` · หลังถ่าย <span class="num">${s.thAfter}</span>` : '';
   return `<button class="brow" data-a="openscreen" data-j="${j.id}" data-v="${s.id}">
     ${s.preview ? `<img class="thumb" src="${fileUrl(s.preview, true)}" alt="" loading="lazy">` : '<span class="thumb none" aria-hidden="true"></span>'}
     <span class="bt">${s.stencilId ? `<span class="sid sm">${esc(s.stencilId)}</span>` : ''}<b>${esc(s.design || '(ยังไม่ตั้งชื่อ)')}</b>
       <span class="muted small">${s.frameSource === 'customer' ? '<span class="fsrc">บล็อคเดิมลูกค้า</span> · ' : ''}${(s.sizes || []).length ? `ไซส์ ${esc(s.sizes.join(', '))} · ` : ''}<span class="num">${esc(s.mesh)}</span> · สเปค <span class="num">${esc(s.target)} µm</span>${s.coats.length ? ` · กาว ${s.coats.length} รอบ` : ''}${th}</span>
-      ${waitingFile(s) ? '<span class="fstate wait">รอไฟล์จากลูกค้า</span>' : needsFilm(s) ? '<span class="fstate">ยังไม่ทำฟิล์ม</span>' : !s.film && !s.artworkId && db.features.files && !prep && ['ordered', 'coating'].includes(s.status) ? '<span class="fstate">ยังไม่มีไฟล์เตรียม</span>' : ''}</span>
+      ${waitingFile(s) ? '<span class="fstate wait">รอไฟล์จากลูกค้า</span>' : needsFilm(s) ? '<span class="fstate">ยังไม่ทำฟิล์ม</span>' : ''}</span>
     ${chip(s.status)}
   </button>`;
 }
@@ -1074,7 +1073,7 @@ function screenView() {
   if (!s.artworkId && db.features.files) h += attachCard(j, s);
   if (db.features.files) {
     const art = true;
-    s.originals = s.originals || []; s.prepared = s.prepared || [];
+    s.originals = s.originals || [];
     h += `<div class="card" style="display:flex;flex-direction:column;gap:14px">
       <h3>ไฟล์งาน</h3>
       <div class="idrow">
@@ -1089,9 +1088,6 @@ function screenView() {
       <div class="fsec"><div class="spread"><span class="label">ไฟล์ต้นฉบับจากลูกค้า (${s.originals.length})</span>
         ${art ? `<label class="btn sm" for="af-orig">+ เพิ่ม</label><input id="af-orig" type="file" multiple hidden data-addfile="originals">` : ''}</div>
         <div class="flist">${s.originals.map(id => fileChip(id, art, 's:originals')).join('') || '<span class="muted small">ยังไม่มีไฟล์</span>'}</div></div>
-      <div class="fsec"><div class="spread"><span class="label">ไฟล์ที่เตรียมแล้ว ส่งยิงฟิล์ม (${s.prepared.length})</span>
-        ${art ? `<label class="btn sm primary" for="af-prep">+ อัปโหลด</label><input id="af-prep" type="file" multiple hidden data-addfile="prepared">` : ''}</div>
-        <div class="flist">${s.prepared.map(id => fileChip(id, art, 's:prepared')).join('') || '<span class="muted small">ยังไม่มีไฟล์ที่เตรียม</span>'}</div></div>
       <div id="uploads"></div>
     </div>`;
   }
@@ -1156,7 +1152,7 @@ function settingsView() {
   <div class="card">
     <h3>สถานะระบบ</h3>
     ${stat(true, 'ฐานข้อมูล D1', 'ใบงาน รอบขึ้นกาว รูปตรวจงาน')}
-    ${stat(fx.files, 'ที่เก็บไฟล์ R2', 'ไฟล์ลูกค้า ไฟล์ที่เตรียม รูปตัวอย่างลาย')}
+    ${stat(fx.files, 'ที่เก็บไฟล์ R2', 'ไฟล์ลูกค้า แผ่นฟิล์ม รูปตัวอย่างลาย')}
     ${stat(fx.ai, 'Workers AI', 'ตั้งชื่อลายจากรูป')}
     ${!fx.files || !fx.ai ? '<div class="banner" style="margin-top:8px">ถ้ายังไม่เชื่อม: ตรวจว่าไฟล์ wrangler.jsonc มีส่วน "r2_buckets" และ "ai" แล้ว deploy ใหม่ (ดู README หัวข้อ "แก้ปัญหา")</div>' : ''}
   </div>
@@ -1509,9 +1505,8 @@ document.addEventListener('change', async e => {
     const { s } = find(ui.jobId, ui.screenId); if (!s) return;
     for (const file of fs) {
       try {
-        const f = await uploadFile(file, list === 'prepared' ? 'prepared' : 'original');
+        const f = await uploadFile(file, 'original');
         (s[list] = s[list] || []).push(f.id);
-        if (list === 'prepared') logEv(s, 'อัปโหลดไฟล์ที่เตรียม: ' + f.name);
         if (list === 'originals' && !s.customerRef) s.customerRef = stem(file.name);
         await saveScreen(s); render();
         if (list === 'originals' && !s.preview) { const blob = await previewFromFile(file); if (blob) await setPreview('s', new File([blob], 'preview.jpg', { type: 'image/jpeg' })); }

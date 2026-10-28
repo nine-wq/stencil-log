@@ -66,6 +66,8 @@ Main menu (tabs in the app): ใบงาน (jobs) · ฟิล์ม (film his
 
 **Settings** (⚙, everyone): users/PINs, pick lists, customer default specs (`master.customerSpecs`), tolerance, film settings (`settings.key='film'`: sheet size, margins, marks, compensation factor, near-white, specks, thickness list), CSV export.
 
+Prepared-film uploads (the old "ไฟล์ที่เตรียมแล้ว ส่งยิงฟิล์ม" section, `screen.prepared`) are removed from the UI: every film is made in the app (`screen.film`). Old `prepared` ids are kept in the data, still searchable and protected from file deletion; the CSV column is now แผ่นฟิล์ม (film name).
+
 Screen status flow: `ordered → coating → qc → ready → sent`, with `qc → rework → coating`. Film is a separate flag (`screen.film`), not a status.
 
 ## Stack
