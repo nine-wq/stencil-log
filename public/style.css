@@ -361,3 +361,15 @@ span.szchip{display:inline-flex;align-items:center;min-height:26px;margin:2px 4p
 .waitfile{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;text-align:center;min-height:220px;padding:16px;border:2px dashed color-mix(in srgb,var(--warn) 55%,var(--line));border-radius:var(--r);background:var(--warn-soft)}
 .waitfile b{color:var(--warn)}
 .fstate.wait{background:var(--warn-soft);color:var(--warn)}
+
+/* ฟิล์ม: ประวัติแผ่นฟิล์ม */
+.filmcard .jobhead{cursor:default}
+.filmcard .jobhead:hover{background:var(--sunk)}
+.filmcard .fname{overflow-wrap:anywhere}
+.factions{gap:6px;margin:0;flex-wrap:wrap}
+.brow.sm{grid-template-columns:56px minmax(0,1fr) auto;gap:10px;padding:8px 14px}
+.brow.sm .thumb{width:56px;height:56px}
+div.brow{cursor:default}
+div.brow:hover{background:none}
+.filmwait{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:10px 14px;border:1px dashed var(--emulsion,var(--line));border-radius:var(--r);background:var(--surface);color:inherit;text-decoration:none}
+.filmwait:hover{background:var(--sunk)}

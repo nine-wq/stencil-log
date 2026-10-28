@@ -250,9 +250,9 @@ function render() {
       <button class="btn sm ghost" data-a="logout">ออก</button></div>
   </div>
   <nav class="wrap tabs mainnav" aria-label="เมนูหลัก">
-    <button data-a="nav" data-v="list" aria-current="${!['library', 'settings'].includes(ui.view)}">ใบงาน</button>
+    <button data-a="nav" data-v="list" aria-current="${!['library', 'settings', 'films'].includes(ui.view)}">ใบงาน</button>
+    <button data-a="nav" data-v="films" aria-current="${ui.view === 'films'}">ฟิล์ม${(() => { const n = allScreens().filter(x => needsFilm(x.s)).length; return n ? ` <span class="count" title="บล็อครอลงแผ่นฟิล์ม">${n}</span>` : ''; })()}</button>
     <button data-a="nav" data-v="library" aria-current="${ui.view === 'library'}">คลังลาย</button>
-    <a href="/film/" class="navlink">รวมแผ่นฟิล์ม${(() => { const n = allScreens().filter(x => needsFilm(x.s)).length; return n ? ` <span class="count">${n}</span>` : ''; })()}</a>
   </nav></header>
   <main class="wrap">${body()}</main>`;
   mountViewers();
@@ -264,6 +264,7 @@ function body() {
   if (ui.view === 'screen') return screenView();
   if (ui.view === 'settings') return settingsView();
   if (ui.view === 'library') return libraryView();
+  if (ui.view === 'films') return filmsView();
   return homeView();
 }
 
@@ -285,6 +286,64 @@ function loginView() {
     ${db.users.length ? `<div class="dept"><div class="people">
       ${db.users.map(u => `<button class="person" data-a="pick" data-v="${u.id}"><span class="av artwork">${esc(u.name[0])}</span><b>${esc(u.name)}</b></button>`).join('')}
     </div></div>` : '<div class="empty">โหลดรายชื่อไม่ได้ ตรวจอินเทอร์เน็ตแล้วลองใหม่<br><button class="btn" data-a="reloadusers" style="margin-top:10px">ลองใหม่</button></div>'}
+  </div>`;
+}
+
+/* --- ฟิล์ม: ประวัติแผ่นฟิล์มที่บันทึกไว้ (ล่าสุดก่อน) + ปุ่มสร้างฟิล์ม (ไปหน้ารวมแผ่นฟิล์ม /film/) --- */
+const films = { items: null, more: false, loading: false, err: '', q: '' };
+const tqs = u => u + (u.includes('?') ? '&' : '?') + 't=' + encodeURIComponent(token);
+const fmtDT = t => { const d = new Date(t); return `${fmtD(t)} ${pad2(d.getHours())}:${pad2(d.getMinutes())}`; };
+async function loadFilms(fresh) {
+  if (films.loading) return;
+  films.loading = true; films.err = ''; if (fresh) updateFilms();
+  try {
+    const ps = new URLSearchParams({ limit: '50' });
+    if (!fresh && films.items && films.items.length) ps.set('before', films.items[films.items.length - 1].created);
+    if (films.q.trim()) ps.set('q', films.q.trim());
+    const d = await api('GET', '/films?' + ps);
+    films.items = fresh || !films.items ? d.items : films.items.concat(d.items); films.more = !!d.more;
+  } catch (e) { films.err = e.message; }
+  films.loading = false; updateFilms();
+}
+function updateFilms() { const r = $('#filmres'); if (r && ui.view === 'films') r.innerHTML = filmResults(); }
+function filmsView() {
+  if (!films.items && !films.loading && !films.err) setTimeout(() => loadFilms(true));
+  const n = allScreens().filter(x => needsFilm(x.s)).length;
+  return `<div class="spread"><h2>ฟิล์ม</h2><a class="btn primary" href="/film/">+ สร้างฟิล์ม</a></div>
+  ${n ? `<a class="filmwait" href="/film/"><span><b class="num">${n}</b> บล็อครอลงแผ่นฟิล์ม</span><span aria-hidden="true">→</span></a>` : ''}
+  <div class="search"><input id="fq" type="search" data-fq="1" value="${esc(films.q)}" placeholder="ค้นหา ชื่อไฟล์ ลูกค้า เลขใบงาน ความหนา…" autocomplete="off" enterkeyhint="search"></div>
+  <div id="filmres">${filmResults()}</div>`;
+}
+function filmResults() {
+  if (films.err) return `<div class="empty">โหลดประวัติฟิล์มไม่สำเร็จ (${esc(films.err)})<br><button class="btn" data-a="filmreload" style="margin-top:10px">ลองใหม่</button></div>`;
+  if (!films.items) return '<div class="empty">กำลังโหลด…</div>';
+  if (!films.items.length) return `<div class="empty">${films.q.trim() ? `ไม่พบฟิล์มที่ตรงกับ "${esc(films.q)}"` : 'ยังไม่มีฟิล์มที่บันทึกไว้ กด "+ สร้างฟิล์ม" เพื่อรวมบล็อคลงแผ่นฟิล์ม'}</div>`;
+  const groups = dateGroups().map(g => ({ ...g, xs: [] }));
+  for (const it of films.items) (groups.find(g => it.created >= g.from) || groups[groups.length - 1]).xs.push(it);
+  const sec = g => g.xs.length ? `<div class="sec-h"><h3>${esc(g.title)}</h3><span class="muted small num">${g.xs.length} ไฟล์</span></div>
+    <div class="list">${g.xs.map(filmHistCard).join('')}</div>` : '';
+  return groups.map(sec).join('')
+    + (films.more ? `<button class="btn ghost" data-a="filmmore" ${films.loading ? 'disabled' : ''} style="justify-self:center">${films.loading ? 'กำลังโหลด…' : 'โหลดรายการเก่ากว่านี้'}</button>` : '');
+}
+function filmHistCard(it) {
+  const info = it.info || {}, items = info.items || [], open = tqs('/api/films/' + it.id);
+  const scr = new Map(allScreens().map(x => [x.s.id, x]));
+  const del = ui.arm === 'delfilm:' + it.id;
+  return `<div class="jobcard filmcard">
+    <div class="jobhead"><span class="t fname">${esc(it.name)}</span>
+      <span class="small muted"><span class="num">${fmtDT(it.created)}</span> · ${items.length || info.blocks || 0} ลาย${info.sheets != null ? ` · ${info.sheets} แผ่น` : ''} · ${fmtSize(it.size)}</span>
+      <span class="row factions"><a class="btn sm" href="${open}" target="_blank" rel="noopener">เปิด</a><a class="btn sm ghost" href="${tqs('/api/films/' + it.id + '?dl=1')}">ดาวน์โหลด</a>
+        <button class="btn sm ${del ? 'bad' : 'ghost'}" data-a="delfilm" data-v="${it.id}">${del ? 'กดอีกครั้งเพื่อลบ' : 'ลบ'}</button></span></div>
+    ${items.map((x, n) => {
+      const hit = x.screenId && scr.get(x.screenId), s = hit && hit.s;
+      const pic = x.thumb ? `<img class="thumb" src="${tqs(`/api/films/${it.id}/t${n}`)}" alt="" loading="lazy">` : '<span class="thumb none" aria-hidden="true"></span>';
+      const orig = (info.originals || []).find(o => o.name === (x.src || x.file));
+      const txt = `<span class="bt">${s && s.stencilId ? `<span class="sid sm">${esc(s.stencilId)}</span>` : ''}<b>${esc((s && s.design) || x.design || x.file)}</b>
+        <span class="muted small">${esc(x.customer || 'ไม่ระบุลูกค้า')}${x.jobNo ? ` · <span class="num">${esc(x.jobNo)}</span>` : x.screenId ? '' : ' · ไม่มีใบงาน'} · <span class="num">${x.thick ? x.thick + ' µm' : '—'}</span> · ${x.compUm ? `ชดเชย <span class="num">${x.compUm} µm</span>` : 'ไม่ชดเชย'}</span>
+        ${orig ? `<a class="small" href="${tqs(`/api/originals/${orig.sha}?name=${encodeURIComponent(orig.name)}`)}" download="${esc(orig.name)}">ไฟล์ต้นฉบับ</a>` : ''}</span>`;
+      return hit ? `<button class="brow sm" data-a="openscreen" data-j="${hit.j.id}" data-v="${hit.s.id}">${pic}${txt}<span class="muted small">เปิดบล็อค →</span></button>`
+        : `<div class="brow sm">${pic}${txt}<span></span></div>`;
+    }).join('')}
   </div>`;
 }
 
@@ -720,7 +779,7 @@ function filmCard(s) {
   return `<div class="card" style="display:flex;flex-direction:column;gap:12px">
     <div class="spread"><h3>ฟิล์ม</h3>${f ? '<span class="fstate ok">ทำฟิล์มแล้ว</span>' : '<span class="fstate">ยังไม่ทำฟิล์ม</span>'}</div>
     ${a && a.filmable ? `<div class="srbody">${viewerSlot(pkOf('s', s), s, a, cust)}<div class="srfields">${filmGroup('s', s, a, cust)}</div></div>` : ''}
-    ${f ? `<div class="small">${fmtT(f.at)} โดย ${esc(f.by)}${f.thick ? ` · ความหนาบล็อค <span class="num">${f.thick} µm</span>` : ''}${f.compUm != null ? ` · ชดเชยขอบ <span class="num">${f.compUm} µm</span>` : ''}<br><span class="muted">${esc(f.name)}</span></div>` : '<div class="muted small">ยังไม่ได้ลงแผ่นฟิล์ม · จะรอรวมลงแผ่นที่เมนู "รวมแผ่นฟิล์ม" พร้อมงานอื่น</div>'}
+    ${f ? `<div class="small">${fmtT(f.at)} โดย ${esc(f.by)}${f.thick ? ` · ความหนาบล็อค <span class="num">${f.thick} µm</span>` : ''}${f.compUm != null ? ` · ชดเชยขอบ <span class="num">${f.compUm} µm</span>` : ''}<br><span class="muted">${esc(f.name)}</span></div>` : '<div class="muted small">ยังไม่ได้ลงแผ่นฟิล์ม · จะรอรวมลงแผ่นที่เมนู "ฟิล์ม" → "+ สร้างฟิล์ม" พร้อมงานอื่น</div>'}
     <div class="row">${f ? `<a class="btn sm" href="/api/films/${f.id}?dl=1&t=${t}">ดาวน์โหลดแผ่นฟิล์ม</a><a class="btn sm ghost" href="/api/films/${f.id}?t=${t}" target="_blank" rel="noopener">เปิดดู</a>` : ''}
       ${a && a.filmable && f ? `<a class="btn sm ghost" href="/film/?add=${s.id}">ลงแผ่นฟิล์มใหม่</a>` : ''}</div>
   </div>`;
@@ -1133,7 +1192,7 @@ function go(view, o = {}) { Object.assign(ui, { view, arm: null }, o); render();
 document.addEventListener('click', async e => {
   const el = e.target.closest('[data-a]'); if (!el || el.disabled) return;
   const a = el.dataset.a, v = el.dataset.v;
-  if (a !== 'deljob' && a !== 'delfile' && a !== 'rmart' && a !== 'artdel') ui.arm = null;
+  if (a !== 'deljob' && a !== 'delfile' && a !== 'rmart' && a !== 'artdel' && a !== 'delfilm') ui.arm = null;
   const cur = () => find(ui.jobId, ui.screenId);
   switch (a) {
     case 'pick': ui.pickUser = v; ui.pin = ''; ui.pinErr = ''; render(); break;
@@ -1158,11 +1217,20 @@ document.addEventListener('click', async e => {
       break;
     case 'pindel': ui.pin = ui.pin.slice(0, -1); render(); break;
     case 'logout': try { await api('POST', '/logout'); } catch (x) {} signOutLocal(); break;
-    case 'refresh': await loadData(); toast('อัปเดตแล้ว'); break;
+    case 'refresh': await loadData(); if (ui.view === 'films') loadFilms(true); toast('อัปเดตแล้ว'); break;
     case 'tab': go('list', { tab: v }); break;
     case 'clearq': ui.q = ''; render(); setTimeout(() => { const el = $('#q'); if (el) el.focus(); }); break;
     case 'settings': ui.admin = null; ui.editUser = null; ui.filmSet = null; go('settings'); break;
-    case 'nav': go(v === 'library' ? 'library' : 'list'); break;
+    case 'nav': if (v === 'films') { go('films'); loadFilms(true); } else go(v === 'library' ? 'library' : 'list'); break;
+    case 'filmreload': loadFilms(true); break;
+    case 'filmmore': loadFilms(false); break;
+    case 'delfilm': {
+      if (ui.arm !== 'delfilm:' + v) { ui.arm = 'delfilm:' + v; updateFilms(); break; }
+      ui.arm = null; el.disabled = true; el.textContent = 'กำลังลบ…';
+      try { await api('DELETE', '/films/' + v); films.items = (films.items || []).filter(x => x.id !== v); toast('ลบฟิล์มแล้ว บล็อคที่อยู่บนแผ่นนี้กลับไปรอลงแผ่นฟิล์ม'); await loadData(true); }
+      catch (x) { toast('ลบไม่สำเร็จ: ' + x.message); }
+      render(); break;
+    }
     case 'groupby': ui.groupBy = v; try { localStorage.setItem('stencil-groupby', v); } catch (x) {} updateResults(); break;
     case 'libcust': ui.lib.cust = v; ui.lib.edit = null; render(); break;
     case 'sharedadd': { const fs = ui.lib.pending || []; ui.lib.pending = null; render(); await addArtworkFiles(ui.lib.cust, fs); break; }
@@ -1353,6 +1421,7 @@ document.addEventListener('input', e => {
     clearTimeout(ui.qTimer); ui.qTimer = setTimeout(updateResults, 120);
     return;
   }
+  if (t.dataset.fq) { films.q = t.value; clearTimeout(ui.fqTimer); ui.fqTimer = setTimeout(() => loadFilms(true), 300); return; }
   if (t.dataset.attq) {
     ui.attachQ = t.value; const box = document.getElementById('attgrid'); if (!box) return;
     const { j } = find(ui.jobId), q = searchTerms(t.value), lib = custArts(j.customer);
@@ -1541,6 +1610,7 @@ async function takeShared() {
 try { ui.groupBy = localStorage.getItem('stencil-groupby') === 'customer' ? 'customer' : 'date'; } catch (e) {}
 // ลิงก์ตรงไปที่บล็อค: /#screen=<id> (จากหน้ารวมแผ่นฟิล์ม)
 function openFromHash() {
+  if (location.hash === '#films' && ui.user) { history.replaceState(null, '', location.pathname + location.search); go('films'); return; }
   const m = location.hash.match(/^#screen=([\w-]+)$/); if (!m || !ui.user) return;
   history.replaceState(null, '', location.pathname + location.search);
   const x = allScreens().find(y => y.s.id === m[1]); if (!x) return;

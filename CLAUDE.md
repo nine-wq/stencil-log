@@ -5,7 +5,7 @@ Owner: Nine. Staff use it on phones and desktop PCs. The former film-positive ap
 
 ## Workflow
 Everyone who logs in (name + PIN) can do everything. There are no role checks; the `users.role` column is kept but unused.
-Main menu: ใบงาน (jobs) · คลังลาย (artwork library) · รวมแผ่นฟิล์ม (combine-onto-sheet page, with a count of screens waiting for film).
+Main menu (tabs in the app): ใบงาน (jobs) · ฟิล์ม (film history, with a count of screens waiting for film) · คลังลาย (artwork library).
 
 1. **Artwork library** (`artworks` table, one row = one design = one left/right pair from a customer file):
    - Upload a customer's files under a customer, from คลังลาย or inside the new-job form.
@@ -43,7 +43,10 @@ Main menu: ใบงาน (jobs) · คลังลาย (artwork library) · 
    - **Film group**: compensation and the colours to leave out.
      - It sets the compensation (auto = target × factor / manual µm / none) and the colours to leave out.
      - These are saved as `screen.filmPrep = {mode, manualUm, notArt[]}`. Thickness always comes from the screen's `target`.
-3. **Combine onto sheet** (`public/film/`):
+3. **ฟิล์ม tab** (`filmsView()` in app.js, view `films`, deep link `/#films`):
+   - Like the job list: heading + "+ สร้างฟิล์ม" (→ `/film/`), a "n บล็อครอลงแผ่นฟิล์ม" bar, a search box (server-side `q`, all words must match), then saved films newest first in date groups (`dateGroups()`), 50 at a time with "โหลดรายการเก่ากว่านี้".
+   - Each film card: file name, date/time · designs · sheets · size, เปิด / ดาวน์โหลด / ลบ (tap twice; the server also unlinks its screens, then `loadData`). One row per design: thumbnail, stencil ID + name, customer · job number (or ไม่มีใบงาน) · thickness · compensation, ไฟล์ต้นฉบับ for stored originals. Rows whose `screenId` still exists open that block.
+   **Combine onto sheet** (`public/film/`, title "สร้างฟิล์ม", back link "← ฟิล์ม" to `/#films`; its own tabs are hidden, history lives in the ฟิล์ม tab):
    - One list, "บล็อคที่รอลงแผ่นฟิล์ม": screens with a filmable artwork, no `film`, and not sent, from every job and customer. **Ticked = on the sheet**; ticking/unticking adds/removes it at once (`Q.sel`, `syncSheet()`). All are ticked when the page opens (or only the `?add=` ids). Buttons เลือกทั้งหมด / ไม่เลือก.
      - Each row: checkbox, picture, name, stencil ID · thickness · compensation, and "แก้" (`/#screen=<id>`). Job screens have no card below; film settings are edited in the job.
    - Each one loads the artwork's original from R2, keeps only that design (nearest `box`), and applies the job's customer, the screen's `target` and its `filmPrep`.
