@@ -69,6 +69,17 @@ h2 { font-size: .78rem; font-weight: 600; text-transform: uppercase; letter-spac
 .qrow { grid-template-columns: auto 44px minmax(0, 1fr) auto }
 .qrow .qedit { font-size: .78rem; color: var(--accent); font-weight: 600; padding: 4px 6px; text-decoration: none }
 .qrow .qedit:hover { text-decoration: underline }
+.drop.slim { padding: 10px; gap: 2px }
+.drop.slim strong { font-size: .88rem; color: var(--accent) }
+.drop.slim span { font-size: .78rem }
+.qacts { display: flex; align-items: center; gap: 2px }
+.qacts .x { font-size: .95rem }
+.qthumb { width: 44px; height: 44px; background: #fff; border: 1px solid var(--line); border-radius: 6px; display: grid; place-items: center; overflow: hidden }
+.qthumb canvas { max-width: 100%; max-height: 100%; display: block }
+.qrow .qt small.warnline { color: var(--warn) }
+.qrow .qt small.bad { color: var(--bad); white-space: normal }
+.hpanel { margin: 2px 0 8px 30px; padding: 4px 10px 8px; border-left: 2px solid var(--accent-soft); min-width: 0 }
+@media (max-width: 420px) { .hpanel { margin-left: 4px } }
 .qstate { display: block; color: var(--accent); font-size: .76rem }
 .qstate.bad { color: var(--bad) }
 .qbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center }
@@ -335,19 +346,18 @@ details.settings summary { cursor: pointer; font-weight: 600; font-size: .9rem }
       <section class="queue" id="queueBox" aria-label="บล็อครอทำฟิล์ม">
         <div class="qhead"><h2 class="sh">บล็อคที่รอลงแผ่นฟิล์ม</h2><span class="qempty" id="queueCount"></span></div>
         <div id="queueList"><div class="qempty">กำลังโหลด…</div></div>
+        <div class="qjob" id="handBox" hidden><b>ไม่มีใบงาน <span>ไฟล์ที่ลากมาเอง</span></b><div id="jobs"></div></div>
+        <label class="drop slim" id="drop" tabindex="0">
+          <strong>+ เพิ่มไฟล์ที่ไม่มีใบงาน</strong>
+          <span>ลากไฟล์ .ai / .pdf / .zip มาวาง หรือแตะเพื่อเลือก</span>
+          <input type="file" id="pick" multiple accept=".ai,.pdf,.zip,application/pdf,application/zip">
+        </label>
         <div class="qbar" id="queueBar" hidden>
           <span class="qempty">ติ๊ก = อยู่บนแผ่นฟิล์ม</span><span style="flex:1"></span>
           <button type="button" class="ghost" id="queueAll">เลือกทั้งหมด</button>
           <button type="button" class="ghost" id="queueNone">ไม่เลือก</button>
         </div>
       </section>
-      <label class="drop" id="drop" tabindex="0">
-        <strong>หรือลากไฟล์ .ai / .pdf / .zip มาวางเอง</strong>
-        <span>สำหรับงานที่ไม่มีใบงาน · ใส่ได้หลายไฟล์พร้อมกัน</span>
-        <input type="file" id="pick" multiple accept=".ai,.pdf,.zip,application/pdf,application/zip">
-      </label>
-
-      <div class="jobs" id="jobs"></div>
 
     </section>
 
@@ -598,9 +608,10 @@ details.settings summary { cursor: pointer; font-weight: 600; font-size: .9rem }
 
   /* ---------- file intake ---------- */
   const drop = $('drop');
-  ['dragenter', 'dragover'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.add('over'); }));
-  ['dragleave', 'drop'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.remove('over'); }));
-  drop.addEventListener('drop', e => addFiles([...e.dataTransfer.files]));
+  const qbox = $('queueBox');   // the whole list accepts dropped files
+  ['dragenter', 'dragover'].forEach(ev => qbox.addEventListener(ev, e => { e.preventDefault(); drop.classList.add('over'); }));
+  qbox.addEventListener('dragleave', e => { if (!qbox.contains(e.relatedTarget)) drop.classList.remove('over'); });
+  qbox.addEventListener('drop', e => { e.preventDefault(); drop.classList.remove('over'); addFiles([...e.dataTransfer.files]); });
   drop.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); $('pick').click(); } });
   $('pick').addEventListener('change', e => { addFiles([...e.target.files]); e.target.value = ''; });
 
@@ -644,53 +655,39 @@ details.settings summary { cursor: pointer; font-weight: 600; font-size: .9rem }
     for (const c of cols) { const g = m.get(c.label); if (g) { g.keys.push(c.key); g.art = g.art || c.art; } else m.set(c.label, { ...c, keys: [c.key] }); }
     return [...m.values()];
   }
+  const hands = () => jobs.filter(r => !r.screen);
+  function compLine(set, um) { return set.mode === 'none' ? 'ไม่ชดเชยขอบ' : `ชดเชย ${um} µm${set.mode === 'manual' ? ' (ระบุเอง)' : ''}`; }
+  // files dropped here by hand: rows in the same list as the job screens (ticked = on the sheet), settings fold open under the row
   function renderJobs() {
     syncKeep();
     const box = $('jobs'); box.textContent = '';
-    for (const rec of jobs) {
-      if (rec.screen) continue;   // job screens are shown in the list above (ticked = on the sheet)
-      const card = document.createElement('article'); card.className = 'job' + (rec.sample ? ' sample' : '');
-      const th = document.createElement('div'); th.className = 'thumb'; card.appendChild(th);
-      const body = document.createElement('div'); body.style.minWidth = '0';
-      const head = document.createElement('div'); head.className = 'jhead';
-      const nm = document.createElement('div'); nm.className = 'jname'; nm.textContent = rec.name;
-      if (rec.sample) { const t = document.createElement('span'); t.className = 'tag'; t.textContent = 'ตัวอย่าง'; nm.appendChild(t); }
-      if (rec.screen) { const t = document.createElement('span'); t.className = 'jtag'; t.textContent = rec.screen.done ? `${rec.screen.jobNo} · ทำฟิล์มแล้ว` : rec.screen.jobNo; nm.appendChild(t); }
+    const hs = hands(); $('handBox').hidden = !hs.length;
+    for (const rec of hs) {
+      const lab = document.createElement('label'); lab.className = 'qrow' + (rec.off ? ' off' : '');
+      const cb = document.createElement('input'); cb.type = 'checkbox'; cb.checked = !rec.off && !rec.error; cb.disabled = !!rec.error;
+      cb.setAttribute('aria-label', 'ใส่ลงแผ่นฟิล์ม: ' + rec.name);
+      cb.addEventListener('change', () => { rec.off = !cb.checked; renderJobs(); schedule(0); });
+      const th = document.createElement('span'); th.className = 'qthumb';
+      const t = document.createElement('span'); t.className = 'qt'; t.textContent = rec.name;
+      const acts = document.createElement('span'); acts.className = 'qacts';
       const x = document.createElement('button'); x.className = 'x'; x.type = 'button'; x.textContent = '✕'; x.title = 'เอาไฟล์นี้ออก'; x.setAttribute('aria-label', 'เอา ' + rec.name + ' ออก');
-      x.addEventListener('click', () => { jobs.splice(jobs.indexOf(rec), 1); renderJobs(); renderQueue(); schedule(0); });
-      head.append(nm, x); body.appendChild(head);
-      if (rec.error) { const e = document.createElement('div'); e.className = 'err'; e.textContent = rec.error; body.appendChild(e); card.appendChild(body); box.appendChild(card); continue; }
+      x.addEventListener('click', (e) => { e.preventDefault(); jobs.splice(jobs.indexOf(rec), 1); renderJobs(); schedule(0); });
+      lab.append(cb, th, t, acts); box.appendChild(lab);
+      const small = (txt, cls) => { const m = document.createElement('small'); if (cls) m.className = cls; m.textContent = txt; t.appendChild(m); };
+      if (rec.error) { small(rec.error, 'bad'); acts.appendChild(x); continue; }
       const j = rec.job; const d = C.describe(j, st);
-      if (rec.screen) {   // job screen: film settings were checked in the job, here it is only shown
-        const ds = j.dset && j.dset[rec.screen.index] || {};
-        const m = document.createElement('div'); m.className = 'meta';
-        const um = C.compensation(ds, st);
-        m.textContent = `${rec.screen.stencilId ? rec.screen.stencilId + ' · ' : ''}${rec.screen.customer} · ความหนา ${ds.thick != null ? ds.thick : '-'} µm · ${ds.mode === 'none' ? 'ไม่ชดเชยขอบ' : `ชดเชยขอบ ${um} µm${ds.mode === 'manual' ? ' (ระบุเอง)' : ''}`}${j.notArt.size ? ` · ตัดสีออก ${j.notArt.size} สี` : ''}`;
-        body.appendChild(m);
-        const a = document.createElement('a'); a.className = 'editlink'; a.href = '/#screen=' + encodeURIComponent(rec.screen.id); a.textContent = 'แก้การตรวจฟิล์มที่ใบงาน';
-        body.appendChild(a);
-        card.appendChild(body); box.appendChild(card); thumb(rec, th);
-        continue;
-      }
-
-      // a file dropped here by hand: the same compact card as a job screen; its settings fold open on request
-      { const t = document.createElement('span'); t.className = 'jtag hand'; t.textContent = 'ไม่มีใบงาน'; nm.appendChild(t); }
-      if (!rec.open) {
-        const on = d.designs.filter(ds => !ds.off);
-        on.forEach(ds => {
-          const set = dsFor(j, ds.index, rec.name), um = C.compensation(set, st), m = document.createElement('div'); m.className = 'meta';
-          m.textContent = `${d.designs.length > 1 ? `ลาย ${ds.index + 1} · ` : ''}${set.customer || 'ไม่ระบุลูกค้า'} · ความหนา ${set.thick != null ? set.thick : '-'} µm · ${set.mode === 'none' ? 'ไม่ชดเชยขอบ' : `ชดเชยขอบ ${um} µm${set.mode === 'manual' ? ' (ระบุเอง)' : ''}`}${j.notArt.size ? ` · ตัดสีออก ${j.notArt.size} สี` : ''}`;
-          body.appendChild(m);
-        });
-        if (!on.length) { const m = document.createElement('div'); m.className = 'meta'; m.textContent = d.designs.length ? 'ปิดทุกลายในไฟล์นี้ไว้' : 'ไม่พบลายในไฟล์นี้'; body.appendChild(m); }
-        if (on.some(ds => !(dsFor(j, ds.index, rec.name).customer))) { const w = document.createElement('div'); w.className = 'meta warnline'; w.textContent = 'ยังไม่ได้เลือกลูกค้าและความหนา'; body.appendChild(w); }
-        const b = document.createElement('button'); b.type = 'button'; b.className = 'editlink linkbtn'; b.textContent = 'ปรับการตั้งค่าฟิล์ม';
-        b.addEventListener('click', () => { rec.open = true; renderJobs(); });
-        body.appendChild(b);
-        card.appendChild(body); box.appendChild(card); thumb(rec, th);
-        continue;
-      }
-
+      const on = d.designs.filter(ds => !ds.off);
+      on.forEach(ds => { const set = dsFor(j, ds.index, rec.name);
+        small(`${d.designs.length > 1 ? `ลาย ${ds.index + 1} · ` : ''}${set.customer || 'ไม่ระบุลูกค้า'} · ${set.thick != null ? set.thick : '-'} µm · ${compLine(set, C.compensation(set, st))}${j.notArt.size ? ` · ตัดสีออก ${j.notArt.size} สี` : ''}`); });
+      if (!on.length) small(d.designs.length ? 'ปิดทุกลายในไฟล์นี้ไว้' : 'ไม่พบลายในไฟล์นี้');
+      if (on.some(ds => !(dsFor(j, ds.index, rec.name).customer))) small('ยังไม่ได้เลือกลูกค้าและความหนา', 'warnline');
+      const ed = document.createElement('button'); ed.type = 'button'; ed.className = 'qedit linkbtn'; ed.textContent = rec.open ? 'ย่อ' : 'ตั้งค่า';
+      ed.setAttribute('aria-expanded', String(!!rec.open));
+      ed.addEventListener('click', (e) => { e.preventDefault(); rec.open = !rec.open; renderJobs(); });
+      acts.append(ed, x);
+      thumb(rec, th);
+      if (!rec.open) continue;
+      const body = document.createElement('div'); body.className = 'hpanel';
       const sum = document.createElement('div'); sum.className = 'meta';
       sum.textContent = d.designs.length ? `พบ ${d.designs.length} ลาย` + (d.framed ? ' จากกรอบแป้นในไฟล์' : '') : 'ไม่พบลายในไฟล์นี้';
       body.appendChild(sum);
@@ -771,9 +768,9 @@ details.settings summary { cursor: pointer; font-weight: 600; font-size: .9rem }
       if (warns.length) { const ul = document.createElement('ul'); ul.className = 'warns'; warns.forEach(w => { const li = document.createElement('li'); li.textContent = w; ul.appendChild(li); }); body.appendChild(ul); }
       { const b = document.createElement('button'); b.type = 'button'; b.className = 'editlink linkbtn'; b.textContent = 'เสร็จแล้ว ย่อการตั้งค่า';
         b.addEventListener('click', () => { rec.open = false; renderJobs(); }); body.appendChild(b); }
-      card.appendChild(body); box.appendChild(card);
-      thumb(rec, th);
+      box.appendChild(body);
     }
+    updateCount();
   }
   const pageCache = new Map();
   async function thumb(rec, el) {
@@ -816,7 +813,7 @@ details.settings summary { cursor: pointer; font-weight: 600; font-size: .9rem }
   function setStatus(t, bad) { const s = $('status'); s.textContent = t || ''; s.classList.toggle('bad', !!bad); }
   async function build() {
     const id = ++buildId;
-    const ready = jobs.filter(r => r.job);
+    const ready = jobs.filter(r => r.job && !r.off);
     let blocks = []; ready.forEach(r => { C.describe(r.job, st).designs.forEach(ds => dsFor(r.job, ds.index, r.name)); blocks = blocks.concat(C.blocksFor(r.job, st)); });
     const stats = $('stats'); stats.textContent = '';
     if (!blocks.length) { lastPdf = null; $('save').disabled = true; showMsg('<div class="empty"><b>ยังไม่มีงานบนฟิล์ม</b><br>เลือกบล็อคจาก "บล็อครอทำฟิล์ม" ทางซ้าย หรือลากไฟล์ลูกค้า (.ai / .pdf / .zip) มาวาง แอปจะตัดส่วนที่ไม่ใช่ลาย ทำเป็นสีดำ และเรียงลงฟิล์ม ' + `${st.sheetW}×${st.sheetH}″` + ' ให้ที่นี่</div>'); return; }
@@ -841,7 +838,7 @@ details.settings summary { cursor: pointer; font-weight: 600; font-size: .9rem }
   function syncKeep() {
     $('keepWrap').hidden = true; $('keepCopy').checked = true;   // always kept: screens are linked to the saved copy
     // originals of job screens are already in the artwork library: the box only matters for files dropped here by hand
-    const handFiles = jobs.some(r => r.job && !r.screen && !r.sample);
+    const handFiles = jobs.some(r => r.job && !r.screen && !r.sample && !r.off);
     $('origWrap').hidden = !(historyOn() && remote.originals && handFiles);
     $('origWrap').title = 'เก็บไฟล์ต้นฉบับที่ลากมาวางเองในหน้านี้ (ไฟล์ของบล็อคจากใบงานอยู่ในคลังลายแล้ว)';
     $('keepOrig').disabled = !$('keepCopy').checked;
@@ -1231,7 +1228,7 @@ details.settings summary { cursor: pointer; font-weight: 600; font-size: .9rem }
   }
   /* original pane */
   function fillOrigSel() {
-    const sel = $('origSel'), ok = jobs.filter(r => r.job && !r.error);
+    const sel = $('origSel'), ok = jobs.filter(r => r.job && !r.error && !r.off);
     if (!ok.includes(origRec)) origRec = null;
     sel.textContent = '';
     ok.forEach(r => { const o = document.createElement('option'); o.value = r.id; o.textContent = r.name; sel.appendChild(o); });
@@ -1301,7 +1298,7 @@ details.settings summary { cursor: pointer; font-weight: 600; font-size: .9rem }
   $('save').addEventListener('click', async () => {
     if (!lastPdf || busy) return;
     const pdf = lastPdf, plan = lastPlan, blocks = lastBlocks;   // the film as shown now
-    const real = jobs.filter(r => r.job && !r.sample);
+    const real = jobs.filter(r => r.job && !r.sample && !r.off);
     const d = new Date(); const p2 = (n) => String(n).padStart(2, '0'); const stamp = `${d.getFullYear()}-${p2(d.getMonth() + 1)}-${p2(d.getDate())}_${p2(d.getHours())}${p2(d.getMinutes())}${p2(d.getSeconds())}`;
     // name after the job when every design comes from one job (or one customer), otherwise a general name
     const scr = real.map(r => r.screen).filter(Boolean), safe = (t) => String(t).replace(/[\\/:*?"<>|]+/g, '_').trim();
@@ -1389,10 +1386,9 @@ details.settings summary { cursor: pointer; font-weight: 600; font-size: .9rem }
   }
   function renderQueue() {
     const box = $('queueList'); box.textContent = '';
-    const list = listed(), on = list.filter(x => Q.sel.has(x.s.id)).length;
-    $('queueCount').textContent = list.length ? `บนแผ่น ${on}/${list.length}` : '';
-    $('queueBar').hidden = !list.length;
-    if (!list.length) { const m = document.createElement('div'); m.className = 'qempty'; m.textContent = Q.data ? 'ไม่มีบล็อคที่รอทำฟิล์ม (บล็อคต้องมีลายจากคลังลาย)' : ''; box.appendChild(m); return; }
+    const list = listed();
+    updateCount();
+    if (!list.length) { const m = document.createElement('div'); m.className = 'qempty'; m.textContent = Q.data ? 'ไม่มีบล็อคจากใบงานที่รอทำฟิล์ม' : ''; box.appendChild(m); return; }
     const byJob = new Map(); list.forEach(x => { if (!byJob.has(x.j.id)) byJob.set(x.j.id, []); byJob.get(x.j.id).push(x); });
     for (const xs of byJob.values()) {
       const g = document.createElement('div'); g.className = 'qjob';
@@ -1418,8 +1414,14 @@ details.settings summary { cursor: pointer; font-weight: 600; font-size: .9rem }
       box.appendChild(g);
     }
   }
-  $('queueAll').addEventListener('click', () => { listed().forEach(x => { Q.sel.add(x.s.id); Q.err.delete(x.s.id); }); renderQueue(); syncSheet(); });
-  $('queueNone').addEventListener('click', () => { Q.sel.clear(); renderQueue(); syncSheet(); });
+  function updateCount() {
+    const list = listed(), hs = hands().filter(r => !r.error);
+    const on = list.filter(x => Q.sel.has(x.s.id)).length + hs.filter(r => !r.off).length, all = list.length + hs.length;
+    $('queueCount').textContent = all ? `บนแผ่น ${on}/${all}` : '';
+    $('queueBar').hidden = !all;
+  }
+  $('queueAll').addEventListener('click', () => { listed().forEach(x => { Q.sel.add(x.s.id); Q.err.delete(x.s.id); }); hands().forEach(r => { r.off = false; }); renderQueue(); renderJobs(); syncSheet(); schedule(0); });
+  $('queueNone').addEventListener('click', () => { Q.sel.clear(); hands().forEach(r => { r.off = true; }); renderQueue(); renderJobs(); syncSheet(); schedule(0); });
   // bring the sheet in line with the ticks: unticked screens come off, ticked ones are loaded and laid out
   let sheetSync = null;
   async function syncSheet() {
