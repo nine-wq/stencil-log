@@ -47,7 +47,7 @@ Main menu: ใบงาน (jobs) · คลังลาย (artwork library) · 
    - "บล็อคที่รอลงแผ่นฟิล์ม" lists screens with a filmable artwork, no `film`, and not sent, from every job and customer. All are ticked at first; "รวมลงแผ่นฟิล์ม" lays them out.
    - Each one loads the artwork's original from R2, keeps only that design (nearest `box`), and applies the job's customer, the screen's `target` and its `filmPrep`.
    - Job screens show as compact cards with no controls; "แก้การตรวจฟิล์มที่ใบงาน" links to `/#screen=<id>`.
-   - Files can also be dropped by hand for work without a job.
+   - Files can also be dropped by hand for work without a job. The "เก็บไฟล์ต้นฉบับ" box (originals to `film/orig/<sha>`) only shows while such hand-dropped files are on the sheet; job screens' originals are already in the library and are never stored again.
    - Saving always stores the history copy, then `POST /api/films/:id/link` sets `screen.film = {id, name, at, by, compUm, thick}` and adds a log line.
    - Deleting a film from history removes `film` from its screens again.
    - `/film/?add=<screenId,…>` opens the page with those screens (from the job/screen pages).
