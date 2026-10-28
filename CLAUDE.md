@@ -44,11 +44,11 @@ Main menu: ใบงาน (jobs) · คลังลาย (artwork library) · 
      - It sets the compensation (auto = target × factor / manual µm / none) and the colours to leave out.
      - These are saved as `screen.filmPrep = {mode, manualUm, notArt[]}`. Thickness always comes from the screen's `target`.
 3. **Combine onto sheet** (`public/film/`):
-   - "บล็อคที่รอลงแผ่นฟิล์ม" lists screens with a filmable artwork, no `film`, and not sent, from every job and customer. All are ticked at first; "รวมลงแผ่นฟิล์ม" lays them out.
+   - One list, "บล็อคที่รอลงแผ่นฟิล์ม": screens with a filmable artwork, no `film`, and not sent, from every job and customer. **Ticked = on the sheet**; ticking/unticking adds/removes it at once (`Q.sel`, `syncSheet()`). All are ticked when the page opens (or only the `?add=` ids). Buttons เลือกทั้งหมด / ไม่เลือก.
+     - Each row: checkbox, picture, name, stencil ID · thickness · compensation, and "แก้" (`/#screen=<id>`). Job screens have no card below; film settings are edited in the job.
    - Each one loads the artwork's original from R2, keeps only that design (nearest `box`), and applies the job's customer, the screen's `target` and its `filmPrep`.
-   - Every card has the same compact form: picture, name + tag (job number, or "ไม่มีใบงาน"), and one summary line per design (customer · thickness · compensation).
-     - Job screens link to "แก้การตรวจฟิล์มที่ใบงาน" (`/#screen=<id>`).
-     - Hand-dropped files fold their controls behind "ปรับการตั้งค่าฟิล์ม" (`rec.open`).
+   - Cards below the list are only for hand-dropped files: picture, name + "ไม่มีใบงาน" tag, one summary line per design; controls fold behind "ปรับการตั้งค่าฟิล์ม" (`rec.open`).
+   - After saving, the linked screens leave the list and the sheet.
    - Files can also be dropped by hand for work without a job. The "เก็บไฟล์ต้นฉบับ" box (originals to `film/orig/<sha>`) only shows while such hand-dropped files are on the sheet; job screens' originals are already in the library and are never stored again.
    - Saving always stores the history copy, then `POST /api/films/:id/link` sets `screen.film = {id, name, at, by, compUm, thick}` and adds a log line.
    - Deleting a film from history removes `film` from its screens again.
