@@ -69,6 +69,9 @@ h2 { font-size: .78rem; font-weight: 600; text-transform: uppercase; letter-spac
 .qbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center }
 .qempty { font-size: .85rem; color: var(--muted) }
 .editlink { font-size: .82rem; color: var(--accent); font-weight: 600 }
+.linkbtn { background: none; border: 0; padding: 4px 0; text-decoration: underline; cursor: pointer; font-family: var(--font-body); justify-self: start; text-align: left }
+.jtag.hand { color: var(--muted); background: var(--bg); border: 1px solid var(--line) }
+.warnline { color: var(--warn) }
 .jtag { display: inline-block; font-size: .72rem; font-weight: 600; color: var(--accent); background: var(--accent-soft); border-radius: 5px; padding: 1px 6px; margin-left: 6px; vertical-align: middle }
 
 .drop { border: 1.5px dashed var(--line); border-radius: 10px; padding: 18px; display: grid; gap: 6px; text-align: center;
@@ -663,6 +666,24 @@ details.settings summary { cursor: pointer; font-weight: 600; font-size: .9rem }
         continue;
       }
 
+      // a file dropped here by hand: the same compact card as a job screen; its settings fold open on request
+      { const t = document.createElement('span'); t.className = 'jtag hand'; t.textContent = 'ไม่มีใบงาน'; nm.appendChild(t); }
+      if (!rec.open) {
+        const on = d.designs.filter(ds => !ds.off);
+        on.forEach(ds => {
+          const set = dsFor(j, ds.index, rec.name), um = C.compensation(set, st), m = document.createElement('div'); m.className = 'meta';
+          m.textContent = `${d.designs.length > 1 ? `ลาย ${ds.index + 1} · ` : ''}${set.customer || 'ไม่ระบุลูกค้า'} · ความหนา ${set.thick != null ? set.thick : '-'} µm · ${set.mode === 'none' ? 'ไม่ชดเชยขอบ' : `ชดเชยขอบ ${um} µm${set.mode === 'manual' ? ' (ระบุเอง)' : ''}`}${j.notArt.size ? ` · ตัดสีออก ${j.notArt.size} สี` : ''}`;
+          body.appendChild(m);
+        });
+        if (!on.length) { const m = document.createElement('div'); m.className = 'meta'; m.textContent = d.designs.length ? 'ปิดทุกลายในไฟล์นี้ไว้' : 'ไม่พบลายในไฟล์นี้'; body.appendChild(m); }
+        if (on.some(ds => !(dsFor(j, ds.index, rec.name).customer))) { const w = document.createElement('div'); w.className = 'meta warnline'; w.textContent = 'ยังไม่ได้เลือกลูกค้าและความหนา'; body.appendChild(w); }
+        const b = document.createElement('button'); b.type = 'button'; b.className = 'editlink linkbtn'; b.textContent = 'ปรับการตั้งค่าฟิล์ม';
+        b.addEventListener('click', () => { rec.open = true; renderJobs(); });
+        body.appendChild(b);
+        card.appendChild(body); box.appendChild(card); thumb(rec, th);
+        continue;
+      }
+
       const sum = document.createElement('div'); sum.className = 'meta';
       sum.textContent = d.designs.length ? `พบ ${d.designs.length} ลาย` + (d.framed ? ' จากกรอบแป้นในไฟล์' : '') : 'ไม่พบลายในไฟล์นี้';
       body.appendChild(sum);
@@ -741,6 +762,8 @@ details.settings summary { cursor: pointer; font-weight: 600; font-size: .9rem }
       const warns = j.warnings.slice();
       if (d.designs.length && !d.framed) warns.unshift('ไม่พบกรอบแป้นในไฟล์ จึงแยกลายจากกลุ่มชิ้นงานแทน ตรวจภาพย่อว่ากรอบตรงกับลายจริง');
       if (warns.length) { const ul = document.createElement('ul'); ul.className = 'warns'; warns.forEach(w => { const li = document.createElement('li'); li.textContent = w; ul.appendChild(li); }); body.appendChild(ul); }
+      { const b = document.createElement('button'); b.type = 'button'; b.className = 'editlink linkbtn'; b.textContent = 'เสร็จแล้ว ย่อการตั้งค่า';
+        b.addEventListener('click', () => { rec.open = false; renderJobs(); }); body.appendChild(b); }
       card.appendChild(body); box.appendChild(card);
       thumb(rec, th);
     }
@@ -1391,7 +1414,7 @@ details.settings summary { cursor: pointer; font-weight: 600; font-size: .9rem }
         }
         // label under the design on the film: stencil ID + customer REF, so the film piece can be matched to its stencil
         const ref = a.customerRef || String(a.fileName || 'artwork').replace(/\.(ai|pdf)$/i, ''), label = s.stencilId ? `${s.stencilId} ${ref}` : ref;
-        const rec = { id: ++seq, name: `${s.design || a.name || label}`, bytes: bytes.slice(0), page: a.page || 0, src: a.fileName || label, srcBytes: bytes,
+        const rec = { id: ++seq, name: `${s.design || a.name || ref}`, bytes: bytes.slice(0), page: a.page || 0, src: a.fileName || label, srcBytes: bytes,
           screen: { id: s.id, stencilId: s.stencilId || '', jobNo: j.no, design: s.design || a.name || '', customer: j.customer, thick: Number(s.target) || null } };
         rec.job = await C.analyze(bytes, label, a.page || 0);
         const d = C.describe(rec.job, st);
