@@ -514,13 +514,14 @@ function waitFileBox(t, s) {
 }
 // the screen page while the customer's file has not come yet: upload it, or pick an artwork already in the library
 function attachCard(j, s) {
+  const replace = !!s.artworkId;   // the customer sent a revised file for a screen that already has its artwork
   const choice = (ui.attachChoice && ui.attachChoice.sid === s.id) ? ui.attachChoice.ids.map(artOf).filter(Boolean) : null;
-  const lib = custArts(j.customer), q = searchTerms(ui.attachQ || ''), hits = q.length ? lib.filter(a => matches(norm([a.name, a.customerRef, a.fileName].join(' ')), q)) : lib;
-  return `<div class="card attach" style="display:flex;flex-direction:column;gap:12px">
-    <div class="spread"><h3>ไฟล์ลายของบล็อคนี้</h3><span class="fstate wait">รอไฟล์จากลูกค้า</span></div>
+  const lib = custArts(j.customer).filter(a => a.id !== s.artworkId), q = searchTerms(ui.attachQ || ''), hits = q.length ? lib.filter(a => matches(norm([a.name, a.customerRef, a.fileName].join(' ')), q)) : lib;
+  return `<div class="card attach" id="attachcard" style="display:flex;flex-direction:column;gap:12px">
+    <div class="spread"><h3>${replace ? 'เปลี่ยนไฟล์ลาย' : 'ไฟล์ลายของบล็อคนี้'}</h3>${replace ? '<button class="btn sm ghost" data-a="replacecancel">ยกเลิก</button>' : '<span class="fstate wait">รอไฟล์จากลูกค้า</span>'}</div>
     ${choice ? `<div class="spechint"><span class="label">ไฟล์นี้มี ${choice.length} ลาย</span><span class="small">แตะลายที่เป็นของบล็อคนี้ ลายอื่นเก็บไว้ในคลังลายของ ${esc(j.customer)}</span></div>
       ${artGrid(choice, new Set(), 'attachart')}`
-    : `<div class="muted small">เมื่อลูกค้าส่งไฟล์มา อัปโหลดที่นี่ ไฟล์จะเข้าคลังลายของ ${esc(j.customer)} และบล็อคนี้จะได้รูป ชื่อลาย และพร้อมทำฟิล์ม</div>
+    : `<div class="muted small">${replace ? `อัปโหลดไฟล์ที่ลูกค้าแก้มา ไฟล์จะเข้าคลังลายของ ${esc(j.customer)} แล้วบล็อคนี้จะใช้ลายใหม่แทน (รูป ไฟล์ Customer REF)${s.film ? ' และต้องลงแผ่นฟิล์มใหม่' : ''} · ชื่อลายเดิมยังอยู่` : `เมื่อลูกค้าส่งไฟล์มา อัปโหลดที่นี่ ไฟล์จะเข้าคลังลายของ ${esc(j.customer)} และบล็อคนี้จะได้รูป ชื่อลาย และพร้อมทำฟิล์ม`}</div>
       <label class="drop" for="af-attach" data-drop="attach">+ อัปโหลดไฟล์ลาย หรือลากไฟล์มาวางที่นี่<br><span class="small muted">AI (PDF-compatible), PDF, JPG, PNG</span></label>
       <input id="af-attach" type="file" hidden data-attachfile="s">
       <div id="libbusy">${libBusyHtml()}</div>
@@ -532,11 +533,16 @@ function attachCard(j, s) {
 // give a screen its artwork: picture, file, Customer REF, and the name when it has none yet
 function attachArt(t, a) {
   const o = targetObj(t); if (!o || !a) return;
-  o.artworkId = a.id; o.preview = a.preview || o.preview || null;
-  o.originals = [...new Set([...(o.originals || []), a.file].filter(Boolean))];
-  if (!String(o.customerRef || '').trim()) o.customerRef = a.customerRef || '';
+  const replace = t === 's' && o.artworkId && o.artworkId !== a.id;
+  o.artworkId = a.id; o.preview = a.preview || (replace ? null : o.preview) || null;
+  o.originals = a.file ? [a.file] : (replace ? [] : o.originals || []);   // one screen = one artwork = its one original file
+  if (replace || !String(o.customerRef || '').trim()) o.customerRef = a.customerRef || '';
   if (!String(o.design || '').trim() && a.name) o.design = a.name;
-  if (t === 's') { logEv(o, 'เพิ่มไฟล์ลาย: ' + (a.fileName || a.customerRef || '')); saveScreen(o); ui.attachChoice = null; ui.attachOpen = false; }
+  if (replace) {
+    if (o.filmPrep) o.filmPrep = { ...o.filmPrep, notArt: [] };   // colours belonged to the old file
+    if (o.film) { delete o.film; logEv(o, 'ต้องลงแผ่นฟิล์มใหม่ (เปลี่ยนไฟล์ลาย)'); }
+  }
+  if (t === 's') { logEv(o, (replace ? 'เปลี่ยนไฟล์ลายเป็น: ' : 'เพิ่มไฟล์ลาย: ') + (a.fileName || a.customerRef || '')); saveScreen(o); ui.attachChoice = null; ui.attachOpen = false; ui.replaceArt = null; }
 }
 async function attachFiles(t, files) {
   const o = targetObj(t); if (!o) return;
@@ -545,7 +551,7 @@ async function attachFiles(t, files) {
   const usable = made.filter(a => a.filmable).length ? made.filter(a => a.filmable) : made;
   if (!usable.length) return;
   if (t === 's') {
-    if (usable.length === 1) { attachArt('s', usable[0]); toast('เพิ่มไฟล์ลายให้บล็อคนี้แล้ว'); }
+    if (usable.length === 1) { const had = !!o.artworkId; attachArt('s', usable[0]); toast(had ? 'เปลี่ยนไฟล์ลายแล้ว' : 'เพิ่มไฟล์ลายให้บล็อคนี้แล้ว'); }
     else ui.attachChoice = { sid: o.id, ids: usable.map(a => a.id) };   // ask which design belongs to this screen
   } else {
     // new-job form: the first design goes to this row, any more designs become new rows
@@ -1070,7 +1076,7 @@ function screenView() {
   ${j.note ? `<div class="card small"><span class="label">หมายเหตุจากอาร์ทเวิร์ค</span><br>${esc(j.note)}</div>` : ''}
   ${s.status === 'rework' && s.qc.note ? `<div class="card" style="border-color:var(--bad)"><span class="label" style="color:var(--bad)">เหตุผลที่ตีกลับ</span><br>${esc(s.qc.note)} <span class="muted small">— ${esc(s.qc.by)} ${fmtT(s.qc.at)}</span></div>` : ''}`;
 
-  if (!s.artworkId && db.features.files) h += attachCard(j, s);
+  if ((!s.artworkId || ui.replaceArt === s.id) && db.features.files) h += attachCard(j, s);
   if (db.features.files) {
     const art = true;
     s.originals = s.originals || [];
@@ -1085,9 +1091,10 @@ function screenView() {
           <div class="field"><span class="flabel">ไซส์</span>${sizeChips('s', s, art)}</div>
         </div>
       </div>
-      <div class="fsec"><div class="spread"><span class="label">ไฟล์ต้นฉบับจากลูกค้า (${s.originals.length})</span>
-        ${art ? `<label class="btn sm" for="af-orig">+ เพิ่ม</label><input id="af-orig" type="file" multiple hidden data-addfile="originals">` : ''}</div>
-        <div class="flist">${s.originals.map(id => fileChip(id, art, 's:originals')).join('') || '<span class="muted small">ยังไม่มีไฟล์</span>'}</div></div>
+      ${(() => { const a = s.artworkId && artOf(s.artworkId), fs = a && a.file ? [a.file] : s.originals;   // read-only: the artwork's own file
+        return `<div class="fsec"><div class="spread"><span class="label">ไฟล์ต้นฉบับจากลูกค้า</span>
+          ${s.artworkId && ui.replaceArt !== s.id ? '<button class="btn sm" data-a="replaceart">เปลี่ยนไฟล์ลาย</button>' : ''}</div>
+          <div class="flist">${fs.map(id => fileChip(id, false)).join('') || '<span class="muted small">ยังไม่มีไฟล์</span>'}</div></div>`; })()}
       <div id="uploads"></div>
     </div>`;
   }
@@ -1263,8 +1270,10 @@ document.addEventListener('click', async e => {
       o.sizes = cur.includes(k) ? cur.filter(x => x !== k) : sizeList().filter(x => x === k || cur.includes(x)).concat(cur.filter(x => !sizeList().includes(x)));
       if (v === 's') { logEv(o, 'แก้ไซส์: ' + (o.sizes.join(', ') || 'ไม่ระบุ')); saveScreen(o); }
       render(); break; }
-    case 'attachart': attachArt('s', artOf(v)); toast('เพิ่มไฟล์ลายให้บล็อคนี้แล้ว'); render(); break;
+    case 'attachart': { const had = !!(cur().s || {}).artworkId; attachArt('s', artOf(v)); toast(had ? 'เปลี่ยนไฟล์ลายแล้ว' : 'เพิ่มไฟล์ลายให้บล็อคนี้แล้ว'); render(); break; }
     case 'toggleattach': ui.attachOpen = !ui.attachOpen; render(); break;
+    case 'replaceart': ui.replaceArt = ui.screenId; ui.attachChoice = null; ui.attachOpen = false; ui.attachQ = ''; render(); setTimeout(() => { const c = $('#attachcard'); if (c) c.scrollIntoView({ behavior: 'smooth', block: 'start' }); }); break;
+    case 'replacecancel': ui.replaceArt = null; ui.attachChoice = null; render(); break;
     case 'toggleold': ui.draft.showOld = !ui.draft.showOld; render(); break;
     case 'pickart': {
       const d = ui.draft, a = artOf(v); if (!a) break;
@@ -1314,7 +1323,7 @@ document.addEventListener('click', async e => {
       try { await api('DELETE', '/jobs/' + v); await loadData(); toast('ลบใบงานแล้ว'); go('list'); } catch (x) { toast(x.message); }
       break;
     case 'openjob': go('job', { jobId: v }); break;
-    case 'openscreen': { ui.attachChoice = null; ui.attachOpen = false; ui.attachQ = ''; const back = ui.view === 'job' ? 'job' : 'list'; go('screen', { jobId: el.dataset.j, screenId: v, backTo: back }); break; }
+    case 'openscreen': { ui.attachChoice = null; ui.attachOpen = false; ui.attachQ = ''; ui.replaceArt = null; const back = ui.view === 'job' ? 'job' : 'list'; go('screen', { jobId: el.dataset.j, screenId: v, backTo: back }); break; }
     case 'coat': {
       const { s } = cur(); s.coats.push({ t: Date.now(), side: v, by: ui.user.name });
       if (s.status === 'ordered' || s.status === 'rework') { logEv(s, s.status === 'rework' ? 'เริ่มแก้งานตีกลับ' : 'เริ่มขึ้นกาว'); s.status = 'coating'; }
@@ -1420,7 +1429,7 @@ document.addEventListener('input', e => {
   if (t.dataset.fq) { films.q = t.value; clearTimeout(ui.fqTimer); ui.fqTimer = setTimeout(() => loadFilms(true), 300); return; }
   if (t.dataset.attq) {
     ui.attachQ = t.value; const box = document.getElementById('attgrid'); if (!box) return;
-    const { j } = find(ui.jobId), q = searchTerms(t.value), lib = custArts(j.customer);
+    const { j, s } = find(ui.jobId, ui.screenId), q = searchTerms(t.value), lib = custArts(j.customer).filter(a => !s || a.id !== s.artworkId);
     const hits = q.length ? lib.filter(a => matches(norm([a.name, a.customerRef, a.fileName].join(' ')), q)) : lib;
     box.innerHTML = hits.length ? artGrid(hits, new Set(), 'attachart') : '<div class="muted small">ไม่พบลายที่ตรงกับคำค้น</div>';
     return;

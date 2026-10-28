@@ -27,6 +27,9 @@ Main menu (tabs in the app): ใบงาน (jobs) · ฟิล์ม (film his
        - A file with several designs asks which one belongs to this screen.
        - `attachArt()` sets `artworkId`, `preview`, `originals`, Customer REF and the name if it is empty, then logs it. The AI name fills it in later if needed.
      - From then on the screen gets the viewer/film group and appears in the film queue.
+   - **One original per screen**: the screen page's "ไฟล์ต้นฉบับจากลูกค้า" is read-only and shows the artwork's own file (no "+ เพิ่ม", no ✕); film, viewer and combine page all read `artwork.file`.
+     - "เปลี่ยนไฟล์ลาย" (`ui.replaceArt`) reopens the same attach card for a revised file: upload into the library (asks which design if several) or pick another library artwork.
+     - Replacing sets `artworkId`, `preview`, `originals = [file]`, Customer REF; keeps the name; clears `filmPrep.notArt`; removes `film` (the screen waits for film again) and logs it.
    - Each block row: header (บล็อคที่ n, predicted Stencil ID, buttons), one viewer on the left, and groups on the right: ลาย (name, Customer REF) · สเปคบล็อค (mesh, frame, emulsion, thickness) · ฟิล์ม.
    - **Viewer** (`makeViewer`, shown at once, no toggle; it loads when scrolled into view):
      - The same area of the original with the design's film laid over it. The slider (ต้นฉบับ ↔ ฟิล์ม, remembered per browser) sets the film's opacity.
