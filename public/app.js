@@ -235,6 +235,9 @@ function render() {
   // จำช่องที่กำลังพิมพ์ไว้ เพื่อไม่ให้หลุดโฟกัสเมื่อหน้าจอวาดใหม่
   const ae = document.activeElement, fid = ae && ae.id, sel = ae && 'selectionStart' in ae ? [ae.selectionStart, ae.selectionEnd] : null;
   const zone = ae && ae.dataset && ae.dataset.zone;
+  // settings: keep what was typed but not saved yet when the page redraws (e.g. "+ เพิ่มพนักงาน")
+  const keep = ui.view === 'settings' && ui.lastView === 'settings' && !ui.dropEdits ? formSnapshot() : null;
+  ui.dropEdits = false; ui.lastView = ui.view;
   setTimeout(() => {
     if (fid) { const el = document.getElementById(fid); if (el && el !== document.activeElement) { el.focus({ preventScroll: true }); if (sel && el.setSelectionRange) try { el.setSelectionRange(sel[0], sel[1]); } catch (e) {} } }
     else if (zone) { const el = document.querySelector(`[data-zone="${zone}"]`); if (el) el.focus({ preventScroll: true }); }
@@ -255,6 +258,7 @@ function render() {
     <button data-a="nav" data-v="library" aria-current="${ui.view === 'library'}">คลังลาย</button>
   </nav></header>
   <main class="wrap">${body()}</main>`;
+  if (keep) formRestore(keep);
   mountViewers();
   window.scrollTo(0, y);
 }
@@ -1031,7 +1035,7 @@ function filmSettingsCard() {
       <div class="field"><label for="fs-thicknesses">ความหนาที่มีให้เลือกในหน้าฟิล์ม (µm คั่นด้วยจุลภาค)</label><input id="fs-thicknesses" data-fs="thicknesses" value="${esc((f.thicknesses || []).join(', '))}"></div></div>
     <label class="check"><input type="checkbox" id="fs-labels" ${f.labels ? 'checked' : ''}><span>พิมพ์ข้อความใต้ลาย (ลูกค้า ชื่อไฟล์ ความหนา การชดเชย วันที่)</span></label>
     <label class="check"><input type="checkbox" id="fs-cropMarks" ${f.cropMarks ? 'checked' : ''}><span>เส้นตัด (crop mark)</span></label>
-    <div class="row" style="justify-content:flex-end"><span class="err" id="fserr"></span><button class="btn primary" data-a="fsave">บันทึกการตั้งค่าฟิล์ม</button></div>
+    <span class="err" id="fserr"></span>
   </div>`;
 }
 
@@ -1151,7 +1155,7 @@ function settingsView() {
         <div class="field"><label for="u-pin">${u.id ? 'PIN ใหม่ (เว้นว่างถ้าไม่เปลี่ยน)' : 'PIN 4 หลัก'}</label><input id="u-pin" data-u="pin" inputmode="numeric" maxlength="4" value="${esc(u.pin || '')}" autocomplete="off"></div>
         ${u.id ? `<label class="check" style="align-self:end"><input type="checkbox" data-u="active" ${u.active ? 'checked' : ''}><span>ใช้งานอยู่</span></label>` : ''}
       </div>
-      <div class="row" style="justify-content:flex-end"><span class="err" id="uerr"></span><button class="btn ghost" data-a="ucancel">ยกเลิก</button><button class="btn primary" data-a="usave">บันทึก</button></div></div>`;
+      <div class="row" style="justify-content:flex-end"><span class="err" id="uerr"></span><button class="btn ghost" data-a="ucancel">ยกเลิก</button></div></div>`;
   const fx = db.features || {};
   const stat = (on, name, what) => `<div class="urow"><span class="fstate ${on ? 'ok' : ''}">${on ? 'เชื่อมแล้ว' : 'ยังไม่เชื่อม'}</span><span><b>${name}</b><br><span class="muted small">${what}</span></span><span></span></div>`;
   return `<button class="btn ghost back" data-a="back">← กลับ</button>
@@ -1177,17 +1181,78 @@ function settingsView() {
       <div class="field"><label for="ms-def">ความหนาเริ่มต้นของบล็อคใหม่</label><div class="unit"><input id="ms-def" type="number" data-m="defaultTarget" value="${esc(defTarget())}"><span>µm</span></div></div>
       <div class="field"><label for="ms-tol">ค่าความหนาที่ยอมรับได้ (±)</label><div class="unit"><input id="ms-tol" type="number" data-m="tolerance" value="${esc(tol())}"><span>µm</span></div></div>
     </div>
-    <div class="row" style="justify-content:flex-end"><button class="btn primary" data-a="msave">บันทึกรายการ</button></div>
   </div>
   <div class="card" style="display:flex;flex-direction:column;gap:12px">
     <div><h3>สเปคประจำลูกค้า</h3><div class="muted small">ใส่ให้อัตโนมัติเมื่อสร้างใบงานของลูกค้านั้น ระบบจำให้เองจากใบงานแรกของลูกค้าใหม่ แก้ที่นี่ได้</div></div>
     ${m.customers.length ? m.customers.map((c, i) => { const cs = (m.customerSpecs || {})[c] || {}, sel = (arr, v, k) => `<select data-cs="${i}" data-k="${k}" aria-label="${k}"><option value="">-</option>${(v && !arr.includes(v) ? [v, ...arr] : arr).map(x => `<option ${x === v ? 'selected' : ''}>${esc(x)}</option>`).join('')}</select>`;
       return `<div class="csrow"><b>${esc(c)}</b><div class="csgrid">${sel(m.frames, cs.frame, 'frame')}${sel(m.mesh, cs.mesh, 'mesh')}${sel(m.emulsions, cs.emulsion, 'emulsion')}<div class="unit"><input type="number" data-cs="${i}" data-k="target" value="${esc(cs.target || '')}" placeholder="ความหนา" aria-label="ความหนา"><span>µm</span></div></div></div>`; }).join('') : '<div class="muted small">ยังไม่มีลูกค้า</div>'}
-    <div class="row" style="justify-content:flex-end"><button class="btn primary" data-a="msave">บันทึกสเปคประจำ</button></div>
   </div>
   ${filmSettingsCard()}
   <div class="card spread"><div><h3>สำรองข้อมูล</h3><div class="muted small">ไฟล์ CSV เปิดด้วย Excel ได้ ทุกบล็อคทุกใบงาน</div></div>
-    <a class="btn" href="/api/export.csv?t=${encodeURIComponent(token)}">ดาวน์โหลด CSV</a></div>`;
+    <a class="btn" href="/api/export.csv?t=${encodeURIComponent(token)}">ดาวน์โหลด CSV</a></div>
+  <div class="savebar"><span class="err" id="serr"></span><button class="btn primary" data-a="settingssave" ${ui.busy ? 'disabled' : ''}>บันทึกการตั้งค่า</button></div>`;
+}
+
+const formKey = el => el.id ? '#' + el.id : el.dataset.cs != null ? `cs:${el.dataset.cs}:${el.dataset.k}` : null;
+function formSnapshot() {
+  const m = new Map(), main = document.querySelector('main'); if (!main) return m;
+  main.querySelectorAll('input, textarea, select').forEach(el => { const k = formKey(el); if (k && el.dataset.u == null) m.set(k, el.type === 'checkbox' ? el.checked : el.value); });
+  return m;
+}
+function formRestore(m) {
+  document.querySelectorAll('main input, main textarea, main select').forEach(el => { const k = formKey(el); if (!k || !m.has(k)) return; if (el.type === 'checkbox') el.checked = m.get(k); else el.value = m.get(k); });
+}
+/* ---------- settings: one save for every card (users form, pick lists, customer specs, film) ---------- */
+function readSettings() {
+  const errs = [];
+  // user being added/edited
+  const u = ui.editUser;
+  if (u) {
+    if (!u.name.trim()) errs.push('พนักงาน: ใส่ชื่อ');
+    else if ((u.pin || !u.id) && !/^\d{4}$/.test(u.pin)) errs.push('พนักงาน: PIN ต้องเป็นตัวเลข 4 หลัก');
+  }
+  // pick lists + customer specs
+  const m = { ...db.master };
+  for (const k of ['mesh', 'frames', 'emulsions', 'sizes', 'customers']) m[k] = $('#ms-' + k).value.split('\n').map(x => x.trim()).filter(Boolean);
+  m.tolerance = Number($('#ms-tol').value) || 10;
+  m.defaultTarget = Number($('#ms-def').value) || 400;
+  const specs = {};   // only customers still on the list
+  db.master.customers.forEach((c, i) => {
+    const g = k => { const el = document.querySelector(`[data-cs="${i}"][data-k="${k}"]`); return el ? el.value.trim() : ''; };
+    const sp = { frame: g('frame'), mesh: g('mesh'), emulsion: g('emulsion'), target: Number(g('target')) || '' };
+    if (m.customers.includes(c) && (sp.frame || sp.mesh || sp.emulsion || sp.target)) specs[c] = sp;
+  });
+  m.customerSpecs = specs;
+  // film
+  let f = null;
+  if (ui.filmSet && $('#fs-thicknesses')) {
+    f = { ...ui.filmSet };
+    for (const [k] of FILM_FIELDS) { const n = parseFloat($('#fs-' + k).value); if (!isFinite(n) || n < 0) { errs.push('ฟิล์ม: ช่องที่ต้องเป็นตัวเลขยังไม่ถูกต้อง'); break; } f[k] = n; }
+    f.thicknesses = [...new Set($('#fs-thicknesses').value.split(/[,\s]+/).filter(Boolean).map(Number).filter(x => isFinite(x) && x >= 0))].sort((a, b) => a - b);
+    f.labels = $('#fs-labels').checked; f.cropMarks = $('#fs-cropMarks').checked;
+  }
+  return { errs, u, m, f };
+}
+async function saveSettings() {
+  const er = $('#serr'); er.textContent = '';
+  const { errs, u, m, f } = readSettings();
+  if (errs.length) { er.textContent = errs.join(' · '); return; }
+  ui.busy = true; $('[data-a="settingssave"]').disabled = true;
+  const fails = [];
+  try { await api('PUT', '/master', m); db.master = m; } catch (x) { fails.push('รายการ/สเปคประจำ: ' + x.message); }
+  if (f) {
+    try { const r = await api('PUT', '/film-settings', { film: f, baseUpdated: ui.filmSet.updated || 0 }); ui.filmSet = { ...FILM_DEF, ...r.film }; filmSetP = null; }
+    catch (x) {
+      if (x.status === 409) { ui.filmSet = { ...FILM_DEF, ...x.data.film }; fails.push('ฟิล์ม: มีคนบันทึกก่อนหน้า แสดงค่าล่าสุดแล้ว ตรวจแล้วกดบันทึกอีกครั้ง'); }
+      else fails.push('ฟิล์ม: ' + x.message);
+    }
+  }
+  if (u) {
+    try { await api('POST', '/admin/users', { ...u, name: u.name.trim() }); ui.editUser = null; ui.admin = await api('GET', '/admin/users'); }
+    catch (x) { fails.push('พนักงาน: ' + x.message); }
+  }
+  ui.busy = false; ui.dropEdits = true; render();   // show what the server now holds
+  if (fails.length) { const e2 = $('#serr'); if (e2) e2.textContent = fails.join(' · '); toast('บันทึกไม่ครบ'); } else toast('บันทึกการตั้งค่าแล้ว');
 }
 
 /* ---------- actions ---------- */
@@ -1282,20 +1347,6 @@ document.addEventListener('click', async e => {
       else d.screens.push(screenFromArt(a));
       render(); break;
     }
-    case 'fsave': {
-      const f = { ...ui.filmSet }, er = $('#fserr');
-      for (const [k] of FILM_FIELDS) { const n = parseFloat($('#fs-' + k).value); if (!isFinite(n) || n < 0) return er.textContent = 'ช่องที่ต้องเป็นตัวเลขยังไม่ถูกต้อง'; f[k] = n; }
-      f.thicknesses = [...new Set($('#fs-thicknesses').value.split(/[,\s]+/).filter(Boolean).map(Number).filter(x => isFinite(x) && x >= 0))].sort((a, b) => a - b);
-      f.labels = $('#fs-labels').checked; f.cropMarks = $('#fs-cropMarks').checked;
-      try {
-        const r = await api('PUT', '/film-settings', { film: f, baseUpdated: ui.filmSet.updated || 0 });
-        ui.filmSet = { ...FILM_DEF, ...r.film }; filmSetP = null; toast('บันทึกการตั้งค่าฟิล์มแล้ว'); render();
-      } catch (x) {
-        if (x.status === 409) { ui.filmSet = { ...FILM_DEF, ...x.data.film }; render(); toast('มีคนบันทึกการตั้งค่าฟิล์มก่อนหน้า แสดงค่าล่าสุดแล้ว ตรวจแล้วกดบันทึกอีกครั้ง'); }
-        else toast(x.message);
-      }
-      break;
-    }
     case 'back': go(ui.view === 'screen' && ui.backTo === 'job' ? 'job' : 'list'); break;
     case 'newjob':
       ui.draft = { customer: '', specApplied: '', date: localDate(), due: localDate(Date.now() + 3 * 864e5), note: '', screens: [] };
@@ -1384,32 +1435,7 @@ document.addEventListener('click', async e => {
     case 'uadd': ui.editUser = { name: '', role: 'artwork', pin: '', active: true }; render(); break;
     case 'uedit': { const u = ui.admin.find(x => x.id === v); ui.editUser = { ...u, active: !!u.active, pin: '' }; render(); break; }
     case 'ucancel': ui.editUser = null; render(); break;
-    case 'usave': {
-      const u = ui.editUser, er = $('#uerr');
-      if (!u.name.trim()) return er.textContent = 'ใส่ชื่อ';
-      if ((u.pin || !u.id) && !/^\d{4}$/.test(u.pin)) return er.textContent = 'PIN ต้องเป็นตัวเลข 4 หลัก';
-      try {
-        await api('POST', '/admin/users', { ...u, name: u.name.trim() });
-        ui.editUser = null; ui.admin = await api('GET', '/admin/users'); render(); toast('บันทึกแล้ว');
-      } catch (x) { er.textContent = x.message; }
-      break;
-    }
-    case 'msave': {
-      const m = { ...db.master };
-      for (const k of ['mesh', 'frames', 'emulsions', 'sizes', 'customers']) m[k] = $('#ms-' + k).value.split('\n').map(x => x.trim()).filter(Boolean);
-      m.tolerance = Number($('#ms-tol').value) || 10;
-      m.defaultTarget = Number($('#ms-def').value) || 400;
-      // สเปคประจำลูกค้า: อ่านจากตาราง แล้วเก็บเฉพาะลูกค้าที่ยังอยู่ในรายการ
-      const specs = {};
-      db.master.customers.forEach((c, i) => {
-        const g = k => { const el = document.querySelector(`[data-cs="${i}"][data-k="${k}"]`); return el ? el.value.trim() : ''; };
-        const sp = { frame: g('frame'), mesh: g('mesh'), emulsion: g('emulsion'), target: Number(g('target')) || '' };
-        if (m.customers.includes(c) && (sp.frame || sp.mesh || sp.emulsion || sp.target)) specs[c] = sp;
-      });
-      m.customerSpecs = specs;
-      try { await api('PUT', '/master', m); db.master = m; toast('บันทึกรายการแล้ว'); render(); } catch (x) { toast(x.message); }
-      break;
-    }
+    case 'settingssave': await saveSettings(); break;
   }
 });
 $('#lb').addEventListener('click', () => $('#lb').hidden = true);

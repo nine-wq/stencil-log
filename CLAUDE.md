@@ -68,6 +68,9 @@ Main menu (tabs in the app): ใบงาน (jobs) · ฟิล์ม (film his
 - The search box matches jobs, blocks, files and people.
 
 **Settings** (⚙, everyone): users/PINs, pick lists, customer default specs (`master.customerSpecs`), tolerance, film settings (`settings.key='film'`: sheet size, margins, marks, compensation factor, near-white, specks, thickness list), CSV export.
+- One save button for the whole page ("บันทึกการตั้งค่า", sticky at the bottom, `saveSettings()`): it checks everything first (user form, film numbers), then saves pick lists + customer specs (`PUT /master`), film settings (`PUT /film-settings`, 409 on stale base) and the user being added/edited. The user form only has ยกเลิก.
+- Unsaved values survive redraws on this page (`formSnapshot`/`formRestore` in `render()`); after a save the page shows what the server holds (`ui.dropEdits`).
+- One-time reset `oneTimeReset()` in src/index.js (key `reset-2026-10-29` in settings): on the first request after deploy it cleared artworks, jobs, screens, photos, files, film_outputs and the whole R2 bucket, and set `seq`/`sseq` back to 1. The claimed settings row stops it from ever running again; remove the function once it has run in production.
 
 Prepared-film uploads (the old "ไฟล์ที่เตรียมแล้ว ส่งยิงฟิล์ม" section, `screen.prepared`) are removed from the UI: every film is made in the app (`screen.film`). Old `prepared` ids are kept in the data, still searchable and protected from file deletion; the CSV column is now แผ่นฟิล์ม (film name).
 
