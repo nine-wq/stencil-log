@@ -67,7 +67,7 @@ Main menu (tabs in the app): ใบงาน (jobs) · ฟิล์ม (film his
 - Stage filters: ทั้งหมด, รอทำฟิล์ม, ขึ้นบล็อค, รอตรวจ, พร้อมส่ง, ส่งแล้ว.
 - Grouping by job date or by customer (remembered per browser).
 - The search box matches jobs, blocks, files and people.
-- Job cards: header = customer, job number, due date, done/total (no received date). Block rows (`blockRow`): 97 px picture; name first, then the stencil ID as plain muted text; sizes · mesh · thickness (no word สเปค); on the right one column with the block status chip and the film tag (รอไฟล์จากลูกค้า / ยังไม่ทำฟิล์ม) under it.
+- Job cards: header = customer on the left; job number · due date on the right in the same plain small text (no received date, no done/total count). Block rows (`blockRow`): 97 px picture; name first, then the stencil ID as plain muted text; sizes · mesh · thickness (no word สเปค); on the right one column: the film chip first (`chip fl-wait` รอไฟล์จากลูกค้า / `chip fl-need` ยังไม่ทำฟิล์ม, same dot style as status chips, warn colours), then the block status chip.
 
 **Settings** (⚙, everyone): users/PINs, pick lists, customer default specs (`master.customerSpecs`), tolerance, film settings (`settings.key='film'`: sheet size, margins, marks, compensation factor, near-white, specks, thickness list), CSV export.
 - One save button for the whole page ("บันทึกการตั้งค่า", sticky at the bottom, `saveSettings()`): it checks everything first (user form, film numbers), then saves pick lists + customer specs (`PUT /master`), film settings (`PUT /film-settings`, 409 on stale base) and the user being added/edited. The user form only has ยกเลิก.
