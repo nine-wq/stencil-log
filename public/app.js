@@ -8,7 +8,7 @@ const QC_PHOTOS = [['front', 'ด้านหน้าบล็อค', 'ถ่�
 const photoKindOf = (s, p) => (s.photoKind || {})[p.id] || 'other';
 // ตัวกรองหน้าแรก
 const FILTERS = [
-  ['all', 'ทั้งหมด', s => !isDone(s)],
+  ['all', 'ทั้งหมด', () => true],
   ['film', 'รอทำฟิล์ม', s => needsFilm(s)],
   ['coat', 'ขึ้นบล็อค', s => ['ordered', 'coating', 'rework'].includes(s.status)],
   ['qc', 'รอตรวจ', s => s.status === 'qc'],
@@ -313,8 +313,7 @@ function homeView() {
 function homeResults() {
   const f = FILTERS.find(x => x[0] === ui.tab) || FILTERS[0];
   const q = searchTerms(ui.q);
-  // ตอนค้นหาด้วยตัวกรอง "ทั้งหมด" ให้ค้นรวมงานที่ส่งแล้วด้วย
-  const test = q.length && f[0] === 'all' ? () => true : f[2];
+  const test = f[2];
   const order = { rework: 0, coating: 1, ordered: 2, qc: 3, ready: 4, sent: 5 };
   const byCust = false;   // newest job date first, grouped by date
   const hits = db.jobs.map(j => {
@@ -336,9 +335,9 @@ function homeResults() {
   const sec = g => g.xs.length ? `<div class="sec-h"><h3>${esc(g.title)}</h3><span class="muted small num">${g.xs.length} ใบงาน</span></div>
     <div class="list">${g.xs.map(({ j, ss }) => jobCard(j, ss)).join('')}</div>` : '';
   const waitN = allScreens().filter(x => needsFilm(x.s)).length;
-  return `<div class="filters" role="tablist">${FILTERS.map(([k, label, t]) => { const n = count(t); return `<button role="tab" data-a="tab" data-v="${k}" aria-selected="${k === f[0]}">${label}${k !== 'done' || q.length ? ` <span class="count">${n}</span>` : ''}</button>`; }).join('')}</div>
+  return `<div class="filters" role="tablist">${FILTERS.map(([k, label, t]) => { const n = count(t); return `<button role="tab" data-a="tab" data-v="${k}" aria-selected="${k === f[0]}">${label} <span class="count">${n}</span></button>`; }).join('')}</div>
   ${f[0] === 'film' && waitN ? `<a class="filmwait" href="/film/"><span><b class="num">${waitN}</b> บล็อครอลงแผ่นฟิล์ม · รวมหลายใบงานลงแผ่นเดียวได้</span><span>สร้างฟิล์ม →</span></a>` : ''}
-  ${q.length ? `<div class="muted small">พบ <span class="num">${hits.reduce((n, x) => n + x.ss.length, 0)}</span> บล็อค ใน <span class="num">${hits.length}</span> ใบงาน${f[0] === 'all' ? ' (รวมงานที่ส่งแล้ว)' : ''}</div>` : ''}
+  ${q.length ? `<div class="muted small">พบ <span class="num">${hits.reduce((n, x) => n + x.ss.length, 0)}</span> บล็อค ใน <span class="num">${hits.length}</span> ใบงาน</div>` : ''}
   ${hits.length ? groups.map(sec).join('') : `<div class="empty">${q.length ? `ไม่พบงานที่ตรงกับ "${esc(ui.q)}"` : `ไม่มีงานในขั้นตอน "${f[1]}"`}</div>`}`;
 }
 // ช่วงเวลา: ล่าสุด (3 วัน) → สัปดาห์นี้ (เริ่มวันจันทร์) → เดือนนี้ → 3 เดือนที่ผ่านมา → ปีนี้ → ก่อนหน้านี้
