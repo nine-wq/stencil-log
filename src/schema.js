@@ -20,5 +20,7 @@ export const SCHEMA = [
   "CREATE TABLE IF NOT EXISTS artworks ( id TEXT PRIMARY KEY, customer TEXT NOT NULL, data TEXT NOT NULL, created INTEGER NOT NULL )",
   "CREATE INDEX IF NOT EXISTS artworks_customer ON artworks(customer)",
   // เลขบล็อค (Stencil ID) ST-ปปดด-NNNN: ตัวนับต่อเนื่อง ออกให้ทุกบล็อคใหม่ตอนบันทึกใบงาน
-  "INSERT OR IGNORE INTO settings (key, value) VALUES ('sseq', '1')"
+  "INSERT OR IGNORE INTO settings (key, value) VALUES ('sseq', '1')",
+  // เลขฟิล์ม FM-ปปดด-NNN: ตัวนับต่อเนื่อง ออกให้ตอนบันทึกฟิล์มแต่ละแผ่น
+  "INSERT OR IGNORE INTO settings (key, value) VALUES ('fseq', '1')"
 ];

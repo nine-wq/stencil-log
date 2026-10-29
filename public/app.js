@@ -341,23 +341,26 @@ function filmResults() {
     + (films.more ? `<button class="btn ghost" data-a="filmmore" ${films.loading ? 'disabled' : ''} style="justify-self:center">${films.loading ? 'กำลังโหลด…' : 'โหลดรายการเก่ากว่านี้'}</button>` : '');
 }
 function filmHistCard(it) {
-  const info = it.info || {}, items = info.items || [], open = tqs('/api/films/' + it.id);
+  const info = it.info || {}, items = info.items || [];
   const scr = new Map(allScreens().map(x => [x.s.id, x]));
-  const del = ui.arm === 'delfilm:' + it.id;
+  const title = info.no || String(it.name || '').replace(/\.pdf$/i, '');
+  // rows show the film's own snapshot of each block (what was on the film), not the block as it is now
   return `<div class="jobcard filmcard">
-    <div class="jobhead"><span class="t fname">${esc(it.name)}</span>
-      <span class="small muted"><span class="num">${fmtDT(it.created)}</span> · ${items.length || info.blocks || 0} ลาย${info.sheets != null ? ` · ${info.sheets} แผ่น` : ''} · ${fmtSize(it.size)}</span>
-      <span class="row factions"><a class="btn sm" href="${open}" target="_blank" rel="noopener">เปิด</a><a class="btn sm ghost" href="${tqs('/api/films/' + it.id + '?dl=1')}">ดาวน์โหลด</a>
-        <button class="btn sm ${del ? 'bad' : 'ghost'}" data-a="delfilm" data-v="${it.id}">${del ? 'กดอีกครั้งเพื่อลบ' : 'ลบ'}</button></span></div>
+    <button class="jobhead" data-a="openfilm" data-v="${it.id}" title="เปิดดูฟิล์มเทียบกับต้นฉบับ">
+      <span class="t">${esc(title)}</span>
+      <span class="small">${fmtDT(it.created)} · ${items.length || info.blocks || 0} ลาย${info.sheets != null ? ` · ${info.sheets} แผ่น` : ''}</span>
+    </button>
     ${items.map((x, n) => {
       const hit = x.screenId && scr.get(x.screenId), s = hit && hit.s;
-      const pic = x.thumb ? `<img class="thumb" src="${tqs(`/api/films/${it.id}/t${n}`)}" alt="" loading="lazy">` : '<span class="thumb none" aria-hidden="true"></span>';
-      const orig = (info.originals || []).find(o => o.name === (x.src || x.file));
-      const txt = `<span class="bt">${s && s.stencilId ? `<span class="sid sm">${esc(s.stencilId)}</span>` : ''}<b>${esc((s && s.design) || x.design || x.file)}</b>
-        <span class="muted small">${esc(x.customer || 'ไม่ระบุลูกค้า')}${x.jobNo ? ` · <span class="num">${esc(x.jobNo)}</span>` : x.screenId ? '' : ' · ไม่มีใบงาน'} · <span class="num">${x.thick ? x.thick + ' µm' : '—'}</span> · ${x.compUm ? `ชดเชย <span class="num">${x.compUm} µm</span>` : 'ไม่ชดเชย'}</span>
-        ${orig ? `<a class="small" href="${tqs(`/api/originals/${orig.sha}?name=${encodeURIComponent(orig.name)}`)}" download="${esc(orig.name)}">ไฟล์ต้นฉบับ</a>` : ''}</span>`;
-      return hit ? `<button class="brow sm" data-a="openscreen" data-j="${hit.j.id}" data-v="${hit.s.id}">${pic}${txt}<span class="muted small">เปิดบล็อค →</span></button>`
-        : `<div class="brow sm">${pic}${txt}<span></span></div>`;
+      const pv = x.preview || (s && s.preview);
+      const pic = pv ? `<img class="thumb" src="${fileUrl(pv, true)}" alt="" loading="lazy">` : x.thumb ? `<img class="thumb" src="${tqs(`/api/films/${it.id}/t${n}`)}" alt="" loading="lazy">` : '<span class="thumb none" aria-hidden="true"></span>';
+      const sid = x.stencilId || (s && s.stencilId) || '';
+      const src = x.frameSource || (s && s.frameSource);
+      const txt = `<span class="bt"><b>${esc(x.design || (s && s.design) || x.file || '(ไม่มีชื่อ)')}</b>
+        <span class="sidtxt">${[sid, x.customer || 'ไม่ระบุลูกค้า', x.jobNo || (x.screenId ? '' : 'ไม่มีใบงาน')].filter(Boolean).map(esc).join(' · ')}</span>
+        <span class="muted small">${x.screenId ? (src === 'customer' ? '<span class="fsrc">บล็อคเดิมลูกค้า</span> · ' : 'บล็อคใหม่ · ') : ''}${(x.sizes || []).length ? `ไซส์ ${esc(x.sizes.join(', '))} · ` : ''}${x.mesh ? `<span class="num">${esc(x.mesh)}</span> · ` : ''}<span class="num">${x.thick ? x.thick + ' µm' : '—'}</span> · ${x.compUm ? `ชดเชย <span class="num">${x.compUm} µm</span>` : 'ไม่ชดเชย'}</span></span>`;
+      return hit ? `<button class="brow" data-a="openscreen" data-j="${hit.j.id}" data-v="${hit.s.id}">${pic}${txt}<span class="bstate">${chip(s.status)}</span></button>`
+        : `<div class="brow">${pic}${txt}<span></span></div>`;
     }).join('')}
   </div>`;
 }
@@ -1335,6 +1338,7 @@ document.addEventListener('click', async e => {
     case 'nav': if (v === 'films') { go('films'); loadFilms(true); } else go(v === 'library' ? 'library' : 'list'); break;
     case 'filmreload': loadFilms(true); break;
     case 'filmmore': loadFilms(false); break;
+    case 'openfilm': location.href = '/film/?view=' + encodeURIComponent(v); break;
     case 'delfilm': {
       if (ui.arm !== 'delfilm:' + v) { ui.arm = 'delfilm:' + v; updateFilms(); break; }
       ui.arm = null; el.disabled = true; el.textContent = 'กำลังลบ…';

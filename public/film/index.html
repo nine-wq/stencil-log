@@ -80,6 +80,11 @@ h2 { font-size: .78rem; font-weight: 600; text-transform: uppercase; letter-spac
 .qrow .qt small.bad { color: var(--bad); white-space: normal }
 .hpanel { margin: 2px 0 8px 30px; padding: 4px 10px 8px; border-left: 2px solid var(--accent-soft); min-width: 0 }
 @media (max-width: 420px) { .hpanel { margin-left: 4px } }
+.vrow { grid-template-columns: 56px minmax(0, 1fr) }
+.vrow img, .vrow .noimg { width: 56px; height: 56px }
+.vrow .qt b { font-weight: 600 }
+.vdel { color: var(--bad) }
+.vdel.armed { background: var(--bad); color: var(--bg); border-color: var(--bad) }
 .qstate { display: block; color: var(--accent); font-size: .76rem }
 .qstate.bad { color: var(--bad) }
 .qbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center }
@@ -343,6 +348,11 @@ details.settings summary { cursor: pointer; font-weight: 600; font-size: .9rem }
 
   <div class="grid" id="viewWork" role="tabpanel" aria-labelledby="tabWork">
     <section class="rail" aria-label="งาน">
+      <section class="queue" id="viewBox" aria-label="ฟิล์มที่บันทึกไว้" hidden>
+        <div class="qhead"><h2 class="sh" id="vTitle">ฟิล์ม</h2><span class="qempty" id="vMeta"></span></div>
+        <div id="vList"><div class="qempty">กำลังโหลด…</div></div>
+        <div class="qbar"><a class="btn" id="vOpen" target="_blank" rel="noopener">เปิด PDF</a><span style="flex:1"></span><button type="button" class="ghost vdel" id="vDel">ลบฟิล์ม</button></div>
+      </section>
       <section class="queue" id="queueBox" aria-label="บล็อครอทำฟิล์ม">
         <div class="qhead"><h2 class="sh">บล็อคที่รอลงแผ่นฟิล์ม</h2><span class="qempty" id="queueCount"></span></div>
         <div id="queueList"><div class="qempty">กำลังโหลด…</div></div>
@@ -633,22 +643,23 @@ details.settings summary { cursor: pointer; font-weight: 600; font-size: .9rem }
     $('keepWrap').hidden = true; $('keepCopy').checked = true;   // always kept: screens are linked to the saved copy
   }
   $('keepCopy').addEventListener('change', syncKeep);
-  async function archive(filename, bytes, plan, blocks) {
+  async function archive(stamp, bytes, plan, blocks) {
     // returns { text, bad } describing what was stored; never throws
     if (!historyOn() || !$('keepCopy').checked || !bytes) return null;
     setStatus('กำลังเก็บสำเนาในประวัติ… อย่าเพิ่งปิดหน้านี้');
     const order = plan ? plan.sheets.flatMap((sh, pi) => sh.map(it => ({ it, pi }))) : [];
-    const items = order.map(({ it }) => it.b).map(b => {
-      const ds = (b.job.dset && b.job.dset[b.design.index]) || {};
+    const items = order.map(({ it, pi }) => {
+      const b = it.b, ds = (b.job.dset && b.job.dset[b.design.index]) || {};
       const rec = jobs.find(r => r.job === b.job);
       const sc = rec && rec.screen;
       return { file: b.job.name, src: rec ? rec.src : b.job.name, customer: ds.customer || '', thick: ds.thick != null ? ds.thick : null, compUm: b.offsetUm, mode: ds.mode || 'auto',
-        screenId: sc ? sc.id : '', jobNo: sc ? sc.jobNo : '', design: sc ? sc.design : '' };
+        screenId: sc ? sc.id : '', jobNo: sc ? sc.jobNo : '', design: sc ? sc.design : '', ...((rec && rec.snap) || {}),
+        place: { si: pi, x: it.x, y: it.y, w: it.w, h: it.h, W: it.W, H: it.H, rot: !!it.rot, bbox: b.bbox } };
     });
     const info = { sheets: plan ? plan.sheets.length : 0, blocks: items.length, sheetW: st.sheetW, sheetH: st.sheetH, date: st.dateText, items };
     const fd = new FormData();
-    fd.append('name', filename); fd.append('info', JSON.stringify(info));
-    fd.append('file', new Blob([bytes], { type: 'application/pdf' }), filename);
+    fd.append('stamp', stamp); fd.append('info', JSON.stringify(info));
+    fd.append('file', new Blob([bytes], { type: 'application/pdf' }), 'film.pdf');
     try { (await makeThumbs(bytes, plan, order)).forEach((t, n) => { if (t) fd.append('thumb_' + n, t, `t${n}`); }); } catch (e) {}
     try {
       const r = await apiFetch('/api/films', { method: 'POST', body: fd });
@@ -656,7 +667,7 @@ details.settings summary { cursor: pointer; font-weight: 600; font-size: .9rem }
       if (!r.ok) throw new Error(saved.error || r.status);
       hist.items = null;   // refresh next time the tab opens
       const link = await linkScreens(saved.id, order);
-      return { text: 'เก็บสำเนาในประวัติแล้ว' + link.text, bad: link.bad };
+      return { text: 'เก็บในประวัติฟิล์มแล้ว (' + (saved.info && saved.info.no || saved.name) + ')' + link.text, bad: link.bad, name: saved.name };
     } catch (e) { return { text: 'เก็บสำเนาในประวัติไม่สำเร็จ (' + e.message + ')', bad: true }; }
   }
   // tell each job screen on this film that its film is done
@@ -980,7 +991,8 @@ details.settings summary { cursor: pointer; font-weight: 600; font-size: .9rem }
     for (let i = 1; i <= doc.numPages; i++) {
       const pg = await doc.getPage(i); const v = pg.getViewport({ scale: 1 });
       if (!gap) gap = v.width * 0.06;
-      pages.push({ pg, x, w: v.width, h: v.height, cap: `แผ่น ${i} · ${plan.sheets[i - 1].length} บล็อก · ใช้ ${Math.round(used[i - 1])} mm` });
+      const nb = (plan.sheets[i - 1] || []).length;
+      pages.push({ pg, x, w: v.width, h: v.height, cap: `แผ่น ${i}${nb ? ` · ${nb} บล็อก` : ''}${used ? ` · ใช้ ${Math.round(used[i - 1])} mm` : ''}` });
       x += v.width + gap; H = Math.max(H, v.height);
     }
     if (id !== buildId) { doc.destroy(); return; }
@@ -1061,19 +1073,14 @@ details.settings summary { cursor: pointer; font-weight: 600; font-size: .9rem }
   $('save').addEventListener('click', async () => {
     if (!lastPdf || busy) return;
     const pdf = lastPdf, plan = lastPlan, blocks = lastBlocks;   // the film as shown now
-    const real = jobs.filter(r => r.job && !r.sample && !r.off);
-    const d = new Date(); const p2 = (n) => String(n).padStart(2, '0'); const stamp = `${d.getFullYear()}-${p2(d.getMonth() + 1)}-${p2(d.getDate())}_${p2(d.getHours())}${p2(d.getMinutes())}${p2(d.getSeconds())}`;
-    // name after the job when every design comes from one job (or one customer), otherwise a general name
-    const scr = real.map(r => r.screen).filter(Boolean), safe = (t) => String(t).replace(/[\\/:*?"<>|]+/g, '_').trim();
-    const jobNos = [...new Set(scr.map(x => x.jobNo))], custs = [...new Set(scr.map(x => x.customer))];
-    const base = scr.length === real.length && scr.length ? (jobNos.length === 1 ? `${safe(custs[0])}_${jobNos[0]}_film` : custs.length === 1 ? `${safe(custs[0])}_${jobNos.length}jobs_film` : `film_${jobNos.length}jobs`)
-      : real.length === 1 ? real[0].name.replace(/\.(ai|pdf)$/i, '') + '_film' : `film_${st.sheetW}x${st.sheetH}_${real.length || 1}jobs`;
-    const filename = `${base}_${stamp}.pdf`;
+    // the server gives the film its number; the file is named <number>_<date>_<time>.pdf
+    const d = new Date(); const p2 = (n) => String(n).padStart(2, '0'); const stamp = `${d.getFullYear()}-${p2(d.getMonth() + 1)}-${p2(d.getDate())}_${p2(d.getHours())}${p2(d.getMinutes())}`;
     // 1) store the copy and the originals on the server first, 2) then hand the file to the browser
     busy = true; const btn = $('save'), label = btn.textContent; btn.disabled = true; btn.textContent = 'กำลังบันทึก…';
     let stored = null;
-    try { stored = await archive(filename, pdf, plan, blocks); }
+    try { stored = await archive(stamp, pdf, plan, blocks); }
     finally { busy = false; btn.disabled = false; btn.textContent = label; }
+    const filename = (stored && stored.name) || `film_${stamp}.pdf`;
     const tail = stored ? ' · ' + stored.text : '';
     const bad = !!(stored && stored.bad);
     const inViewer = !!(window.claude && window.claude.use);
@@ -1100,6 +1107,8 @@ details.settings summary { cursor: pointer; font-weight: 600; font-size: .9rem }
   (async function start() {
     if (!window.PDFLib || !C) { showMsg('<div class="empty">โหลดเครื่องมือไม่สำเร็จ ลองรีเฟรชหน้า</div>'); return; }
     syncNote();
+    const viewId = new URLSearchParams(location.search).get('view');
+    if (viewId) { await viewFilm(viewId); return; }
     await loadRemote();
     renderJobs();
     const want = new URLSearchParams(location.search).get('add');
@@ -1108,6 +1117,68 @@ details.settings summary { cursor: pointer; font-weight: 600; font-size: .9rem }
     try { await Promise.race([document.fonts.load('10px "IBM Plex Sans Thai"', 'ก'), new Promise(r => setTimeout(r, 2500))]); } catch (e) {}
     build();
   })();
+
+  /* ---------- view mode (/film/?view=<id>): a saved film next to its originals, read-only ---------- */
+  // everything shown comes from the film's own snapshot (info.items), not from the blocks as they are now
+  async function viewFilm(id) {
+    $('queueBox').hidden = true; $('viewBox').hidden = false;
+    document.querySelectorAll('.saveside').forEach(e => { e.hidden = true; });
+    const h1 = document.querySelector('header h1'); if (h1 && h1.lastChild) h1.childNodes.forEach(n => { if (n.nodeType === 3 && n.textContent.trim()) n.textContent = 'ดูฟิล์ม '; });
+    let f;
+    try { const r = await apiFetch('/api/films/' + id + '/info'); f = await r.json(); if (!r.ok) throw new Error(f.error || r.status); }
+    catch (e) { $('vList').innerHTML = ''; const m = document.createElement('div'); m.className = 'qempty'; m.textContent = 'เปิดฟิล์มนี้ไม่ได้: ' + e.message; $('vList').appendChild(m); showMsg('<div class="empty">ไม่พบฟิล์มนี้ อาจถูกลบไปแล้ว</div>'); return; }
+    const info = f.info || {}, items = info.items || [], no = info.no || f.name.replace(/\.pdf$/i, '');
+    $('vTitle').textContent = no; document.title = no + ' · ฟิล์ม';
+    const d = new Date(f.created), p2 = (n) => String(n).padStart(2, '0');
+    $('vMeta').textContent = `${p2(d.getDate())}/${p2(d.getMonth() + 1)}/${(d.getFullYear() + 543) % 100} ${p2(d.getHours())}:${p2(d.getMinutes())} · ${items.length || info.blocks || 0} ลาย · ${info.sheets || 1} แผ่น${info.by ? ' · ' + info.by : ''}`;
+    $('vOpen').href = tq('/api/films/' + id);
+    let armT = 0; const del = $('vDel');
+    del.addEventListener('click', async () => {
+      if (!del.classList.contains('armed')) { del.classList.add('armed'); del.textContent = 'กดอีกครั้งเพื่อลบ'; armT = setTimeout(() => { del.classList.remove('armed'); del.textContent = 'ลบฟิล์ม'; }, 4000); return; }
+      clearTimeout(armT); del.disabled = true; del.textContent = 'กำลังลบ…';
+      try { const r = await apiFetch('/api/films/' + id, { method: 'DELETE' }); if (!r.ok) throw new Error(r.status); location.href = '/#films'; }
+      catch (e) { del.disabled = false; del.classList.remove('armed'); del.textContent = 'ลบฟิล์ม'; setStatus('ลบไม่สำเร็จ: ' + e.message, true); }
+    });
+    // the designs on this film, as they were when it was made
+    const box = $('vList'); box.textContent = '';
+    const recOf = new Map(), recs = [];
+    items.forEach((x, n) => {
+      const row = document.createElement('div'); row.className = 'qrow vrow';
+      let pic;
+      const src = x.preview ? tq('/api/files/' + x.preview + '?inline=1') : x.thumb ? tq(`/api/films/${id}/t${n}`) : '';
+      if (src) { pic = document.createElement('img'); pic.loading = 'lazy'; pic.alt = ''; pic.src = src; } else { pic = document.createElement('span'); pic.className = 'noimg'; }
+      const t = document.createElement('span'); t.className = 'qt';
+      const b = document.createElement('b'); b.textContent = x.design || x.file || '(ไม่มีชื่อ)'; t.appendChild(b);
+      const s1 = document.createElement('small'); s1.textContent = [x.stencilId, x.customer || 'ไม่ระบุลูกค้า', x.jobNo || (x.screenId ? '' : 'ไม่มีใบงาน')].filter(Boolean).join(' · '); t.appendChild(s1);
+      const s2 = document.createElement('small');
+      s2.textContent = [x.frameSource === 'customer' ? 'บล็อคเดิมลูกค้า' : (x.stencilId ? 'บล็อคใหม่' : ''), (x.sizes || []).length ? 'ไซส์ ' + x.sizes.join(', ') : '', x.mesh, x.thick ? x.thick + ' µm' : '', x.compUm ? 'ชดเชย ' + x.compUm + ' µm' : 'ไม่ชดเชย'].filter(Boolean).join(' · ');
+      t.appendChild(s2);
+      row.append(pic, t); box.appendChild(row);
+      if (x.orig && x.place && x.place.bbox) {
+        const key = x.orig + ':' + (x.page || 0);
+        if (!recOf.has(key)) { const rec = { id: ++seq, name: x.origName || x.design || 'ต้นฉบับ', fileId: x.orig, page: x.page || 0, job: {} }; recOf.set(key, rec); recs.push(rec); }
+        const rec = recOf.get(key);
+        row.addEventListener('click', () => { if (rec.bytes) showOrig(rec); });
+      }
+    });
+    if (!items.length) { const m = document.createElement('div'); m.className = 'qempty'; m.textContent = 'ไม่มีรายละเอียดลายของฟิล์มนี้'; box.appendChild(m); }
+    // film pane: the PDF exactly as saved; original pane: the block's original file kept with the film
+    setStatus('กำลังเปิดฟิล์มและไฟล์ต้นฉบับ…');
+    try {
+      const r = await apiFetch('/api/films/' + id); if (!r.ok) throw new Error(r.status);
+      const pdf = new Uint8Array(await r.arrayBuffer());
+      for (const rec of recs) {
+        try { const o = await apiFetch('/api/files/' + rec.fileId); if (!o.ok) throw new Error(o.status); rec.bytes = new Uint8Array(await o.arrayBuffer()); jobs.push(rec); }
+        catch (e) { rec.error = 'เปิดไฟล์ต้นฉบับไม่ได้'; }
+      }
+      const sheets = [];
+      items.forEach(x => { if (!x.place || !x.place.bbox) return; const rec = recOf.get(x.orig + ':' + (x.page || 0));
+        (sheets[x.place.si || 0] ||= []).push({ ...x.place, b: { bbox: x.place.bbox, job: rec && rec.bytes ? rec.job : {} } }); });
+      const n = Math.max(info.sheets || 1, sheets.length); for (let i = 0; i < n; i++) sheets[i] = sheets[i] || [];
+      await preview(pdf, buildId, null, { sheets });
+      setStatus(recs.length && !jobs.length ? 'ฟิล์มนี้ไม่มีไฟล์ต้นฉบับเก็บไว้เทียบ (ฟิล์มที่ทำก่อนมีการเก็บ snapshot)' : '');
+    } catch (e) { setStatus('เปิดฟิล์มไม่ได้: ' + e.message, true); }
+  }
 
   /* ---------- screens from the job app that still need a film: one list, ticked = on the sheet ---------- */
   const Q = { data: null, sel: new Set(), files: new Map(), loading: new Set(), err: new Map() };
@@ -1214,7 +1285,10 @@ details.settings summary { cursor: pointer; font-weight: 600; font-size: .9rem }
         // label under the design on the film: stencil ID + customer REF, so the film piece can be matched to its stencil
         const ref = a.customerRef || String(a.fileName || 'artwork').replace(/\.(ai|pdf)$/i, ''), label = s.stencilId ? `${s.stencilId} ${ref}` : ref;
         const rec = { id: ++seq, name: `${s.design || a.name || ref}`, bytes: bytes.slice(0), page: a.page || 0, src: a.fileName || label, srcBytes: bytes,
-          screen: { id: s.id, stencilId: s.stencilId || '', jobNo: j.no, design: s.design || a.name || '', customer: j.customer, thick: Number(s.target) || null } };
+          screen: { id: s.id, stencilId: s.stencilId || '', jobNo: j.no, design: s.design || a.name || '', customer: j.customer, thick: Number(s.target) || null },
+          // snapshot stored with the film: the block as it is now, and which original (file, page) it came from
+          snap: { stencilId: s.stencilId || '', customerRef: s.customerRef || a.customerRef || '', sizes: s.sizes || [], frameSource: s.frameSource || 'new',
+            mesh: s.mesh || '', frame: s.frame || '', emulsion: s.emulsion || '', preview: s.preview || a.preview || '', orig: a.file || '', origName: a.fileName || '', page: a.page || 0 } };
         rec.job = await C.analyze(bytes, label, a.page || 0);
         const d = C.describe(rec.job, st);
         if (!d.designs.length) throw new Error('ไม่พบลายในไฟล์');

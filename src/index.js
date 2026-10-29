@@ -47,6 +47,7 @@ function fileIdsOf(d) {
   return [...(d.originals || []), ...(d.prepared || []), ...(d.preview ? [d.preview] : [])];
 }
 const artFileIds = a => [a.file, a.preview].filter(Boolean);
+const filmFileIds = r => { try { return (JSON.parse(r.info || '{}').items || []).flatMap(x => [x.orig, x.preview]).filter(Boolean); } catch (e) { return []; } };
 
 const json = (d, status = 200) =>
   new Response(JSON.stringify(d), { status, headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' } });
@@ -240,7 +241,8 @@ async function api(req, env, url) {
       // ลบเฉพาะไฟล์ที่ไม่มีใบงานอื่นหรือคลังลายใช้อยู่ (ไฟล์ลายในคลังใช้ซ้ำได้หลายใบงาน)
       const { results: others } = await env.DB.prepare('SELECT data FROM screens WHERE job_id != ?').bind(id).all();
       const { results: arts } = await env.DB.prepare('SELECT data FROM artworks').all();
-      const keep = new Set([...others.flatMap(s => fileIdsOf(JSON.parse(s.data))), ...arts.flatMap(a => artFileIds(JSON.parse(a.data)))]);
+      const { results: films } = await env.DB.prepare('SELECT info FROM film_outputs').all();   // films keep their snapshot's original and picture
+      const keep = new Set([...others.flatMap(s => fileIdsOf(JSON.parse(s.data))), ...arts.flatMap(a => artFileIds(JSON.parse(a.data))), ...films.flatMap(filmFileIds)]);
       const fids = [...new Set(sc.flatMap(s => fileIdsOf(JSON.parse(s.data))))].filter(f => !keep.has(f));
       if (fids.length) {
         if (env.FILES) await env.FILES.delete(fids);
@@ -342,7 +344,8 @@ async function api(req, env, url) {
       const gone = [];
       for (const f of artFileIds(d)) {
         const other = await env.DB.prepare('SELECT 1 FROM artworks WHERE instr(data, ?) > 0 LIMIT 1').bind(`"${f}"`).first()
-          || await env.DB.prepare('SELECT 1 FROM screens WHERE instr(data, ?) > 0 LIMIT 1').bind(`"${f}"`).first();
+          || await env.DB.prepare('SELECT 1 FROM screens WHERE instr(data, ?) > 0 LIMIT 1').bind(`"${f}"`).first()
+          || await env.DB.prepare('SELECT 1 FROM film_outputs WHERE instr(info, ?) > 0 LIMIT 1').bind(`"${f}"`).first();
         if (!other) gone.push(f);
       }
       if (gone.length) {
@@ -385,7 +388,8 @@ async function api(req, env, url) {
     }
     if (m === 'DELETE') {
       // ไฟล์ที่ลายในคลังใช้อยู่ไม่ลบ (เอาออกจากบล็อคได้ แต่ไฟล์ยังอยู่ในคลังลาย)
-      const inLib = await env.DB.prepare('SELECT 1 FROM artworks WHERE instr(data, ?) > 0 LIMIT 1').bind(`"${id}"`).first();
+      const inLib = await env.DB.prepare('SELECT 1 FROM artworks WHERE instr(data, ?) > 0 LIMIT 1').bind(`"${id}"`).first()
+        || await env.DB.prepare('SELECT 1 FROM film_outputs WHERE instr(info, ?) > 0 LIMIT 1').bind(`"${id}"`).first();
       if (inLib) return json({ ok: true, kept: true });
       if (env.FILES) await env.FILES.delete(id);
       await env.DB.prepare('DELETE FROM files WHERE id = ?').bind(id).run();

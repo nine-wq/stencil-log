@@ -44,9 +44,17 @@ function cleanInfo(raw, me) {
   try { o = JSON.parse(raw || '{}'); } catch { o = {}; }
   const str = (v, n = 200) => String(v == null ? '' : v).slice(0, n);
   const num = v => { const x = Number(v); return Number.isFinite(x) ? x : null; };
+  const id = v => (/^[\w-]{1,40}$/.test(String(v || '')) ? String(v) : '');
+  const nums = (a, n) => (Array.isArray(a) ? a.slice(0, n).map(num) : null);
+  // one item per design on the film: a snapshot of the block as it was when the film was made
   const items = Array.isArray(o.items) ? o.items.slice(0, 200).map(it => ({
     file: str(it.file), src: str(it.src), customer: str(it.customer, 100), thick: num(it.thick), compUm: num(it.compUm), mode: str(it.mode, 10),
-    screenId: str(it.screenId, 40), jobNo: str(it.jobNo, 40), design: str(it.design, 80), thumb: false
+    screenId: str(it.screenId, 40), jobNo: str(it.jobNo, 40), design: str(it.design, 80), thumb: false,
+    stencilId: str(it.stencilId, 30), customerRef: str(it.customerRef, 120), sizes: Array.isArray(it.sizes) ? it.sizes.slice(0, 20).map(x => str(x, 30)) : [],
+    frameSource: it.frameSource === 'customer' ? 'customer' : 'new', mesh: str(it.mesh, 40), frame: str(it.frame, 60), emulsion: str(it.emulsion, 60),
+    preview: id(it.preview), orig: id(it.orig), origName: str(it.origName, 200), page: num(it.page) || 0,
+    place: it.place && typeof it.place === 'object' ? { si: num(it.place.si) || 0, x: num(it.place.x), y: num(it.place.y), w: num(it.place.w), h: num(it.place.h),
+      W: num(it.place.W), H: num(it.place.H), rot: !!it.place.rot, bbox: nums(it.place.bbox, 4) } : null
   })) : [];
   return { sheets: num(o.sheets), blocks: num(o.blocks), sheetW: num(o.sheetW), sheetH: num(o.sheetH), date: str(o.date, 20), by: me.name, items, originals: [] };
 }
@@ -120,9 +128,14 @@ export async function filmApi(req, env, url, p, m, me) {
     if (!buf.byteLength) return json({ error: 'empty' }, 400);
     if (buf.byteLength > MAX_PDF) return json({ error: 'too_large' }, 413);
     if (String.fromCharCode(...new Uint8Array(buf, 0, Math.min(5, buf.byteLength))) !== '%PDF-') return json({ error: 'not_pdf' }, 400);
-    const name = safeName(form.get('name'));
     const info = cleanInfo(form.get('info'), me);
     const id = fid(), created = Date.now();
+    // film number FM-<Thai YY><MM>-<NNN>; the file is named <number>_<date>_<time>.pdf (the browser's local time)
+    const fs = await env.DB.prepare("UPDATE settings SET value = CAST(value AS INTEGER) + 1 WHERE key = 'fseq' RETURNING value").first();
+    const th = new Date(created + 7 * 3600e3), p2 = n => String(n).padStart(2, '0');
+    info.no = `FM-${p2((th.getUTCFullYear() + 543) % 100)}${p2(th.getUTCMonth() + 1)}-${String(Number(fs ? fs.value : 1) - 1).padStart(3, '0')}`;
+    const stamp = String(form.get('stamp') || '');
+    const name = safeName(`${info.no}_${/^\d{4}-\d{2}-\d{2}_\d{4,6}$/.test(stamp) ? stamp : th.toISOString().slice(0, 16).replace('T', '_').replace(':', '')}.pdf`);
     await env.FILES.put(`film/${id}.pdf`, buf, { httpMetadata: { contentType: 'application/pdf' }, customMetadata: { name } });
     const puts = [];
     for (let n = 0; n < info.items.length; n++) {
@@ -185,6 +198,14 @@ export async function filmApi(req, env, url, p, m, me) {
     return json({ linked: done });
   }
 
+  // one film's details (for the film page in view mode)
+  const im = p.match(/^\/films\/([a-f0-9]{16})\/info$/);
+  if (im && m === 'GET') {
+    const x = await env.DB.prepare('SELECT id, name, created, size, info FROM film_outputs WHERE id = ?').bind(im[1]).first();
+    if (!x) return json({ error: 'not_found' }, 404);
+    return json({ id: x.id, name: x.name, created: x.created, size: x.size, info: JSON.parse(x.info || '{}') });
+  }
+
   const mm = p.match(/^\/films\/([a-f0-9]{16})$/);
   if (mm) {
     const id = mm[1];
@@ -200,8 +221,12 @@ export async function filmApi(req, env, url, p, m, me) {
     }
     if (m === 'DELETE') {
       const meta = await env.DB.prepare('SELECT info FROM film_outputs WHERE id = ?').bind(id).first();
-      let shas = [];
-      try { shas = ((JSON.parse((meta && meta.info) || '{}').originals) || []).map(o => o.sha).filter(x => /^[a-f0-9]{64}$/.test(x)); } catch {}
+      let shas = [], refs = [];
+      try {
+        const inf = JSON.parse((meta && meta.info) || '{}');
+        shas = (inf.originals || []).map(o => o.sha).filter(x => /^[a-f0-9]{64}$/.test(x));
+        refs = [...new Set((inf.items || []).flatMap(x => [x.orig, x.preview]).filter(x => /^[\w-]{1,40}$/.test(String(x || ''))))];
+      } catch {}
       await env.DB.prepare('DELETE FROM film_outputs WHERE id = ?').bind(id).run();
       // screens that pointed at this film go back to "waiting for film"
       try {
@@ -221,7 +246,17 @@ export async function filmApi(req, env, url, p, m, me) {
           const other = await env.DB.prepare('SELECT 1 FROM film_outputs WHERE instr(info, ?) > 0 LIMIT 1').bind(sha).first();
           if (!other) keys.push(`film/orig/${sha}`);
         }
+        // the block's original and picture kept for this film's snapshot: remove them when nothing else uses them any more
+        const gone = [];
+        for (const f of refs) {
+          const q = `"${f}"`;
+          const used = await env.DB.prepare('SELECT 1 FROM screens WHERE instr(data, ?) > 0 LIMIT 1').bind(q).first()
+            || await env.DB.prepare('SELECT 1 FROM artworks WHERE instr(data, ?) > 0 LIMIT 1').bind(q).first()
+            || await env.DB.prepare('SELECT 1 FROM film_outputs WHERE instr(info, ?) > 0 LIMIT 1').bind(q).first();
+          if (!used) { keys.push(f); gone.push(f); }
+        }
         await env.FILES.delete(keys);
+        if (gone.length) await env.DB.batch(gone.map(f => env.DB.prepare('DELETE FROM files WHERE id = ?').bind(f)));
       } catch (e) { console.log('film delete cleanup', id, String(e && e.message || e)); }
       return json({ ok: true });
     }
