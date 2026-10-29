@@ -447,7 +447,7 @@ function blockRow(j, s) {
   const row = `<div class="brow" role="button" tabindex="0" data-a="openscreen" data-j="${j.id}" data-v="${s.id}">
     ${s.preview ? `<img class="thumb" src="${fileUrl(s.preview, true)}" alt="" loading="lazy">` : '<span class="thumb none" aria-hidden="true"></span>'}
     <span class="bt"><b>${esc(s.design || '(ยังไม่ตั้งชื่อ)')}</b>${s.stencilId ? `<span class="sidtxt">${esc(s.stencilId)}</span>` : ''}
-      <span class="muted small bl">${s.frameSource === 'customer' ? '<span class="fsrc">เดิม</span>' : 'ใหม่'} · <span class="num">${esc(s.mesh)}</span> · <span class="num">${esc(s.target)} µm</span>${(s.sizes || []).length ? ` · ${esc(s.sizes.join(', '))}` : ''}</span></span>
+      <span class="muted small bl">${s.frameSource === 'customer' ? '<span class="fsrc">เดิม</span>' : '<span class="fnew">ใหม่</span>'} · <span class="num">${esc(s.mesh)}</span> · <span class="num">${esc(s.target)} µm</span>${(s.sizes || []).length ? ` · ${esc(s.sizes.join(', '))}` : ''}</span></span>
     <span class="bstate">${waitingFile(s) ? '<span class="chip fl-wait" title="รอไฟล์จากลูกค้า">รอไฟล์</span>' : needsFilm(s) ? '<span class="chip fl-need" title="ยังไม่ทำฟิล์ม">รอฟิล์ม</span>' : ''}${chipShort(s.status)}
       ${canCoat && s.coats.length ? `<span class="rounds num" title="ขึ้นกาวแล้ว ${s.coats.length} รอบ">× ${s.coats.length}</span>` : ''}
       ${canCoat ? `<button class="btn sm primary coatbtn" data-a="quickcoat" data-j="${j.id}" data-v="${s.id}" title="บันทึกรอบขึ้นกาวของบล็อคนี้ (เหมือนกด + ขึ้นกาว ในหน้าบล็อค)">+ ขึ้นกาว</button>` : ''}</span>

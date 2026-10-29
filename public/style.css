@@ -4,7 +4,7 @@
   --fg:#1A1F27; --muted:#5D6570;
   --emulsion:#3141B0; --emulsion-soft:#E4E7FA; --on-emulsion:#FFFFFF;
   --mesh:#C99500; --mesh-soft:#FBF0CC;
-  --ok:#1E7A4A; --ok-soft:#DDF1E5; --warn:#A8620B; --warn-soft:#FBEBD3; --bad:#B3261E; --bad-soft:#F9DEDC;
+  --ok:#1E7A4A; --ok-soft:#DDF1E5; --new:#0B7F86; --warn:#A8620B; --warn-soft:#FBEBD3; --bad:#B3261E; --bad-soft:#F9DEDC;
   --display:"Chakra Petch","IBM Plex Sans Thai",system-ui,sans-serif;
   --body:"IBM Plex Sans Thai",system-ui,-apple-system,"Segoe UI",sans-serif;
   --mono:"IBM Plex Mono",ui-monospace,Menlo,monospace;
@@ -15,14 +15,14 @@
   --fg:#E8EAEE; --muted:#9AA2AE;
   --emulsion:#8D9BFF; --emulsion-soft:#262C52; --on-emulsion:#10132A;
   --mesh:#E8BC3A; --mesh-soft:#3A3115;
-  --ok:#5CCB8E; --ok-soft:#173326; --warn:#F0A94A; --warn-soft:#3A2A12; --bad:#FF8A80; --bad-soft:#3D1C1A;
+  --ok:#5CCB8E; --ok-soft:#173326; --new:#4FD6D0; --warn:#F0A94A; --warn-soft:#3A2A12; --bad:#FF8A80; --bad-soft:#3D1C1A;
   color-scheme:dark}}
 :root[data-theme="dark"]{
   --bg:#13161B; --surface:#1C2027; --sunk:#252A32; --line:#323844;
   --fg:#E8EAEE; --muted:#9AA2AE;
   --emulsion:#8D9BFF; --emulsion-soft:#262C52; --on-emulsion:#10132A;
   --mesh:#E8BC3A; --mesh-soft:#3A3115;
-  --ok:#5CCB8E; --ok-soft:#173326; --warn:#F0A94A; --warn-soft:#3A2A12; --bad:#FF8A80; --bad-soft:#3D1C1A;
+  --ok:#5CCB8E; --ok-soft:#173326; --new:#4FD6D0; --warn:#F0A94A; --warn-soft:#3A2A12; --bad:#FF8A80; --bad-soft:#3D1C1A;
   color-scheme:dark}
 *{box-sizing:border-box}
 body{background:var(--bg);color:var(--fg);font-family:var(--body);font-size:15px;line-height:1.55}
@@ -356,6 +356,7 @@ span.szchip{display:inline-flex;align-items:center;min-height:26px;margin:2px 4p
 .seg button.on{background:var(--emulsion);color:var(--on-emulsion)}
 .seg button:focus-visible{outline:2px solid var(--emulsion);outline-offset:-2px}
 .fsrc{color:var(--warn);font-weight:600}
+.fnew{color:var(--new);font-weight:600}
 .stack{display:flex;flex-direction:column;gap:10px;min-width:0}
 .stack .ro-v{min-height:0;padding:2px}
 .waitfile{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;text-align:center;min-height:220px;padding:16px;border:2px dashed color-mix(in srgb,var(--warn) 55%,var(--line));border-radius:var(--r);background:var(--warn-soft)}
