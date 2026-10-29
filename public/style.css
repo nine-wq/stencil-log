@@ -464,3 +464,19 @@ div.brow:hover{background:none}
 .seg.fsrcpick .fs-customer{color:var(--warn)}
 .seg.fsrcpick .fs-new.on{background:var(--new);color:var(--surface)}
 .seg.fsrcpick .fs-customer.on{background:var(--warn);color:var(--surface)}
+
+/* job page rows (jobBlockRow) */
+.brow.jr{grid-template-columns:97px minmax(0,1fr) auto;align-items:start}
+.brow.jr .thumb{width:97px;height:97px}
+.brow.jr .bt{gap:3px}
+.brow.jr .sidtxt{margin-bottom:2px}
+.jrspec{display:flex;flex-wrap:wrap;gap:2px 16px;font-size:.84rem;line-height:1.45;color:var(--muted)}
+.jrspec .v{color:var(--fg)}
+.jrspec .fnew,.jrspec .fsrc{font-size:.84rem}
+.brow.jr .bstate{gap:5px}
+@media (max-width:560px){
+  .brow.jr.jr.jr{grid-template-columns:68px minmax(0,1fr);gap:10px;padding:10px 12px}
+  .brow.jr.jr.jr .thumb{width:68px;height:68px}
+  .brow.jr .bstate{grid-column:2;flex-direction:row;flex-wrap:wrap;align-items:center;justify-content:flex-start}
+  .jrspec{gap:1px 12px;font-size:.8rem}
+}

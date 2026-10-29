@@ -422,24 +422,31 @@ function filmState(s) {
   const a = s.artworkId && artOf(s.artworkId);
   return a && !a.filmable ? '<span class="muted small">ไฟล์ลายทำฟิล์มอัตโนมัติไม่ได้</span>' : '<span class="muted small">-</span>';
 }
+// job page row: same family as the home list rows (name, then muted id line, chips on the right),
+// with every spec as short label + value pairs instead of a form-like grid
 function jobBlockRow(j, s) {
-  const kv = (k, v) => `<span class="kv"><span class="k">${k}</span><span class="v">${v}</span></span>`;
-  return `<button class="brow jb" data-a="openscreen" data-j="${j.id}" data-v="${s.id}">
+  const kv = (k, v) => `<span><span class="k">${k}</span> <span class="v">${v}</span></span>`;
+  const film = waitingFile(s) ? '<span class="chip fl-wait">รอไฟล์จากลูกค้า</span>'
+    : s.film ? `<span class="chip fl-ok" title="ทำฟิล์มแล้ว ${esc(fmtT(s.film.at))}">ทำฟิล์มแล้ว</span>`
+    : needsFilm(s) ? '<span class="chip fl-need">ยังไม่ทำฟิล์ม</span>' : '';
+  const rounds = ['ordered', 'coating', 'rework'].includes(s.status) && s.coats.length ? `<span class="rounds" title="ขึ้นกาวแล้ว ${s.coats.length} รอบ">× ${s.coats.length}</span>` : '';
+  return `<button class="brow jr" data-a="openscreen" data-j="${j.id}" data-v="${s.id}">
     ${s.preview ? `<img class="thumb" src="${fileUrl(s.preview, true)}" alt="" loading="lazy">` : '<span class="thumb none" aria-hidden="true"></span>'}
     <span class="bt">
-      <span class="jbid">${s.stencilId ? `<span class="sid sm">${esc(s.stencilId)}</span>` : ''}${s.customerRef ? `<span class="cref">${esc(s.customerRef)}</span>` : ''}</span>
       <b>${esc(s.design || '(ยังไม่ตั้งชื่อ)')}</b>
-      <span class="kvs">
-        ${kv('ไซส์', (s.sizes || []).length ? esc(s.sizes.join(', ')) : '<span class="muted">ไม่ระบุ</span>')}
-        ${kv('เฟรม', `${esc(s.frame || '-')}${s.frameSource === 'customer' ? ' <span class="fsrc">บล็อคเดิมลูกค้า</span>' : ''}`)}
-        ${kv('ผ้าสกรีน', `<span class="num">${esc(s.mesh || '-')}</span>`)}
+      <span class="sidtxt">${[s.stencilId, s.customerRef].filter(Boolean).map(esc).join(' · ') || '&nbsp;'}</span>
+      <span class="jrspec">
+        ${kv(s.frameSource === 'customer' ? '<span class="fsrc">บล็อคเดิมลูกค้า</span>' : '<span class="fnew">บล็อคใหม่</span>', esc(s.frame || '-'))}
+        ${kv('ผ้า', esc(s.mesh || '-'))}
         ${kv('กาว', esc(s.emulsion || '-'))}
-        ${kv('ความหนา', `<span class="num">${esc(s.target || '-')} µm</span>`)}
-        ${kv('ชดเชยขอบ', compText(s))}
-        ${kv('ฟิล์ม', filmState(s))}
+      </span>
+      <span class="jrspec">
+        ${kv('หนา', `${esc(s.target || '-')} µm`)}
+        ${kv('ชดเชย', compText(s))}
+        ${kv('ไซส์', (s.sizes || []).length ? esc(s.sizes.join(', ')) : '<span class="muted">ไม่ระบุ</span>')}
       </span>
     </span>
-    ${chip(s.status)}
+    <span class="bstate">${film}${chip(s.status)}${rounds}</span>
   </button>`;
 }
 function blockRow(j, s) {
