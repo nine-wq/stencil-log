@@ -43,7 +43,7 @@ One page, no tabs: the job list. The top bar has ⟳, ⚙ and the user. Films ar
      - The list is `master.sizes`, edited in ⚙ (รายการให้เลือก → ไซส์). Default: FREE SIZE, XS–XXL.
      - Shown on home rows, in search and in CSV.
    - **New or the customer's own stencil**: `screen.frameSource = 'new' | 'customer'` (บล็อคใหม่ / บล็อคเดิมลูกค้า).
-     - Set with a two-button switch at the top of สเปคบล็อค and on the screen page. Default: new.
+     - Set with a two-button switch at the top of สเปคบล็อค and on the screen page. Default: new. The switch is full width and coloured like the list (บล็อคใหม่ teal `--new`, บล็อคเดิมลูกค้า orange `--warn`).
      - Shown on home rows when it is the customer's, and included in search and CSV.
    - **Film group**: compensation and the colours to leave out.
      - It sets the compensation (auto = target × factor / manual µm / none) and the colours to leave out.

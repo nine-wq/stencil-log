@@ -470,8 +470,8 @@ const FRAME_SRC = [['new', 'บล็อคใหม่'], ['customer', 'บล�
 const frameSrcText = s => s.frameSource === 'customer' ? 'บล็อคเดิมลูกค้า' : 'บล็อคใหม่';
 function frameSrcPicker(t, s) {
   const cur = s.frameSource === 'customer' ? 'customer' : 'new';
-  return `<div class="seg" role="radiogroup" aria-label="บล็อคใหม่หรือบล็อคเดิมลูกค้า">${FRAME_SRC.map(([v, l]) =>
-    `<button type="button" role="radio" aria-checked="${cur === v}" class="${cur === v ? 'on' : ''}" data-a="framesrc" data-v="${t}" data-k="${v}">${l}</button>`).join('')}</div>`;
+  return `<div class="seg fsrcpick" role="radiogroup" aria-label="บล็อคใหม่หรือบล็อคเดิมลูกค้า">${FRAME_SRC.map(([v, l]) =>
+    `<button type="button" role="radio" aria-checked="${cur === v}" class="fs-${v}${cur === v ? ' on' : ''}" data-a="framesrc" data-v="${t}" data-k="${v}">${l}</button>`).join('')}</div>`;
 }
 function blankScreen() {
   const m = db.master, cs = custSpec(ui.draft && ui.draft.customer) || {};

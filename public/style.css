@@ -454,3 +454,11 @@ div.brow:hover{background:none}
 .brow .bt .bl{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
 .brow .bt .faint{color:var(--muted);opacity:.6}
 .bstate .rounds{font-size:.8rem;color:var(--muted);font-weight:600;padding-right:6px}
+
+/* บล็อคใหม่ / บล็อคเดิมลูกค้า: เต็มความกว้าง สีเดียวกับในรายการ (ใหม่ = teal, เดิม = ส้ม) */
+.seg.fsrcpick{display:flex;width:100%}
+.seg.fsrcpick button{flex:1}
+.seg.fsrcpick .fs-new{color:var(--new)}
+.seg.fsrcpick .fs-customer{color:var(--warn)}
+.seg.fsrcpick .fs-new.on{background:var(--new);color:var(--surface)}
+.seg.fsrcpick .fs-customer.on{background:var(--warn);color:var(--surface)}
