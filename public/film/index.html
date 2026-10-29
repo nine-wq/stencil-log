@@ -80,7 +80,7 @@ h2 { font-size: .78rem; font-weight: 600; text-transform: uppercase; letter-spac
 .qrow .qt small.bad { color: var(--bad); white-space: normal }
 .hpanel { margin: 2px 0 8px 30px; padding: 4px 10px 8px; border-left: 2px solid var(--accent-soft); min-width: 0 }
 @media (max-width: 420px) { .hpanel { margin-left: 4px } }
-.vrow { grid-template-columns: 56px minmax(0, 1fr) }
+.vrow { grid-template-columns: 56px minmax(0, 1fr); cursor: pointer }
 .vrow img, .vrow .noimg { width: 56px; height: 56px }
 .vrow .qt b { font-weight: 600 }
 .vdel { color: var(--bad) }
@@ -232,17 +232,12 @@ details.settings summary { cursor: pointer; font-weight: 600; font-size: .9rem }
   padding: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px) env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px) }
 .cmpbar { display: flex; align-items: center; gap: 6px 14px; padding: 6px 10px; background: var(--panel); border-bottom: 1px solid var(--line); flex-wrap: wrap; font-size: .85rem }
 .cmpbar label { display: inline-flex; align-items: center; gap: 6px; cursor: pointer }
-.cmppanes { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); min-height: 0 }
-.cmp.solo .cmppanes { grid-template-columns: minmax(0, 1fr) }
-.cmp.solo #zvO { display: none }
+.cmppanes { display: grid; grid-template-columns: minmax(0, 1fr); min-height: 0 }
 .zv { display: grid; grid-template-rows: auto minmax(0, 1fr); min-width: 0; min-height: 0 }
-#zvO { border-right: 1px solid var(--line) }
-@media (max-width: 900px) {
-  .cmp { height: clamp(560px, 94vh, 1200px) }
-  .cmppanes { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) minmax(0, 1fr) }
-  .cmp.solo .cmppanes { grid-template-rows: minmax(0, 1fr) }
-  #zvO { border-right: 0; border-bottom: 1px solid var(--line) }
-}
+@media (max-width: 900px) { .cmp { height: clamp(460px, 82vh, 1100px) } }
+.cmpbar select { flex: 1 1 180px; min-width: 0; max-width: 100%; font: .85rem var(--font-body); padding: 4px 6px }
+.cmpop { display: grid !important; grid-template-columns: auto minmax(60px, 1fr) auto; flex: 1 1 200px; color: var(--muted); cursor: default !important }
+.cmpop input { width: 100%; accent-color: var(--accent) }
 .zvbar { display: flex; align-items: center; gap: 6px; padding: 5px 8px; background: var(--panel); border-bottom: 1px solid var(--line); flex-wrap: wrap; min-height: 42px }
 .zvtitle { font-size: .78rem; font-weight: 600; color: var(--muted); letter-spacing: .04em }
 .zvbar select { flex: 1 1 120px; min-width: 0; max-width: 100%; font: .82rem var(--font-body); padding: 3px 6px }
@@ -377,24 +372,14 @@ details.settings summary { cursor: pointer; font-weight: 600; font-size: .9rem }
       <div class="sheets" id="sheets"><div class="empty">กำลังโหลดเครื่องมือ…</div></div>
       <div class="cmp" id="cmp" hidden>
         <div class="cmpbar">
-          <label><input type="checkbox" id="cmpShow" checked> เทียบกับต้นฉบับ</label>
-          <label><input type="checkbox" id="cmpSync" checked> ซูมและเลื่อนพร้อมกัน</label>
-          <span class="zvsp"></span>
+          <select id="focusSel" aria-label="เลือกลายที่จะซูมดู"></select>
+          <label class="cmpop"><span>ต้นฉบับ</span><input type="range" id="cmpOp" min="0" max="100" step="1" aria-label="ความชัดของฟิล์มที่วางทับต้นฉบับ"><span>ฟิล์ม</span></label>
           <button type="button" id="cmpFull" title="ขยายเต็มจอ (Esc เพื่อออก)">เต็มจอ</button>
         </div>
         <div class="cmppanes">
-          <div class="zv" id="zvO">
-            <div class="zvbar">
-              <span class="zvtitle">ต้นฉบับ</span>
-              <select id="origSel" aria-label="เลือกไฟล์ต้นฉบับที่จะเทียบ"></select>
-              <button type="button" data-act="out" aria-label="ซูมออก">−</button><span class="zvpct" data-role="pct">100%</span><button type="button" data-act="in" aria-label="ซูมเข้า">+</button>
-              <button type="button" data-act="fit" title="พอดีกรอบ (0)">พอดี</button>
-            </div>
-            <div class="zvbody" tabindex="0" role="img" aria-label="ไฟล์ต้นฉบับ"><canvas></canvas></div>
-          </div>
           <div class="zv" id="zvF">
             <div class="zvbar">
-              <span class="zvtitle">ฟิล์ม</span>
+              <span class="zvtitle">ฟิล์มทับต้นฉบับ</span>
               <span class="zvnav" data-role="nav"><button type="button" data-act="prev" aria-label="แผ่นก่อนหน้า">‹</button><span data-role="page">แผ่น 1</span><button type="button" data-act="next" aria-label="แผ่นถัดไป">›</button></span>
               <span class="zvsp"></span>
               <button type="button" data-act="out" aria-label="ซูมออก">−</button><span class="zvpct" data-role="pct">100%</span><button type="button" data-act="in" aria-label="ซูมเข้า">+</button>
@@ -827,9 +812,9 @@ details.settings summary { cursor: pointer; font-weight: 600; font-size: .9rem }
   // With "ซูมและเลื่อนพร้อมกัน" on, both panes show the same spot of the same design at the same scale.
   const dpr = () => Math.min(3, window.devicePixelRatio || 1);
   const CAP = 26;   // px under the pages for the caption
-  function makeViewer(root) {
+  function makeViewer(root, under) {
     const v = { pages: [], W: 0, H: 0, scale: 1, tx: 0, ty: 0, touched: false, cur: 0, doc: null,
-      task: null, gen: 0, timer: 0, snap: null, pointers: new Map(), pinch: null, drag: null, onMove: null, lastBox: null };
+      task: null, gen: 0, timer: 0, snap: null, pointers: new Map(), pinch: null, drag: null, onMove: null, lastBox: null, alpha: 1, under };
     const body = root.querySelector('.zvbody'), cv = body.querySelector('canvas'), ctx = cv.getContext('2d');
     const q = (r) => root.querySelector(`[data-role="${r}"]`);
     const shown = () => !root.closest('[hidden]') && body.clientWidth > 0;
@@ -856,6 +841,13 @@ details.settings summary { cursor: pointer; font-weight: 600; font-size: .9rem }
       v.scale = scale; v.tx = (r.width - w * scale) / 2 - x * scale; v.ty = (r.height - CAP - h * scale) / 2;
     }
     function fit() { if (!v.pages.length || !shown()) return; view(v.W, v.H, 0); v.touched = false; changed(true, true); }
+    function fitRect(x, y, w, h) {   // world rectangle (viewport units at scale 1) fills the view
+      if (!v.pages.length || !shown()) return;
+      const r = body.getBoundingClientRect(), pad = r.width < 500 ? 14 : 28;
+      v.scale = Math.max(0.005, Math.min((r.width - 2 * pad) / w, (r.height - 2 * pad) / h, 40));
+      v.tx = r.width / 2 - (x + w / 2) * v.scale; v.ty = r.height / 2 - (y + h / 2) * v.scale;
+      v.touched = true; changed(true);
+    }
     function fitPage(n) {
       if (!v.pages.length) return;
       n = Math.max(0, Math.min(n, v.pages.length - 1)); const p = v.pages[n];
@@ -902,11 +894,21 @@ details.settings summary { cursor: pointer; font-weight: 600; font-size: .9rem }
       g.font = `${12 * k}px ${cs.getPropertyValue('--font-data')}`; g.textAlign = 'center'; g.textBaseline = 'top';
       v.pages.forEach(p => { const r = rectOf(p); if (r.w > 60 && p.cap) g.fillText(p.cap, (r.x + r.w / 2) * k, (r.y + r.h + 8) * k, Math.max(r.w, 200) * k); });
     }
-    function quickDraw() {
-      paintBase(ctx);
-      const s = v.snap;
-      if (s) { const k = dpr(), f = v.scale / s.scale; ctx.drawImage(s.canvas, (v.tx - s.tx * f) * k, (v.ty - s.ty * f) * k, s.canvas.width * f, s.canvas.height * f); }
-      paintCaps(ctx);
+    // the snapshot = film layer (+ originals layer, + where the originals are); the film goes over the originals at v.alpha
+    function paintSnap(g) {
+      const s = v.snap; if (!s) return;
+      const k = dpr(), f = v.scale / s.scale, dx = (v.tx - s.tx * f) * k, dy = (v.ty - s.ty * f) * k, W = s.canvas.width * f, H = s.canvas.height * f;
+      if (!s.under || !s.areas.length || v.alpha >= 1) { g.drawImage(s.canvas, dx, dy, W, H); return; }
+      const path = (outer) => { g.beginPath(); if (outer) g.rect(0, 0, cv.width, cv.height);
+        s.areas.forEach(a => a.forEach((pt, i) => g[i ? 'lineTo' : 'moveTo'](dx + pt[0] * f, dy + pt[1] * f))); };
+      g.drawImage(s.under, dx, dy, W, H);
+      g.save(); path(false); g.clip(); g.globalAlpha = v.alpha; g.drawImage(s.canvas, dx, dy, W, H); g.restore();
+      g.save(); path(true); g.clip('evenodd'); g.drawImage(s.canvas, dx, dy, W, H); g.restore();   // designs without their original stay solid
+    }
+    function quickDraw() { paintBase(ctx); paintSnap(ctx); paintCaps(ctx); }
+    function setAlpha(a) {
+      v.alpha = a;
+      if (v.under && a < 1 && v.snap && !v.snap.under) changed(false, true); else quickDraw();
     }
     async function sharpDraw() {
       if (!v.pages.length || !shown()) return;
@@ -921,8 +923,16 @@ details.settings summary { cursor: pointer; font-weight: 600; font-size: .9rem }
         try { await v.task.promise; } catch (e) { return; }   // cancelled by a newer move
         if (gen !== v.gen) return;
       }
-      v.task = null; v.snap = { canvas: off, ...want };
-      paintBase(ctx); ctx.drawImage(off, 0, 0); paintCaps(ctx);
+      v.task = null;
+      let offU = null, areas = [];
+      if (v.under && v.alpha < 1) {
+        offU = document.createElement('canvas'); offU.width = cv.width; offU.height = cv.height;
+        areas = await v.under(offU.getContext('2d'), { k, vw, vh, rectOf, stale: () => gen !== v.gen, task: (t) => { v.task = t; } });
+        if (gen !== v.gen || !areas) return;
+        v.task = null;
+      }
+      v.snap = { canvas: off, under: offU, areas, ...want };
+      quickDraw();
     }
     // wheel / trackpad pinch (ctrl+wheel): zoom at the pointer; shift+wheel pans sideways
     body.addEventListener('wheel', e => {
@@ -976,13 +986,15 @@ details.settings summary { cursor: pointer; font-weight: 600; font-size: .9rem }
       if (!v.touched) fit();
       else { if (old && old.w && old.h) { v.tx += (w - old.w) / 2; v.ty += (h - old.h) / 2; } changed(true, true); }
     }).observe(body);
-    return { v, load, clear, stop, fit, center, centerOn };
+    return { v, load, clear, stop, fit, fitRect, center, centerOn, setAlpha };
   }
 
-  const FV = makeViewer($('zvF')), OV = makeViewer($('zvO'));
-  let filmPlan = null, origRec = null, origLoading = null, syncing = false;
-  const syncOn = () => $('cmpSync').checked && !$('cmp').classList.contains('solo');
-  function zvStop() { FV.stop(); OV.stop(); }
+  // Film over the originals: each design's original page is drawn under its spot on the sheet (through the
+  // block's placement), the film goes on top at the slider's opacity. Only the originals of the designs nearest
+  // the middle of the view are loaded (at most 3 files open), so big customer files don't fill the phone's memory.
+  const FV = makeViewer($('zvF'), drawOriginals);
+  let filmPlan = null;
+  function zvStop() { FV.stop(); }
   function showMsg(html) { zvStop(); $('cmp').hidden = true; const box = $('sheets'); box.hidden = false; box.innerHTML = html; }
   async function preview(bytes, id, used, plan) {
     if (!window.pdfjsLib) { showMsg('<div class="empty">โหลดตัวแสดงตัวอย่างไม่ได้ แต่ยังบันทึก PDF ได้</div>'); return; }
@@ -998,81 +1010,110 @@ details.settings summary { cursor: pointer; font-weight: 600; font-size: .9rem }
     if (id !== buildId) { doc.destroy(); return; }
     filmPlan = plan; plan.sheets.forEach((sh, si) => sh.forEach(it => { it.si = si; }));
     $('sheets').hidden = true; $('cmp').hidden = false;
+    dropOrigDocs(rec => jobs.includes(rec) && !rec.off);
     FV.load(doc, pages, x - gap, H, true);
-    fillOrigSel();
+    fillFocus();
   }
-  /* original pane */
-  function fillOrigSel() {
-    const sel = $('origSel'), ok = jobs.filter(r => r.job && !r.error && !r.off);
-    if (!ok.includes(origRec)) origRec = null;
-    sel.textContent = '';
-    ok.forEach(r => { const o = document.createElement('option'); o.value = r.id; o.textContent = r.name; sel.appendChild(o); });
-    if (!origRec && ok.length) showOrig(ok[0]); else if (origRec) sel.value = origRec.id;
-    if (!ok.length) { origRec = null; OV.clear(); }
-  }
-  async function showOrig(rec, then) {
-    origRec = rec; $('origSel').value = rec.id;
-    const mine = origLoading = (async () => {
-      let data;
-      if (rec.fileId) {   // view mode: the original is downloaded only when it is shown, and not kept (big .ai files use a lot of phone memory)
-        setStatus('กำลังโหลดไฟล์ต้นฉบับ…');
-        const o = await apiFetch('/api/files/' + rec.fileId); if (!o.ok) throw new Error(o.status);
-        data = new Uint8Array(await o.arrayBuffer()); if (origRec !== rec) return false;
-        setStatus('');
-      } else data = rec.bytes.slice(0);
-      const doc = await pdfjsLib.getDocument({ data, isEvalSupported: false, verbosity: 0 }).promise;
-      const pg = await doc.getPage((rec.page || 0) + 1); const v = pg.getViewport({ scale: 1 });
-      if (origRec !== rec) { doc.destroy(); return false; }
-      OV.load(doc, [{ pg, x: 0, w: v.width, h: v.height, cap: 'ต้นฉบับ · ' + rec.name }], v.width, v.height, false);
-      return true;
+  /* the originals under the film */
+  const recOfIt = (it) => jobs.find(r => r.job && r.job === it.b.job && !r.error);
+  const origDocs = new Map();   // rec -> Promise<{doc, pg, vp1} | null>, most recently used last
+  function origPage(rec) {
+    if (origDocs.has(rec)) { const pr = origDocs.get(rec); origDocs.delete(rec); origDocs.set(rec, pr); return pr; }
+    const pr = (async () => {
+      try {
+        let data;
+        if (rec.fileId) {   // view mode: fetched when needed, not kept
+          setStatus('กำลังโหลดไฟล์ต้นฉบับ…');
+          const o = await apiFetch('/api/files/' + rec.fileId); if (!o.ok) throw new Error(o.status);
+          data = new Uint8Array(await o.arrayBuffer());
+          if ($('status').textContent === 'กำลังโหลดไฟล์ต้นฉบับ…') setStatus('');
+        } else if (rec.bytes) data = rec.bytes.slice(0); else return null;
+        const doc = await pdfjsLib.getDocument({ data, isEvalSupported: false, verbosity: 0 }).promise;
+        const pg = await doc.getPage((rec.page || 0) + 1);
+        return { doc, pg, vp1: pg.getViewport({ scale: 1 }) };
+      } catch (e) { rec.error = 'เปิดไฟล์ต้นฉบับไม่ได้'; setStatus('เปิดไฟล์ต้นฉบับของ ' + rec.name + ' ไม่ได้: ' + e.message, true); return null; }
     })();
-    let ok = false; try { ok = await mine; } catch (e) { setStatus('เปิดไฟล์ต้นฉบับเพื่อเทียบไม่ได้: ' + e.message, true); }
-    if (origLoading === mine) origLoading = null;
-    if (ok) { if (then) then(); else if (syncOn()) syncFilmToOrig(); }
+    origDocs.set(rec, pr);
+    while (origDocs.size > 3) { const [old, p0] = origDocs.entries().next().value; origDocs.delete(old); p0.then(o => o && o.doc.destroy()); }
+    return pr;
   }
-  $('origSel').addEventListener('change', () => { const r = jobs.find(j => String(j.id) === $('origSel').value); if (r) showOrig(r); });
-  /* mapping: original page point (PDF units) <-> film sheet point, through the block's placement */
+  function dropOrigDocs(keep) { for (const [rec, pr] of [...origDocs]) if (!keep(rec)) { origDocs.delete(rec); pr.then(o => o && o.doc.destroy()); } }
+  // a design's outline on screen (CSS px) for a point list in original PDF units
+  function blockScreen(it, c, pts) {
+    const p = FV.v.pages[it.si], r = c.rectOf(p), s = FV.v.scale;
+    return pts.map(([x, y]) => { const f = toFilm(it, x, y), [vx, vy] = p.vp1.convertToViewportPoint(f.x, f.y); return [r.x + vx * s, r.y + vy * s]; });
+  }
+  async function drawOriginals(g, c) {
+    if (!filmPlan) return [];
+    // designs on screen, nearest the middle first; their originals (at most 2 files) go under the film
+    const mid = [c.vw / 2, c.vh / 2], vis = [];
+    filmPlan.sheets.forEach(sh => sh.forEach(it => {
+      if (!FV.v.pages[it.si]) return;
+      const b = it.b.bbox, q = blockScreen(it, c, [[b[0], b[1]], [b[2], b[1]], [b[2], b[3]], [b[0], b[3]]]);
+      const xs = q.map(t => t[0]), ys = q.map(t => t[1]), x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys);
+      if (x1 < 0 || y1 < 0 || x0 > c.vw || y0 > c.vh) return;
+      const rec = recOfIt(it); if (!rec) return;
+      vis.push({ it, rec, q, d: Math.hypot((x0 + x1) / 2 - mid[0], (y0 + y1) / 2 - mid[1]) });
+    }));
+    vis.sort((a, b) => a.d - b.d);
+    const files = []; vis.forEach(x => { if (!files.includes(x.rec) && files.length < 2) files.push(x.rec); });
+    const areas = [], k = c.k;
+    for (const x of vis) {
+      if (!files.includes(x.rec)) continue;
+      const o = await origPage(x.rec); if (c.stale()) return null; if (!o) continue;
+      // affine map: original viewport (scale 1) -> this canvas, from three corners of the design
+      const b = x.it.b.bbox, P = [[b[0], b[1]], [b[2], b[1]], [b[0], b[3]]];
+      const u = P.map(([px, py]) => o.vp1.convertToViewportPoint(px, py)), w = blockScreen(x.it, c, P).map(t => [t[0] * k, t[1] * k]);
+      const du1 = [u[1][0] - u[0][0], u[1][1] - u[0][1]], du2 = [u[2][0] - u[0][0], u[2][1] - u[0][1]];
+      const dw1 = [w[1][0] - w[0][0], w[1][1] - w[0][1]], dw2 = [w[2][0] - w[0][0], w[2][1] - w[0][1]];
+      const det = du1[0] * du2[1] - du2[0] * du1[1]; if (Math.abs(det) < 1e-9) continue;
+      const iu = [du2[1] / det, -du1[1] / det, -du2[0] / det, du1[0] / det];   // inverse of [du1 du2] (column-major a,b,c,d)
+      const a = dw1[0] * iu[0] + dw2[0] * iu[1], bb = dw1[1] * iu[0] + dw2[1] * iu[1];
+      const cc = dw1[0] * iu[2] + dw2[0] * iu[3], d = dw1[1] * iu[2] + dw2[1] * iu[3];
+      const e = w[0][0] - (a * u[0][0] + cc * u[0][1]), f = w[0][1] - (bb * u[0][0] + d * u[0][1]);
+      const qk = x.q.map(t => [t[0] * k, t[1] * k]);
+      g.save(); g.beginPath(); qk.forEach((t, i) => g[i ? 'lineTo' : 'moveTo'](t[0], t[1])); g.closePath(); g.clip();
+      const t = o.pg.render({ canvasContext: g, viewport: o.vp1, transform: [a, bb, cc, d, e, f], background: 'rgba(0,0,0,0)' }); c.task(t);
+      try { await t.promise; } catch (er) { g.restore(); return null; }
+      g.restore(); if (c.stale()) return null;
+      areas.push(qk);
+    }
+    return areas;
+  }
+  /* the film's opacity over the originals (same setting as the block page viewer) */
+  const opIn = $('cmpOp');
+  let opVal = 70; try { const r = localStorage.getItem('stencil-fpop'); if (r !== null && r !== '' && isFinite(+r)) opVal = Math.max(0, Math.min(100, +r)); } catch (e) {}
+  opIn.value = opVal; FV.v.alpha = opVal / 100;
+  opIn.addEventListener('input', () => { FV.setAlpha(+opIn.value / 100); try { localStorage.setItem('stencil-fpop', opIn.value); } catch (e) {} });
+  /* pick a design: the view zooms to it on the sheet */
+  let focusList = [];
+  function fillFocus() {
+    const sel = $('focusSel'), keep = sel.value; sel.textContent = '';
+    focusList = filmPlan ? filmPlan.sheets.flat() : [];
+    const o0 = document.createElement('option'); o0.value = ''; o0.textContent = `ทั้งแผ่น (${focusList.length} ลาย)`; sel.appendChild(o0);
+    const seen = new Map();
+    focusList.forEach((it, i) => {
+      const rec = recOfIt(it), base = it.label || (rec && [rec.screen && rec.screen.stencilId, rec.name].filter(Boolean).join(' ')) || 'ลาย ' + (i + 1), n = (seen.get(base) || 0) + 1; seen.set(base, n);
+      const o = document.createElement('option'); o.value = String(i); o.textContent = (n > 1 ? base + ' (' + n + ')' : base) + (filmPlan.sheets.length > 1 ? ' · แผ่น ' + (it.si + 1) : ''); sel.appendChild(o);
+    });
+    sel.value = keep && +keep < focusList.length ? keep : '';
+  }
+  function focusOn(i) {
+    const it = focusList[i]; if (!it) { FV.fit(); return; }
+    $('focusSel').value = String(i);
+    const p = FV.v.pages[it.si]; if (!p) return;
+    const b = it.b.bbox, pts = [[b[0], b[1]], [b[2], b[1]], [b[2], b[3]], [b[0], b[3]]].map(([x, y]) => { const f = toFilm(it, x, y); return p.vp1.convertToViewportPoint(f.x, f.y); });
+    const xs = pts.map(t => p.x + t[0]), ys = pts.map(t => t[1]), x0 = Math.min(...xs), y0 = Math.min(...ys);
+    FV.fitRect(x0, y0, Math.max(...xs) - x0, Math.max(...ys) - y0);
+  }
+  $('focusSel').addEventListener('change', () => { const v = $('focusSel').value; if (v === '') FV.fit(); else focusOn(+v); });
+  /* mapping: original page point (PDF units) -> film sheet point, through the block's placement */
   const toFilm = (it, x, y) => { const b = it.b.bbox; return it.rot ? { x: it.x + it.h - (y - b[1]), y: it.y + (x - b[0]) } : { x: it.x + (x - b[0]), y: it.y + (y - b[1]) }; };
-  const toOrig = (it, X, Y) => { const b = it.b.bbox; return it.rot ? { x: Y - it.y + b[0], y: it.x + it.h - X + b[1] } : { x: X - it.x + b[0], y: Y - it.y + b[1] }; };
-  const dist2 = (b, x, y) => { const dx = Math.max(b[0] - x, 0, x - b[2]), dy = Math.max(b[1] - y, 0, y - b[3]); return dx * dx + dy * dy; };
-  function syncFilmToOrig() {   // the original moved: show the same spot on the film
-    if (syncing || !syncOn() || !filmPlan || !origRec || !OV.v.pages.length || !FV.v.pages.length) return;
-    const op = OV.v.pages[0], c = OV.center(), [px, py] = op.vp1.convertToPdfPoint(c.x, c.y);
-    let best = null, bd = Infinity;
-    filmPlan.sheets.flat().forEach(it => { if (it.b.job !== origRec.job) return; const d = dist2(it.b.bbox, px, py); if (d < bd) { bd = d; best = it; } });
-    if (!best) return;
-    const f = toFilm(best, px, py), fp = FV.v.pages[best.si]; if (!fp) return;
-    const [vx, vy] = fp.vp1.convertToViewportPoint(f.x, f.y);
-    syncing = true; FV.centerOn({ x: fp.x + vx, y: vy }, OV.v.scale); syncing = false;
-  }
-  function syncOrigToFilm() {   // the film moved: show the same spot of the matching original
-    if (syncing || !syncOn() || !filmPlan || !FV.v.pages.length) return;
-    const c = FV.center(); let si = 0;
-    FV.v.pages.forEach((p, i) => { if (c.x >= p.x) si = i; });
-    const fp = FV.v.pages[si], [X, Y] = fp.vp1.convertToPdfPoint(c.x - fp.x, c.y);
-    let best = null, bd = Infinity;
-    (filmPlan.sheets[si] || []).forEach(it => { const d = dist2([it.x, it.y, it.x + it.W, it.y + it.H], X, Y); if (d < bd) { bd = d; best = it; } });
-    if (!best) return;
-    const o = toOrig(best, X, Y), scale = FV.v.scale;
-    const go = () => {
-      const op = OV.v.pages[0]; if (!op) return;
-      const [vx, vy] = op.vp1.convertToViewportPoint(o.x, o.y);
-      syncing = true; OV.centerOn({ x: vx, y: vy }, scale); syncing = false;
-    };
-    const rec = jobs.find(r => r.job === best.b.job);
-    if (rec && rec !== origRec) { if (!origLoading) showOrig(rec, go); }
-    else if (!origLoading) go();
-  }
-  FV.v.onMove = syncOrigToFilm; OV.v.onMove = syncFilmToOrig;
-  $('cmpSync').addEventListener('change', () => { if (syncOn()) syncFilmToOrig(); });
-  $('cmpShow').addEventListener('change', () => { $('cmp').classList.toggle('solo', !$('cmpShow').checked); if (syncOn()) requestAnimationFrame(syncFilmToOrig); });
   // full screen is a history entry: Android's back button (and swipe-back) closes it instead of leaving the app
-  let soloByFull = false;   // ดูเต็มจอ shows the film alone; closing it brings the original back
   function setFull(on, fromPop) {
     if ($('cmp').classList.contains('full') === on) return;
     $('cmp').classList.toggle('full', on); document.body.style.overflow = on ? 'hidden' : '';
     $('cmpFull').textContent = on ? 'ย่อกลับ' : 'เต็มจอ';
-    if (!on && soloByFull) { soloByFull = false; $('cmpShow').checked = true; $('cmp').classList.remove('solo'); }
     if (fromPop) return;
     if (on) history.pushState({ filmFull: 1 }, '');
     else if (history.state && history.state.filmFull) history.back();
@@ -1157,7 +1198,7 @@ details.settings summary { cursor: pointer; font-weight: 600; font-size: .9rem }
     $('vTitle').textContent = no; document.title = no + ' · ฟิล์ม';
     const d = new Date(f.created), p2 = (n) => String(n).padStart(2, '0');
     $('vMeta').textContent = `${p2(d.getDate())}/${p2(d.getMonth() + 1)}/${(d.getFullYear() + 543) % 100} ${p2(d.getHours())}:${p2(d.getMinutes())} · ${items.length || info.blocks || 0} ลาย · ${info.sheets || 1} แผ่น${info.by ? ' · ' + info.by : ''}`;
-        $('vFull').addEventListener('click', () => { soloByFull = $('cmpShow').checked; if (soloByFull) { $('cmpShow').checked = false; $('cmp').classList.add('solo'); } setFull(true); requestAnimationFrame(() => requestAnimationFrame(() => FV.fit())); });
+        $('vFull').addEventListener('click', () => setFull(true));
     let armT = 0; const del = $('vDel');
     del.addEventListener('click', async () => {
       if (!del.classList.contains('armed')) { del.classList.add('armed'); del.textContent = 'กดอีกครั้งเพื่อลบ'; armT = setTimeout(() => { del.classList.remove('armed'); del.textContent = 'ลบฟิล์ม'; }, 4000); return; }
@@ -1184,8 +1225,8 @@ details.settings summary { cursor: pointer; font-weight: 600; font-size: .9rem }
         const key = x.orig + ':' + (x.page || 0);
         if (!recOf.has(key)) { const rec = { id: ++seq, name: x.origName || x.design || 'ต้นฉบับ', fileId: x.orig, page: x.page || 0, job: {} }; recOf.set(key, rec); recs.push(rec); }
         const rec = recOf.get(key);
-        row.addEventListener('click', () => showOrig(rec));
       }
+      if (x.place && x.place.bbox) row.addEventListener('click', () => { const i = focusList.indexOf(x._pl); if (i < 0) return; $('cmp').scrollIntoView({ behavior: 'smooth', block: 'start' }); focusOn(i); });
     });
     if (!items.length) { const m = document.createElement('div'); m.className = 'qempty'; m.textContent = 'ไม่มีรายละเอียดลายของฟิล์มนี้'; box.appendChild(m); }
     // film pane: the PDF exactly as saved; original pane: the block's original file kept with the film
@@ -1203,10 +1244,10 @@ details.settings summary { cursor: pointer; font-weight: 600; font-size: .9rem }
       recs.forEach(rec => jobs.push(rec));
       const sheets = [];
       items.forEach(x => { if (!x.place || !x.place.bbox) return; const rec = recOf.get(x.orig + ':' + (x.page || 0));
-        (sheets[x.place.si || 0] ||= []).push({ ...x.place, b: { bbox: x.place.bbox, job: rec ? rec.job : {} } }); });
+        x._pl = { ...x.place, label: [x.stencilId, x.design].filter(Boolean).join(' ') || x.origName, b: { bbox: x.place.bbox, job: rec ? rec.job : {} } }; (sheets[x.place.si || 0] ||= []).push(x._pl); });
       const n = Math.max(info.sheets || 1, sheets.length); for (let i = 0; i < n; i++) sheets[i] = sheets[i] || [];
+      setStatus(recs.length ? '' : 'ฟิล์มนี้ไม่มีไฟล์ต้นฉบับเก็บไว้เทียบ (ฟิล์มที่ทำก่อนมีการเก็บ snapshot)');
       await preview(pdf, buildId, null, { sheets });
-      if (!recs.length) setStatus('ฟิล์มนี้ไม่มีไฟล์ต้นฉบับเก็บไว้เทียบ (ฟิล์มที่ทำก่อนมีการเก็บ snapshot)');
     } catch (e) { setStatus('เปิดฟิล์มไม่ได้: ' + e.message, true); }
   }
 
