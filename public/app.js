@@ -216,7 +216,8 @@ function toast(m) { const t = $('#toast'); t.textContent = m; t.hidden = false; 
 const allScreens = () => db.jobs.flatMap(j => j.screens.map(s => ({ j, s })));
 const find = (jid, sid) => { const j = db.jobs.find(x => x.id === jid); return { j, s: j && sid ? j.screens.find(x => x.id === sid) : null }; };
 const tol = () => (db.master && db.master.tolerance) || 10;
-const defTarget = () => (db.master && db.master.defaultTarget) || 400;
+// no app-wide default thickness: a new block takes its customer's default spec, otherwise it is left empty to fill in
+const defTarget = () => '';
 // days left to the due date, counted in calendar days (0 = due today, negative = late); null = no due date or already sent
 function dueDays(j) {
   if (!j.due || j.sentAt || (j.screens || []).every(isDone)) return null;
@@ -1165,7 +1166,6 @@ function settingsView() {
     <h3>รายการให้เลือก</h3><div class="muted small">พิมพ์บรรทัดละ 1 รายการ</div>
     <div class="grid2">
       ${[['mesh', 'เบอร์ผ้าสกรีน'], ['frames', 'ขนาดเฟรม'], ['emulsions', 'ชนิดกาว'], ['sizes', 'ไซส์'], ['customers', 'ลูกค้า']].map(([k, l]) => `<div class="field"><label for="ms-${k}">${l}</label><textarea id="ms-${k}" data-m="${k}" rows="6">${esc((k === 'sizes' ? sizeList() : m[k]).join('\n'))}</textarea></div>`).join('')}
-      <div class="field"><label for="ms-def">ความหนาเริ่มต้นของบล็อคใหม่</label><div class="unit"><input id="ms-def" type="number" data-m="defaultTarget" value="${esc(defTarget())}"><span>µm</span></div></div>
       <div class="field"><label for="ms-tol">ค่าความหนาที่ยอมรับได้ (±)</label><div class="unit"><input id="ms-tol" type="number" data-m="tolerance" value="${esc(tol())}"><span>µm</span></div></div>
     </div>
   </div>
@@ -1202,7 +1202,7 @@ function readSettings() {
   const m = { ...db.master };
   for (const k of ['mesh', 'frames', 'emulsions', 'sizes', 'customers']) m[k] = $('#ms-' + k).value.split('\n').map(x => x.trim()).filter(Boolean);
   m.tolerance = Number($('#ms-tol').value) || 10;
-  m.defaultTarget = Number($('#ms-def').value) || 400;
+  delete m.defaultTarget;
   const specs = {};   // only customers still on the list
   db.master.customers.forEach((c, i) => {
     const g = k => { const el = document.querySelector(`[data-cs="${i}"][data-k="${k}"]`); return el ? el.value.trim() : ''; };
