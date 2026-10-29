@@ -416,3 +416,9 @@ div.brow:hover{background:none}
 .qcslot .ph,.qcslot .addph{width:100%;aspect-ratio:1}
 .req{color:var(--bad)}
 .morejobs{justify-self:center;margin:6px auto 0;display:block}
+
+/* แถวในรายการใบงาน: กดทั้งแถวเปิดบล็อค ปุ่มขึ้นกาวอยู่ใต้สถานะ */
+.brow[role=button]{cursor:pointer}
+.brow[role=button]:hover{background:var(--bg)}
+.brow[role=button]:focus-visible{outline:2px solid var(--emulsion);outline-offset:-2px}
+.coatbtn{min-width:84px}

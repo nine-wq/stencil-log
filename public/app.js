@@ -423,12 +423,13 @@ function jobBlockRow(j, s) {
 }
 function blockRow(j, s) {
   const th = s.thAfter !== '' && s.thAfter != null ? ` · วัดจริง <span class="num">${s.thAfter} µm</span>` : '';
-  return `<button class="brow" data-a="openscreen" data-j="${j.id}" data-v="${s.id}">
+  return `<div class="brow" role="button" tabindex="0" data-a="openscreen" data-j="${j.id}" data-v="${s.id}">
     ${s.preview ? `<img class="thumb" src="${fileUrl(s.preview, true)}" alt="" loading="lazy">` : '<span class="thumb none" aria-hidden="true"></span>'}
     <span class="bt"><b>${esc(s.design || '(ยังไม่ตั้งชื่อ)')}</b>${s.stencilId ? `<span class="sidtxt">${esc(s.stencilId)}</span>` : ''}
       <span class="muted small">${s.frameSource === 'customer' ? '<span class="fsrc">บล็อคเดิมลูกค้า</span>' : 'บล็อคใหม่'} · ${(s.sizes || []).length ? `ไซส์ ${esc(s.sizes.join(', '))} · ` : ''}<span class="num">${esc(s.mesh)}</span> · <span class="num">${esc(s.target)} µm</span>${s.coats.length ? ` · กาว ${s.coats.length} รอบ` : ''}${th}</span></span>
-    <span class="bstate">${waitingFile(s) ? '<span class="chip fl-wait">รอไฟล์จากลูกค้า</span>' : needsFilm(s) ? '<span class="chip fl-need">ยังไม่ทำฟิล์ม</span>' : ''}${chip(s.status)}</span>
-  </button>`;
+    <span class="bstate">${waitingFile(s) ? '<span class="chip fl-wait">รอไฟล์จากลูกค้า</span>' : needsFilm(s) ? '<span class="chip fl-need">ยังไม่ทำฟิล์ม</span>' : ''}${chip(s.status)}
+      ${['ordered', 'coating', 'rework'].includes(s.status) ? `<button class="btn sm primary coatbtn" data-a="quickcoat" data-j="${j.id}" data-v="${s.id}" title="บันทึกรอบขึ้นกาวของบล็อคนี้ (เหมือนกด + ขึ้นกาว ในหน้าบล็อค)">ขึ้นกาว</button>` : ''}</span>
+  </div>`;
 }
 // ไซส์ที่ลูกค้าระบุ: เลือกได้หลายไซส์ หรือไม่ระบุ (รายการแก้ได้ที่ ⚙ ตั้งค่า)
 const DEFAULT_SIZES = ['FREE SIZE', 'XS', 'S', 'M', 'L', 'XL', 'XXL'];
@@ -994,6 +995,8 @@ function makeViewer() {
   new ResizeObserver(() => { if (!v.data || !v.data.film) return; const ow = v.w; size(); if (!v.zoomed) fit(); else { v.tx += (v.w - ow) / 2; changed(true); } }).observe(area);
   return v;
 }
+// rows that act as buttons (they hold their own buttons, so they cannot be <button>s)
+document.addEventListener('keydown', e => { if ((e.key === 'Enter' || e.key === ' ') && e.target.matches && e.target.matches('[role="button"][data-a]')) { e.preventDefault(); e.target.click(); } });
 document.addEventListener('keydown', e => { if (e.key !== 'Escape') return; const f = document.querySelector('.fv.full'); if (f) f.querySelector('[data-z="full"]').click(); });
 
 const FILM_DEF = { sheetW: 21, sheetH: 31, margin: 10, gap: 15, markArm: 5, markGrey: 25, labelGrey: 25, markWidthMm: 0.15, nearWhite: 5, speckMm: 0.2, factor: 0.5, defaultThick: 400, labels: true, cropMarks: false, thicknesses: [100, 200, 300, 400, 500, 600, 800] };
@@ -1236,6 +1239,13 @@ async function saveSettings() {
   if (fails.length) { const e2 = $('#serr'); if (e2) e2.textContent = fails.join(' · '); toast('บันทึกไม่ครบ'); } else toast('บันทึกการตั้งค่าแล้ว');
 }
 
+// one coat round: time + person; the first round moves the block from รอขึ้นบล็อค (or ตีกลับ) to กำลังขึ้นกาว
+async function addCoat(s, named) {
+  s.coats.push({ t: Date.now(), side: '', by: ui.user.name });
+  if (s.status === 'ordered' || s.status === 'rework') { logEv(s, s.status === 'rework' ? 'เริ่มแก้งานตีกลับ' : 'เริ่มขึ้นกาว'); s.status = 'coating'; }
+  render();
+  if (await saveScreen(s)) toast(`ขึ้นกาวรอบที่ ${s.coats.length} แล้ว${named ? ' · ' + (s.design || s.stencilId || '') : ''}`);
+}
 /* ---------- actions ---------- */
 function go(view, o = {}) { Object.assign(ui, { view, arm: null }, o); render(); window.scrollTo(0, 0); }
 document.addEventListener('click', async e => {
@@ -1347,10 +1357,12 @@ document.addEventListener('click', async e => {
       break;
     case 'openjob': go('job', { jobId: v }); break;
     case 'openscreen': { ui.attachChoice = null; ui.attachOpen = false; ui.attachQ = ''; ui.replaceArt = null; const back = ui.view === 'job' ? 'job' : 'list'; go('screen', { jobId: el.dataset.j, screenId: v, backTo: back }); break; }
-    case 'coat': {
-      const { s } = cur(); s.coats.push({ t: Date.now(), side: '', by: ui.user.name });
-      if (s.status === 'ordered' || s.status === 'rework') { logEv(s, s.status === 'rework' ? 'เริ่มแก้งานตีกลับ' : 'เริ่มขึ้นกาว'); s.status = 'coating'; }
-      render(); if (await saveScreen(s)) toast(`บันทึกรอบที่ ${s.coats.length} แล้ว`); break;
+    case 'coat': { const { s } = cur(); await addCoat(s); break; }
+    case 'quickcoat': {   // the same as "+ ขึ้นกาว" on the block page, straight from the job list
+      const { s } = find(el.dataset.j, v); if (!s) break;
+      const last = s.coats[s.coats.length - 1];
+      if (last && Date.now() - last.t < 3000) break;   // ignore a double tap
+      await addCoat(s, true); break;
     }
     case 'undocoat': { const { s } = cur(); s.coats.pop(); if (!s.coats.length && s.status === 'coating') s.status = 'ordered'; render(); saveScreen(s); break; }
     case 'toqc': {
