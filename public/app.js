@@ -1209,7 +1209,7 @@ function settingsView() {
   return `<button class="btn ghost back" data-a="back">← กลับ</button>
   <h2>ตั้งค่า</h2>
   <div class="card">
-    <h3>สถานะระบบ</h3>
+    <div class="spread"><h3>สถานะระบบ</h3><span class="muted small">เวอร์ชัน <b>${esc(window.APP_VERSION || '-')}</b></span></div>
     ${stat(true, 'ฐานข้อมูล D1', 'ใบงาน รอบขึ้นกาว รูปตรวจงาน')}
     ${stat(fx.files, 'ที่เก็บไฟล์ R2', 'ไฟล์ลูกค้า แผ่นฟิล์ม รูปตัวอย่างลาย')}
     ${stat(fx.ai, 'Workers AI', 'ตั้งชื่อลายจากรูป')}
