@@ -1144,7 +1144,7 @@ function screenView() {
       </fieldset>
       ${a && a.filmable ? filmGroup('s', s, a, j.customer) : ''}
       ${f || (a && a.filmable) ? `<div class="filmline small">${f ? `<span><span class="fstate ok">ทำฟิล์มแล้ว</span> <b>${esc(f.name.replace(/\.pdf$/i, ''))}</b> · ${fmtT(f.at)} โดย ${esc(f.by)}${f.compUm != null ? ` · ชดเชย <span class="num">${f.compUm} µm</span>` : ''}</span>
-          <span class="row"><a class="btn sm" href="/api/films/${f.id}?dl=1&t=${t}">ดาวน์โหลด</a><a class="btn sm ghost" href="/film/?view=${f.id}">ดูฟิล์ม</a>${a && a.filmable ? `<a class="btn sm ghost" href="/film/?add=${s.id}">ลงแผ่นใหม่</a>` : ''}</span>`
+          <span class="row"><a class="btn sm" href="/api/films/${f.id}?dl=1&t=${t}" download="${esc(f.name || 'film.pdf')}">ดาวน์โหลด</a><a class="btn sm ghost" href="/film/?view=${f.id}">ดูฟิล์ม</a>${a && a.filmable ? `<a class="btn sm ghost" href="/film/?add=${s.id}">ลงแผ่นใหม่</a>` : ''}</span>`
         : '<span class="muted">ยังไม่ได้ลงแผ่นฟิล์ม · รอรวมลงแผ่นที่เมนู ฟิล์ม → + สร้างฟิล์ม</span>'}</div>` : ''}
     </div></div>
     <div id="uploads"></div>

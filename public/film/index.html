@@ -351,7 +351,7 @@ details.settings summary { cursor: pointer; font-weight: 600; font-size: .9rem }
       <section class="queue" id="viewBox" aria-label="ฟิล์มที่บันทึกไว้" hidden>
         <div class="qhead"><h2 class="sh" id="vTitle">ฟิล์ม</h2><span class="qempty" id="vMeta"></span></div>
         <div id="vList"><div class="qempty">กำลังโหลด…</div></div>
-        <div class="qbar"><a class="btn" id="vOpen" target="_blank" rel="noopener">เปิด PDF</a><span style="flex:1"></span><button type="button" class="ghost vdel" id="vDel">ลบฟิล์ม</button></div>
+        <div class="qbar"><button type="button" class="btn" id="vFull">ดูเต็มจอ</button><button type="button" class="ghost" id="vDl" disabled>ดาวน์โหลด PDF</button><span style="flex:1"></span><button type="button" class="ghost vdel" id="vDel">ลบฟิล์ม</button></div>
       </section>
       <section class="queue" id="queueBox" aria-label="บล็อครอทำฟิล์ม">
         <div class="qhead"><h2 class="sh">บล็อคที่รอลงแผ่นฟิล์ม</h2><span class="qempty" id="queueCount"></span></div>
@@ -1013,7 +1013,14 @@ details.settings summary { cursor: pointer; font-weight: 600; font-size: .9rem }
   async function showOrig(rec, then) {
     origRec = rec; $('origSel').value = rec.id;
     const mine = origLoading = (async () => {
-      const doc = await pdfjsLib.getDocument({ data: rec.bytes.slice(0), isEvalSupported: false, verbosity: 0 }).promise;
+      let data;
+      if (rec.fileId) {   // view mode: the original is downloaded only when it is shown, and not kept (big .ai files use a lot of phone memory)
+        setStatus('กำลังโหลดไฟล์ต้นฉบับ…');
+        const o = await apiFetch('/api/files/' + rec.fileId); if (!o.ok) throw new Error(o.status);
+        data = new Uint8Array(await o.arrayBuffer()); if (origRec !== rec) return false;
+        setStatus('');
+      } else data = rec.bytes.slice(0);
+      const doc = await pdfjsLib.getDocument({ data, isEvalSupported: false, verbosity: 0 }).promise;
       const pg = await doc.getPage((rec.page || 0) + 1); const v = pg.getViewport({ scale: 1 });
       if (origRec !== rec) { doc.destroy(); return false; }
       OV.load(doc, [{ pg, x: 0, w: v.width, h: v.height, cap: 'ต้นฉบับ · ' + rec.name }], v.width, v.height, false);
@@ -1059,10 +1066,18 @@ details.settings summary { cursor: pointer; font-weight: 600; font-size: .9rem }
   FV.v.onMove = syncOrigToFilm; OV.v.onMove = syncFilmToOrig;
   $('cmpSync').addEventListener('change', () => { if (syncOn()) syncFilmToOrig(); });
   $('cmpShow').addEventListener('change', () => { $('cmp').classList.toggle('solo', !$('cmpShow').checked); if (syncOn()) requestAnimationFrame(syncFilmToOrig); });
-  function setFull(on) {
+  // full screen is a history entry: Android's back button (and swipe-back) closes it instead of leaving the app
+  let soloByFull = false;   // ดูเต็มจอ shows the film alone; closing it brings the original back
+  function setFull(on, fromPop) {
+    if ($('cmp').classList.contains('full') === on) return;
     $('cmp').classList.toggle('full', on); document.body.style.overflow = on ? 'hidden' : '';
     $('cmpFull').textContent = on ? 'ย่อกลับ' : 'เต็มจอ';
+    if (!on && soloByFull) { soloByFull = false; $('cmpShow').checked = true; $('cmp').classList.remove('solo'); }
+    if (fromPop) return;
+    if (on) history.pushState({ filmFull: 1 }, '');
+    else if (history.state && history.state.filmFull) history.back();
   }
+  window.addEventListener('popstate', () => { if (!(history.state && history.state.filmFull)) setFull(false, true); });
   $('cmpFull').addEventListener('click', () => setFull(!$('cmp').classList.contains('full')));
   document.addEventListener('keydown', e => { if (e.key === 'Escape' && $('cmp').classList.contains('full')) { setFull(false); e.preventDefault(); } });
 
@@ -1142,7 +1157,7 @@ details.settings summary { cursor: pointer; font-weight: 600; font-size: .9rem }
     $('vTitle').textContent = no; document.title = no + ' · ฟิล์ม';
     const d = new Date(f.created), p2 = (n) => String(n).padStart(2, '0');
     $('vMeta').textContent = `${p2(d.getDate())}/${p2(d.getMonth() + 1)}/${(d.getFullYear() + 543) % 100} ${p2(d.getHours())}:${p2(d.getMinutes())} · ${items.length || info.blocks || 0} ลาย · ${info.sheets || 1} แผ่น${info.by ? ' · ' + info.by : ''}`;
-    $('vOpen').href = tq('/api/films/' + id);
+        $('vFull').addEventListener('click', () => { soloByFull = $('cmpShow').checked; if (soloByFull) { $('cmpShow').checked = false; $('cmp').classList.add('solo'); } setFull(true); requestAnimationFrame(() => requestAnimationFrame(() => FV.fit())); });
     let armT = 0; const del = $('vDel');
     del.addEventListener('click', async () => {
       if (!del.classList.contains('armed')) { del.classList.add('armed'); del.textContent = 'กดอีกครั้งเพื่อลบ'; armT = setTimeout(() => { del.classList.remove('armed'); del.textContent = 'ลบฟิล์ม'; }, 4000); return; }
@@ -1169,7 +1184,7 @@ details.settings summary { cursor: pointer; font-weight: 600; font-size: .9rem }
         const key = x.orig + ':' + (x.page || 0);
         if (!recOf.has(key)) { const rec = { id: ++seq, name: x.origName || x.design || 'ต้นฉบับ', fileId: x.orig, page: x.page || 0, job: {} }; recOf.set(key, rec); recs.push(rec); }
         const rec = recOf.get(key);
-        row.addEventListener('click', () => { if (rec.bytes) showOrig(rec); });
+        row.addEventListener('click', () => showOrig(rec));
       }
     });
     if (!items.length) { const m = document.createElement('div'); m.className = 'qempty'; m.textContent = 'ไม่มีรายละเอียดลายของฟิล์มนี้'; box.appendChild(m); }
@@ -1178,16 +1193,20 @@ details.settings summary { cursor: pointer; font-weight: 600; font-size: .9rem }
     try {
       const r = await apiFetch('/api/films/' + id); if (!r.ok) throw new Error(r.status);
       const pdf = new Uint8Array(await r.arrayBuffer());
-      for (const rec of recs) {
-        try { const o = await apiFetch('/api/files/' + rec.fileId); if (!o.ok) throw new Error(o.status); rec.bytes = new Uint8Array(await o.arrayBuffer()); jobs.push(rec); }
-        catch (e) { rec.error = 'เปิดไฟล์ต้นฉบับไม่ได้'; }
-      }
+      // save to the phone without leaving the app (opening the PDF hands it to another app, and Android may close this one)
+      const dl = $('vDl'); dl.disabled = false;
+      dl.addEventListener('click', () => {
+        const url = URL.createObjectURL(new Blob([pdf], { type: 'application/pdf' }));
+        const a = document.createElement('a'); a.href = url; a.download = f.name || (no + '.pdf'); document.body.appendChild(a); a.click(); a.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 60000); setStatus('บันทึก ' + a.download + ' แล้ว (ดูในโฟลเดอร์ดาวน์โหลด)');
+      });
+      recs.forEach(rec => jobs.push(rec));
       const sheets = [];
       items.forEach(x => { if (!x.place || !x.place.bbox) return; const rec = recOf.get(x.orig + ':' + (x.page || 0));
-        (sheets[x.place.si || 0] ||= []).push({ ...x.place, b: { bbox: x.place.bbox, job: rec && rec.bytes ? rec.job : {} } }); });
+        (sheets[x.place.si || 0] ||= []).push({ ...x.place, b: { bbox: x.place.bbox, job: rec ? rec.job : {} } }); });
       const n = Math.max(info.sheets || 1, sheets.length); for (let i = 0; i < n; i++) sheets[i] = sheets[i] || [];
       await preview(pdf, buildId, null, { sheets });
-      setStatus(recs.length && !jobs.length ? 'ฟิล์มนี้ไม่มีไฟล์ต้นฉบับเก็บไว้เทียบ (ฟิล์มที่ทำก่อนมีการเก็บ snapshot)' : '');
+      if (!recs.length) setStatus('ฟิล์มนี้ไม่มีไฟล์ต้นฉบับเก็บไว้เทียบ (ฟิล์มที่ทำก่อนมีการเก็บ snapshot)');
     } catch (e) { setStatus('เปิดฟิล์มไม่ได้: ' + e.message, true); }
   }
 
