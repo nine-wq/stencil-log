@@ -84,7 +84,7 @@ One page, no tabs: the job list. The top bar has ติดตั้งแอป 
 **Settings** (⚙, everyone): users/PINs (add with "+ เพิ่มพนักงาน", saved by the page's one save button), pick lists, customer default specs (`master.customerSpecs`), tolerance (no app-wide default thickness: a new block takes its customer's spec `target`, otherwise the field is empty and must be filled before saving the job), film settings (`settings.key='film'`: sheet size, margins, marks, compensation factor, near-white, specks, thickness list), CSV export.
 - One save button for the whole page ("บันทึกการตั้งค่า", sticky at the bottom, `saveSettings()`): it checks everything first (user form, film numbers), then saves pick lists + customer specs (`PUT /master`), film settings (`PUT /film-settings`, 409 on stale base) and the user being added/edited. The user form only has ยกเลิก.
 - Unsaved values survive redraws on this page (`formSnapshot`/`formRestore` in `render()`); after a save the page shows what the server holds (`ui.dropEdits`).
-- One-time resets of all data (jobs, screens, photos, files, artworks, films, every R2 object; users, sessions and settings kept; job/stencil/film counters back to 1): 2026-10-29 (code removed afterwards) and 2026-10-30 (`oneTimeReset` in src/index.js, settings row `reset-2026-10-30` claims it so it runs once; remove the function in the next change).
+- One-time resets of all data (jobs, screens, photos, files, artworks, films, every R2 object; users, sessions and settings kept; job/stencil/film counters back to 1): 2026-10-29 and 2026-10-30 (settings rows `reset-2026-10-29` / `reset-2026-10-30` mark them; the code was removed after each ran).
 
 Prepared-film uploads (the old "ไฟล์ที่เตรียมแล้ว ส่งยิงฟิล์ม" section, `screen.prepared`) are removed from the UI: every film is made in the app (`screen.film`). Old `prepared` ids are kept in the data, still searchable and protected from file deletion; the CSV column is now แผ่นฟิล์ม (film name).
 
@@ -114,6 +114,7 @@ Screen status flow: `ordered → coating → qc → sent`, with `qc → rework �
   - `manifest.webmanifest` + `sw.js`: network-first app shell, offline start, never caches `/api/`.
   - Share target: POST `/share-target` → the service worker stores the files in cache `film-share` → `/?share=…` → the library asks which customer they belong to.
   - Bump `SHELL` in sw.js when the cached asset list changes.
+  - **Icon**: one picture everywhere: a white stencil frame with its mesh on the app blue (#3141B0). `favicon.svg` is the source; `icons/icon-192.png`, `icon-512.png` and `maskable-512.png` (mesh shrunk into the safe zone, square) are rendered from it; the top-bar `.mark` shows `favicon.svg`.
   - **Version**: `window.APP_VERSION` at the top of `public/update.js`, shown in ⚙ (สถานะระบบ). Bump it (1.0 → 1.1 …) with every pushed change and tell Nine the number in the reply.
   - `public/update.js` (both pages): records the server's version (ETag of the page and its code) at load; when the app comes back to the screen (≥30 s apart) and it changed, shows "มีเวอร์ชันใหม่ แตะเพื่ออัปเดต" (tap = reload; never automatic, unsaved work stays).
 

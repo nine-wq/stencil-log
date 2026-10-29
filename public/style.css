@@ -41,10 +41,7 @@ h3{font-size:1.05rem}
 header.top{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--surface);border-bottom:1px solid var(--line)}
 .top .wrap{display:flex;align-items:center;gap:12px;padding-block:10px}
 .brand{display:flex;align-items:center;gap:10px;min-width:0;flex:1}
-.mark{width:30px;height:30px;border-radius:6px;flex:none;background:
-  repeating-linear-gradient(0deg,transparent 0 3px,color-mix(in srgb,var(--mesh) 70%,transparent) 3px 4px),
-  repeating-linear-gradient(90deg,transparent 0 3px,color-mix(in srgb,var(--mesh) 70%,transparent) 3px 4px),var(--mesh-soft);
-  border:2px solid var(--mesh)}
+.mark{width:30px;height:30px;flex:none;background:url(/favicon.svg) center/contain no-repeat}   /* same picture as the app icon */
 .brand h1{font-size:1.1rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .who{display:flex;align-items:center;gap:8px;font-size:.88rem}
 .who b{font-weight:600}
