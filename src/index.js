@@ -431,13 +431,13 @@ async function api(req, env, url) {
     const jobs = Object.fromEntries(jobsR.results.map(j => [j.id, { no: j.no, ...JSON.parse(j.data) }]));
     const fname = Object.fromEntries(filesR.results.map(f => [f.id, `${f.name} (${f.by_name})`]));
     const q = v => `"${String(v ?? '').replace(/"/g, '""')}"`;
-    const rows = [['เลขใบงาน', 'ลูกค้า', 'สั่งโดย', 'วันที่รับงาน', 'บันทึกเข้าระบบ', 'กำหนดส่ง', 'Stencil ID', 'Customer REF', 'ไซส์', 'บล็อค', 'ไฟล์ต้นฉบับ', 'แผ่นฟิล์ม', 'ลาย', 'ผ้า', 'เฟรม', 'กาว', 'สเปค µm', 'จำนวนรอบกาว', 'รอบกาว (เวลา/ด้าน/คน)', 'ก่อนถ่าย µm', 'หลังถ่าย µm', 'สถานะ', 'หมายเหตุขึ้นบล็อค', 'หมายเหตุตรวจ', 'ผู้ตรวจ']];
+    const rows = [['เลขใบงาน', 'ลูกค้า', 'สั่งโดย', 'วันที่รับงาน', 'บันทึกเข้าระบบ', 'กำหนดส่ง', 'Stencil ID', 'Customer REF', 'ไซส์', 'บล็อค', 'ไฟล์ต้นฉบับ', 'แผ่นฟิล์ม', 'ลาย', 'ผ้า', 'เฟรม', 'กาว', 'สเปค µm', 'จำนวนรอบกาว', 'รอบขึ้นกาว (เวลา/คน)', 'ก่อนถ่าย µm', 'ความหนาจริง µm', 'สถานะ', 'หมายเหตุขึ้นบล็อค', 'หมายเหตุตรวจ', 'ผู้ตรวจ']];
     const th = t => new Date(t + 7 * 3600e3).toISOString().replace('T', ' ').slice(0, 16);
     for (const s of screensR.results) {
       const j = jobs[s.job_id] || {}, d = JSON.parse(s.data);
       rows.push([j.no, j.customer, j.createdBy, j.date || (j.createdAt ? th(j.createdAt).slice(0, 10) : ''), j.createdAt ? th(j.createdAt) : '', j.due, d.stencilId || '', d.customerRef, (d.sizes || []).join(' '), d.frameSource === 'customer' ? 'บล็อคเดิมลูกค้า' : 'บล็อคใหม่',
         (d.originals || []).map(f => fname[f] || f).join(' | '), d.film ? d.film.name : '', d.design, d.mesh, d.frame, d.emulsion, d.target,
-        d.coats.length, d.coats.map(c => `${th(c.t)} ${c.side} ${c.by}`).join(' | '), d.thBefore, d.thAfter, d.status, d.coatNote, d.qc?.note, d.qc?.by]);
+        d.coats.length, d.coats.map(c => [th(c.t), c.side, c.by].filter(Boolean).join(' ')).join(' | '), d.thBefore, d.thAfter, d.status, d.coatNote, d.qc?.note, d.qc?.by]);
     }
     const csv = '﻿' + rows.map(r => r.map(q).join(',')).join('\r\n');
     return new Response(csv, { headers: { 'content-type': 'text/csv; charset=utf-8', 'content-disposition': `attachment; filename="stencil-log-${Date.now()}.csv"` } });

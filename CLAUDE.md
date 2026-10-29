@@ -63,8 +63,8 @@ One page, no tabs: the job list. The top bar has ⟳, ⚙ and the user. Films ar
    - Saving stores the film first (number, snapshot, placements), then `POST /api/films/:id/link` sets `screen.film = {id, name, at, by, compUm, thick}` and adds a log line.
    - Deleting a film from history removes `film` from its screens again.
    - `/film/?add=<screenId,…>` opens the page with those screens (from the job/screen pages).
-4. **Coater**: logs coat rounds (ด้านพิมพ์ / ด้านปาด) and thickness before/after exposure, then sends to QC.
-5. **QC/finishing**: at least 2 photos plus the checklist, then pass (→ ready) or rework.
+4. **การขึ้นบล็อค** (screen page card): การขึ้นกาว = one "+ ขึ้นกาว" button per round, logged with date/time and person (no side; `coat.side` is ''). The first round moves the block from รอขึ้นบล็อค to กำลังขึ้นกาว (undoing the last round goes back). Then thickness before exposure (`thBefore`), notes, and "เสร็จแล้ว ส่งตรวจ" (needs at least one round).
+5. **ตรวจงานก่อนส่ง**: the real thickness measured here (`thAfter`, shown against the target), required photos `QC_PHOTOS` (front of the stencil with the thickness gauge in the middle; the side with the label) plus any number of other photos (kind kept in `screen.photoKind[photoId]`, no schema change), and the checklist `QC_CHECKS` (รายละเอียดลายครบถ้วน · ไม่มีตำหนิ ตามด รอยฝุ่น · เทปติดเรียบร้อย). Pass needs all of them → ตรวจสอบและจัดส่งแล้ว; rework needs a note.
 
 **Home list** (the only page):
 - Search box and "+ สร้างใบงาน" on one row (`.toprow`), no page title.

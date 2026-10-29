@@ -409,3 +409,9 @@ div.brow:hover{background:none}
 .toprow .search{flex:1;min-width:0}
 .toprow>.btn{flex:none;white-space:nowrap}
 .st-sent{background:var(--ok-soft);color:var(--ok)}
+
+/* ตรวจงาน: รูปที่ต้องมี */
+.qcphotos{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:10px}
+.qcslot{display:flex;flex-direction:column;gap:6px}
+.qcslot .ph,.qcslot .addph{width:100%;aspect-ratio:1}
+.req{color:var(--bad)}

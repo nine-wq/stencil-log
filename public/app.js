@@ -2,7 +2,10 @@
 'use strict';
 // ทุกคนทำได้ทุกขั้นตอน (ยังไม่แยกสิทธิ์ตามฝ่าย)
 const STATUS = { ordered: 'รอขึ้นบล็อค', coating: 'กำลังขึ้นกาว', qc: 'รอตรวจ', rework: 'ตีกลับแก้ไข', ready: 'ตรวจสอบและจัดส่งแล้ว', sent: 'ตรวจสอบและจัดส่งแล้ว' };   // ready = old data from before the merge
-const QC_CHECKS = [['pinhole', 'ไม่มีรูเข็ม / ฟองอากาศ'], ['detail', 'ลายคมชัด ครบทุกเส้น'], ['edge', 'ปิดเทปขอบเรียบร้อย'], ['label', 'ติดป้ายชื่อลูกค้า / ลาย ที่เฟรม']];
+const QC_CHECKS = [['detail', 'รายละเอียดลายครบถ้วน'], ['clean', 'ไม่มีตำหนิ ตามด รอยฝุ่น'], ['tape', 'เทปติดเรียบร้อย']];
+// required QC photos (screen.photoKind[photoId] = kind); any other photo is "อื่น ๆ"
+const QC_PHOTOS = [['front', 'ด้านหน้าบล็อค', 'ถ่ายพร้อมที่วัดความหนา วางกลางบล็อค'], ['label', 'ด้านข้างติดลาเบล', 'ให้เห็นลาเบลชัด']];
+const photoKindOf = (s, p) => (s.photoKind || {})[p.id] || 'other';
 // ตัวกรองหน้าแรก
 const FILTERS = [
   ['all', 'ทั้งหมด', s => !isDone(s)],
@@ -417,7 +420,7 @@ function jobBlockRow(j, s) {
   </button>`;
 }
 function blockRow(j, s) {
-  const th = s.thAfter !== '' ? ` · หลังถ่าย <span class="num">${s.thAfter}</span>` : '';
+  const th = s.thAfter !== '' && s.thAfter != null ? ` · วัดจริง <span class="num">${s.thAfter} µm</span>` : '';
   return `<button class="brow" data-a="openscreen" data-j="${j.id}" data-v="${s.id}">
     ${s.preview ? `<img class="thumb" src="${fileUrl(s.preview, true)}" alt="" loading="lazy">` : '<span class="thumb none" aria-hidden="true"></span>'}
     <span class="bt"><b>${esc(s.design || '(ยังไม่ตั้งชื่อ)')}</b>${s.stencilId ? `<span class="sidtxt">${esc(s.stencilId)}</span>` : ''}
@@ -1080,34 +1083,34 @@ function screenView() {
     <div id="uploads"></div>
   </div>`;
 
+  // การขึ้นบล็อค: coat rounds (time only, no side), thickness before exposure, notes
   h += `<div class="card" style="display:flex;flex-direction:column;gap:12px">
-    <div class="spread"><h3>รอบขึ้นกาว</h3><span class="muted small num">${s.coats.length} รอบ</span></div>
+    <h3>การขึ้นบล็อค</h3>
+    <div class="spread"><span class="label">การขึ้นกาว</span><span class="muted small num">${s.coats.length} รอบ</span></div>
     <div class="coats">${s.coats.map((c, i) => `<div class="coat"><span class="n">${i + 1}</span>
-      <span><b>${esc(c.side)}</b> <span class="muted small">โดย ${esc(c.by)}</span><br><span class="num small">${fmtT(c.t)}</span>${i ? ` <span class="gap">${fmtGap(c.t - s.coats[i - 1].t)}</span>` : ''}</span>
+      <span><b>ขึ้นกาว</b> <span class="muted small">โดย ${esc(c.by)}</span><br><span class="num small">${fmtT(c.t)}</span>${i ? ` <span class="gap">${fmtGap(c.t - s.coats[i - 1].t)}</span>` : ''}</span>
       ${canCoat && i === s.coats.length - 1 ? `<button class="btn sm ghost" data-a="undocoat">ลบ</button>` : '<span></span>'}</div>`).join('') || '<div class="muted small">ยังไม่ได้ขึ้นกาว</div>'}</div>
-    ${canCoat ? `<div class="addcoat">
-      <button class="btn ${nextSide === 'ด้านพิมพ์' ? 'primary' : ''}" data-a="coat" data-v="ด้านพิมพ์">+ ด้านพิมพ์</button>
-      <button class="btn ${nextSide === 'ด้านปาด' ? 'primary' : ''}" data-a="coat" data-v="ด้านปาด">+ ด้านปาด</button></div>
-      <div class="muted small">กดตอนเริ่มปาดแต่ละรอบ ระบบบันทึกเวลาให้อัตโนมัติ</div>` : ''}
-    <div class="thick">
-      ${thickField('thBefore', 'ความหนาก่อนถ่ายบล็อค', s, canCoat)}
-      ${thickField('thAfter', 'ความหนาหลังถ่ายบล็อค / ล้างแล้ว', s, canCoat)}
-    </div>
+    ${canCoat ? `<div class="addcoat"><button class="btn primary" data-a="coat">+ ขึ้นกาว</button></div>
+      <div class="muted small">กดตอนเริ่มปาดกาวแต่ละรอบ ระบบบันทึกวันและเวลาให้อัตโนมัติ</div>` : ''}
+    <div class="thick">${thickField('thBefore', 'ความหนาก่อนถ่ายบล็อค', s, canCoat)}</div>
     <div class="field"><label for="c-note">หมายเหตุการขึ้นบล็อค</label>${canCoat ? `<textarea id="c-note" data-f="coatNote" placeholder="สภาพห้อง เวลาถ่าย ปัญหาที่พบ">${esc(s.coatNote)}</textarea>` : `<div>${esc(s.coatNote) || '<span class="muted">-</span>'}</div>`}</div>
     ${canCoat ? `<div class="row" style="justify-content:flex-end"><span class="err" id="cerr"></span><button class="btn primary" data-a="toqc">เสร็จแล้ว ส่งตรวจ</button></div>` : ''}
   </div>`;
 
   if (['qc', 'ready', 'sent', 'rework'].includes(s.status) || s.photos.length) {
     const ro = !canQC;
+    const ph = (p, i) => `<div class="ph"><img src="${photoSrc(p.id)}" alt="รูปที่ ${i + 1}" loading="lazy" data-a="zoom" data-v="${p.id}"><span class="cap">${esc(p.by)} ${fmtT(p.t)}</span>${ro ? '' : `<button class="x" data-a="delph" data-v="${p.id}" aria-label="ลบรูป">✕</button>`}</div>`;
+    const add = (k, label, sub) => ro ? '' : `<label class="addph" for="phin-${k}">${ui.busy ? 'กำลังอัปโหลด…' : `+ ${label}${sub ? `<br><span class="small">${sub}</span>` : ''}`}</label><input id="phin-${k}" type="file" accept="image/*" ${k === 'other' ? 'multiple' : 'capture="environment"'} hidden data-phk="${k}">`;
+    const others = s.photos.filter(p => photoKindOf(s, p) === 'other');
     h += `<div class="card" style="display:flex;flex-direction:column;gap:12px">
       <div class="spread"><h3>ตรวจงานก่อนส่ง</h3><span class="muted small">${s.photos.length} รูป</span></div>
-      <div class="photos">${s.photos.map((p, i) => `<div class="ph"><img src="${photoSrc(p.id)}" alt="รูปที่ ${i + 1}" loading="lazy" data-a="zoom" data-v="${p.id}"><span class="cap">${esc(p.by)} ${fmtT(p.t)}</span>${ro ? '' : `<button class="x" data-a="delph" data-v="${p.id}" aria-label="ลบรูป">✕</button>`}</div>`).join('')}
-        ${ro ? '' : `<label class="addph" for="phin">${ui.busy ? 'กำลังอัปโหลด…' : '+ ถ่าย/เลือกรูป<br><span class="small">หลายมุม</span>'}</label>`}</div>
-      ${ro ? '' : `<input id="phin" type="file" accept="image/*" multiple hidden>`}
-      <div class="checks">${QC_CHECKS.map(([k, t]) => `<label class="check"><input type="checkbox" data-chk="${k}" ${s.qc.checks[k] ? 'checked' : ''} ${ro ? 'disabled' : ''}><span>${t}</span></label>`).join('')}
-        <div class="check" style="cursor:default"><span style="width:20px;text-align:center">${s.thAfter !== '' && Math.abs(s.thAfter - s.target) <= T ? '✓' : '!'}</span><span>ความหนาหลังถ่าย ${s.thAfter === '' ? '<span class="muted">ยังไม่มีค่า</span>' : `<span class="num">${s.thAfter} µm</span> ${delta(+s.thAfter, +s.target)}`}</span></div></div>
+      <div class="thick">${thickField('thAfter', 'ความหนาจริง (วัดตอนตรวจ)', s, canQC)}</div>
+      <div class="qcphotos">${QC_PHOTOS.map(([k, label, sub]) => { const p = s.photos.find(x => photoKindOf(s, x) === k);
+        return `<div class="qcslot"><span class="label">${label} <span class="req">*</span></span>${p ? ph(p, 0) : add(k, label, sub) || '<span class="muted small">ไม่มีรูป</span>'}</div>`; }).join('')}</div>
+      <div><span class="label">รูปอื่น ๆ</span><div class="photos">${others.map(ph).join('')}${add('other', 'เพิ่มรูป', 'เลือกได้หลายรูป')}</div></div>
+      <div class="checks">${QC_CHECKS.map(([k, t]) => `<label class="check"><input type="checkbox" data-chk="${k}" ${s.qc.checks[k] ? 'checked' : ''} ${ro ? 'disabled' : ''}><span>${t}</span></label>`).join('')}</div>
       <div class="field"><label for="q-note">หมายเหตุการตรวจ</label>${ro ? `<div>${esc(s.qc.note) || '<span class="muted">-</span>'}${s.qc.by ? ` <span class="muted small">— ${esc(s.qc.by)} ${fmtT(s.qc.at)}</span>` : ''}</div>` : `<textarea id="q-note" data-q="note" placeholder="ถ้าตีกลับ ระบุสิ่งที่ต้องแก้">${esc(s.qc.note)}</textarea>`}</div>
-      ${canQC ? `<div class="row" style="justify-content:flex-end"><span class="err" id="qerr"></span><button class="btn bad" data-a="rework">ตีกลับแก้ไข</button><button class="btn ok" data-a="pass">ผ่าน พร้อมส่ง</button></div>` : ''}
+      ${canQC ? `<div class="row" style="justify-content:flex-end"><span class="err" id="qerr"></span><button class="btn bad" data-a="rework">ตีกลับแก้ไข</button><button class="btn ok" data-a="pass">ผ่าน ตรวจสอบและจัดส่ง</button></div>` : ''}
     </div>`;
   }
   if (s.log.length) h += `<div class="timeline"><span class="label">ประวัติ</span>${s.log.map(l => `<span><span class="num">${fmtT(l[0])}</span> · ${esc(l[1])} · ${esc(l[2])}</span>`).join('')}</div>`;
@@ -1342,22 +1345,21 @@ document.addEventListener('click', async e => {
     case 'openjob': go('job', { jobId: v }); break;
     case 'openscreen': { ui.attachChoice = null; ui.attachOpen = false; ui.attachQ = ''; ui.replaceArt = null; const back = ui.view === 'job' ? 'job' : 'list'; go('screen', { jobId: el.dataset.j, screenId: v, backTo: back }); break; }
     case 'coat': {
-      const { s } = cur(); s.coats.push({ t: Date.now(), side: v, by: ui.user.name });
+      const { s } = cur(); s.coats.push({ t: Date.now(), side: '', by: ui.user.name });
       if (s.status === 'ordered' || s.status === 'rework') { logEv(s, s.status === 'rework' ? 'เริ่มแก้งานตีกลับ' : 'เริ่มขึ้นกาว'); s.status = 'coating'; }
       render(); if (await saveScreen(s)) toast(`บันทึกรอบที่ ${s.coats.length} แล้ว`); break;
     }
-    case 'undocoat': { const { s } = cur(); s.coats.pop(); render(); saveScreen(s); break; }
+    case 'undocoat': { const { s } = cur(); s.coats.pop(); if (!s.coats.length && s.status === 'coating') s.status = 'ordered'; render(); saveScreen(s); break; }
     case 'toqc': {
       const { s } = cur();
       if (!s.coats.length) return $('#cerr').textContent = 'ยังไม่มีรอบขึ้นกาว';
-      if (s.thAfter === '') return $('#cerr').textContent = 'ใส่ความหนาหลังถ่ายบล็อคก่อนส่งตรวจ';
       s.status = 'qc'; logEv(s, 'ส่งตรวจ');
       if (await saveScreen(s)) { toast('ส่งให้ฝ่ายตรวจแล้ว'); go('list'); }
       break;
     }
     case 'delph': {
       const { s } = cur();
-      try { await api('DELETE', '/photos/' + v); s.photos = s.photos.filter(p => p.id !== v); render(); } catch (x) { toast(x.message); }
+      try { await api('DELETE', '/photos/' + v); s.photos = s.photos.filter(p => p.id !== v); if (s.photoKind && s.photoKind[v]) { delete s.photoKind[v]; saveScreen(s); } render(); } catch (x) { toast(x.message); }
       break;
     }
     case 'zoom': $('#lbimg').src = photoSrc(v); $('#lb').hidden = false; break;
@@ -1377,7 +1379,9 @@ document.addEventListener('click', async e => {
     }
     case 'pass': {
       const { s } = cur();
-      if (s.photos.length < 2) return $('#qerr').textContent = 'ถ่ายรูปอย่างน้อย 2 มุมก่อนผ่าน';
+      if (s.thAfter === '' || s.thAfter == null) return $('#qerr').textContent = 'ใส่ความหนาจริงที่วัดได้ก่อน';
+      const miss = QC_PHOTOS.filter(([k]) => !s.photos.some(p => photoKindOf(s, p) === k)).map(x => x[1]);
+      if (miss.length) return $('#qerr').textContent = 'ยังไม่มีรูป: ' + miss.join(', ');
       if (QC_CHECKS.some(([k]) => !s.qc.checks[k])) return $('#qerr').textContent = 'ติ๊กรายการตรวจให้ครบ';
       Object.assign(s.qc, { by: ui.user.name, at: Date.now() }); s.status = 'sent'; logEv(s, 'ตรวจสอบและจัดส่งแล้ว');
       if (await saveScreen(s)) { toast('ตรวจสอบและจัดส่งแล้ว'); go('list'); }
@@ -1508,8 +1512,8 @@ document.addEventListener('change', async e => {
     toast('อัปโหลดเสร็จแล้ว');
     return;
   }
-  if (t.id === 'phin' && t.files.length) {
-    const { s } = find(ui.jobId, ui.screenId), files = [...t.files];
+  if (t.dataset.phk && t.files.length) {
+    const { s } = find(ui.jobId, ui.screenId), files = [...t.files], kind = t.dataset.phk;
     ui.busy = true; render();
     let n = 0;
     for (const f of files) {
@@ -1517,8 +1521,10 @@ document.addEventListener('change', async e => {
         const blob = await shrink(f); if (!blob) continue;
         const p = await api('POST', `/screens/${s.id}/photos`, blob, true);
         s.photos.push(p); n++;
+        if (kind !== 'other') s.photoKind = { ...(s.photoKind || {}), [p.id]: kind };
       } catch (x) { toast('อัปโหลดรูปไม่สำเร็จ: ' + x.message); }
     }
+    if (n && kind !== 'other') await saveScreen(s);
     ui.busy = false; render(); if (n) toast(`เพิ่ม ${n} รูปแล้ว`);
   }
 });
