@@ -514,9 +514,6 @@ function newJobView() {
       <div class="field"><label for="f-date">วันที่รับงาน</label><input id="f-date" type="date" value="${esc(d.date)}" data-d="date"></div>
       <div class="field"><label for="f-due">กำหนดส่ง</label><input id="f-due" type="date" value="${esc(d.due)}" data-d="due"></div>
     </div>
-    ${(() => { const cs = custSpec(d.customer), isNew = cust && !cs;
-      // สเปคประจำแก้ได้ที่ ⚙ ตั้งค่า เท่านั้น
-      return cs ? `<div class="spechint"><span class="label">สเปคประจำลูกค้า</span><span>${esc(specText(cs))}</span><span class="muted small">ใส่ให้ทุกบล็อคอัตโนมัติ เปลี่ยนเฉพาะงานนี้ได้ที่แต่ละบล็อค · แก้สเปคประจำได้ที่ ⚙ ตั้งค่า</span></div>` : ''; })()}
     <div class="field"><label for="f-note">รายละเอียด / ข้อควรระวัง</label><textarea id="f-note" data-d="note" placeholder="เช่น ชนิดหมึก งานเส้นเล็ก">${esc(d.note)}</textarea></div>
   </div>
   ${cust ? (() => {
@@ -1099,7 +1096,7 @@ function filmSettingsCard() {
 
 function jobView() {
   const { j } = find(ui.jobId); if (!j) { ui.view = 'list'; return body(); }
-  const waitFilm = j.screens.filter(needsFilm), cs = custSpec(j.customer);
+  const waitFilm = j.screens.filter(needsFilm);
   // laid out like the new-job form: the job card (customer, dates, spec, note), then the blocks
   return `<button class="btn ghost back" data-a="back">← กลับ</button>
   <div class="spread"><h2>ใบงาน <span class="jobno h">${esc(j.no)}</span></h2><span class="${dueCls(j)}">${dueText(j)}</span></div>
@@ -1109,7 +1106,6 @@ function jobView() {
       <div class="field"><label for="j-date">วันที่รับงาน</label><input id="j-date" type="date" value="${esc(jobDate(j))}" data-jf="date" data-v="${j.id}"></div>
       <div class="field"><label for="j-due">กำหนดส่ง</label><input id="j-due" type="date" value="${esc(j.due || '')}" data-jf="due" data-v="${j.id}"></div>
     </div>
-    ${cs ? `<div class="spechint"><span class="label">สเปคประจำลูกค้า</span><span>${esc(specText(cs))}</span><span class="muted small">ค่าที่ใช้จริงของแต่ละบล็อคอยู่ในรายการด้านล่าง · แก้สเปคประจำได้ที่ ⚙ ตั้งค่า</span></div>` : ''}
     <div class="field"><label for="j-note">รายละเอียด / ข้อควรระวัง</label><textarea id="j-note" data-jf="note" data-v="${j.id}" placeholder="เช่น ชนิดหมึก งานเส้นเล็ก">${esc(j.note || '')}</textarea></div>
     <span class="muted small">สั่งโดย ${esc(j.createdBy)} · ${fmtT(j.createdAt)}${j.sentAt ? ` · ส่งลูกค้า ${fmtT(j.sentAt)}` : ''}</span>
   </div>
