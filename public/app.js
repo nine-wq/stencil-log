@@ -1031,7 +1031,8 @@ function jobView() {
     <div class="field"><label for="j-due">กำหนดส่ง</label><input id="j-due" type="date" value="${esc(j.due || '')}" data-jf="due" data-v="${j.id}"></div>
   </div>` : `<div class="muted small">รับงาน ${fmtD(jobTs(j))}</div>`}
   ${j.note ? `<div class="card">${esc(j.note)}</div>` : ''}
-  <div class="muted small">สั่งโดย ${esc(j.createdBy)} · ${fmtT(j.createdAt)}${j.sentAt ? ` · ส่งลูกค้า ${fmtT(j.sentAt)}` : ''}</div>
+  <div class="spread"><span class="muted small">สั่งโดย ${esc(j.createdBy)} · ${fmtT(j.createdAt)}${j.sentAt ? ` · ส่งลูกค้า ${fmtT(j.sentAt)}` : ''}</span>
+    <button class="btn sm" data-a="labels" data-v="${j.id}" title="ลาเบล 20 × 2.2 cm เรียงต่อกันบนกระดาษสติกเกอร์ A4">พิมพ์ลาเบลติดบล็อค (${j.screens.length})</button></div>
   ${waitFilm.length ? `<div class="card spread"><span><b>ยังไม่ทำฟิล์ม ${waitFilm.length} บล็อค</b><br><span class="muted small">เปิดหน้าทำฟิล์มพร้อมบล็อคเหล่านี้ เรียงลงแผ่นได้ร่วมกับงานอื่น</span></span>
     <a class="btn primary" href="/film/?add=${waitFilm.map(s => s.id).join(',')}">ทำฟิล์ม</a></div>` : ''}
   <div class="jobcard">${j.screens.map(s => jobBlockRow(j, s)).join('')}</div>
@@ -1053,7 +1054,7 @@ function screenView() {
   let h = `<button class="btn ghost back" data-a="back">← กลับ</button>
   <div class="spread shead"><div><h2>${esc(s.design || '(ยังไม่ตั้งชื่อ)')}</h2>
     <div class="small muted">${s.stencilId ? `<span class="sidtxt">${esc(s.stencilId)}</span> · ` : ''}${esc(j.no)} · ${esc(j.customer)} · <span class="${dueCls(j)}">${dueText(j)}</span></div></div>
-    <span class="bstate">${filmTag}${chip(s.status)}</span></div>
+    <span class="bstate">${filmTag}${chip(s.status)}<button class="btn sm ghost" data-a="labels" data-v="${j.id}" data-s="${s.id}">พิมพ์ลาเบล</button></span></div>
   ${j.note ? `<div class="card small"><span class="label">หมายเหตุจากอาร์ทเวิร์ค</span><br>${esc(j.note)}</div>` : ''}
   ${s.status === 'rework' && s.qc.note ? `<div class="card" style="border-color:var(--bad)"><span class="label" style="color:var(--bad)">เหตุผลที่ตีกลับ</span><br>${esc(s.qc.note)} <span class="muted small">— ${esc(s.qc.by)} ${fmtT(s.qc.at)}</span></div>` : ''}`;
 
@@ -1249,6 +1250,60 @@ async function addCoat(s, named) {
   render();
   if (await saveScreen(s)) toast(`ขึ้นกาวรอบที่ ${s.coats.length} แล้ว${named ? ' · ' + (s.design || s.stencilId || '') : ''}`);
 }
+/* ---------- stencil labels: 200 × 22 mm, stacked with no gap on A4 sticker paper (13 per sheet), cut along the lines ---------- */
+function printLabels(j, screens) {
+  const abs = u => location.origin + u;
+  const ymd = t => { const d = new Date(t); return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`; };
+  const one = s => {
+    const date = s.coats && s.coats.length ? s.coats[0].t : Date.now();   // the day the stencil was coated (or today)
+    const cell = (k, v, cls = '') => `<div class="c ${cls}"><span class="k">${k}</span><span class="v">${v}</span></div>`;
+    return `<div class="lb">
+      <div class="pic">${s.preview ? `<img src="${abs(fileUrl(s.preview, true))}" alt="">` : ''}</div>
+      ${cell('Code', esc(s.stencilId || '-'), 'mono')}${cell('Date', ymd(date), 'mono')}
+      ${cell('Design', `${esc(s.design || '-')}${(s.sizes || []).length ? ` <small>· ${esc(s.sizes.join(', '))}</small>` : ''}`, 'wide')}
+      ${cell('Job', esc(j.no), 'mono')}
+      ${cell('Mesh', esc(s.mesh || '-'), 'mono')}${cell('Thickness', `${esc(s.target || '-')} µm`, 'mono')}
+      ${cell('Customer', `${esc(j.customer)}${s.customerRef ? ` <small>· ${esc(s.customerRef)}</small>` : ''}`, 'wide')}
+      <div class="c last"><span class="k">Frame</span><span class="v">${esc(s.frame || '-')}${s.frameSource === 'customer' ? ' <small>(ลูกค้า)</small>' : ''}</span><span class="by">prepared by VICZO INTERNATIONAL co.,ltd.</span></div>
+    </div>`;
+  };
+  const per = 13, sheets = [];
+  for (let i = 0; i < screens.length; i += per) sheets.push(screens.slice(i, i + per));
+  const html = `<!doctype html><html lang="th"><head><meta charset="utf-8"><title>ลาเบล ${esc(j.no)}</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;600&family=IBM+Plex+Mono:wght@500;600&display=swap">
+<style>
+@page { size: A4 portrait; margin: 0 }
+* { box-sizing: border-box; margin: 0; padding: 0 }
+body { font-family: "IBM Plex Sans Thai", sans-serif; color: #000; background: #fff; -webkit-print-color-adjust: exact; print-color-adjust: exact }
+.sheet { width: 210mm; height: 297mm; padding: 5.5mm 5mm; break-after: page; page-break-after: always }
+.sheet:last-child { break-after: auto; page-break-after: auto }
+.lb { width: 200mm; height: 22mm; display: grid; grid-template-columns: 30mm 34mm 34mm 68mm 34mm; grid-template-rows: 1fr 1fr;
+  border: .3mm solid #000; margin-top: -.3mm; overflow: hidden }
+.lb:first-child { margin-top: 0 }
+.pic { grid-row: span 2; border-right: .3mm solid #000; display: grid; place-items: center; padding: .8mm; overflow: hidden }
+.pic img { max-width: 100%; max-height: 20mm; object-fit: contain; display: block }
+.c { display: grid; grid-template-columns: auto 1fr; align-items: center; gap: 1.2mm; padding: 0 1.4mm; border-right: .2mm solid #000; border-bottom: .2mm solid #000; min-width: 0; overflow: hidden }
+.c:nth-child(n+6) { border-bottom: 0 }
+.c .k { font-size: 6pt; color: #333 }
+.c .v { font-size: 9pt; font-weight: 600; line-height: 1.15; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; word-break: break-word }
+.c .v small { font-size: 7pt; font-weight: 400 }
+.c.mono .v { font-family: "IBM Plex Mono", monospace; font-size: 9pt }
+.c.last { border-right: 0; grid-template-rows: auto auto; align-content: center; row-gap: 0 }
+.c.last .by { grid-column: 1 / -1; font-size: 5pt; color: #333; line-height: 1.1 }
+.lb > .c:nth-child(5) { border-right: 0 }
+.tip { font: 12px sans-serif; color: #555; padding: 8px 12px; background: #f3f3f3 } @media print { .tip { display: none } }
+</style></head><body>
+<div class="tip">ลาเบล ${screens.length} ชิ้น · พิมพ์ที่ขนาด A4 · Scale 100% (ไม่ใช่ Fit to page) · ไม่มีขอบกระดาษ</div>
+${sheets.map(sh => `<div class="sheet">${sh.map(one).join('')}</div>`).join('')}
+<script>
+  Promise.all([document.fonts ? document.fonts.ready : 0, ...[...document.images].map(i => i.complete ? 0 : new Promise(r => { i.onload = i.onerror = r; }))])
+    .then(() => setTimeout(() => window.print(), 200));
+<\/script></body></html>`;
+  const w = window.open('', '_blank');
+  if (!w) { toast('เบราว์เซอร์บล็อกหน้าต่างใหม่ อนุญาตป๊อปอัปให้เว็บนี้แล้วกดอีกครั้ง'); return; }
+  w.document.open(); w.document.write(html); w.document.close();
+}
+
 /* ---------- actions ---------- */
 function go(view, o = {}) { Object.assign(ui, { view, arm: null }, o); render(); window.scrollTo(0, 0); }
 document.addEventListener('click', async e => {
@@ -1361,6 +1416,7 @@ document.addEventListener('click', async e => {
     case 'openjob': go('job', { jobId: v }); break;
     case 'openscreen': { ui.attachChoice = null; ui.attachOpen = false; ui.attachQ = ''; ui.replaceArt = null; const back = ui.view === 'job' ? 'job' : 'list'; go('screen', { jobId: el.dataset.j, screenId: v, backTo: back }); break; }
     case 'coat': { const { s } = cur(); await addCoat(s); break; }
+    case 'labels': { const { j } = find(v); if (j) printLabels(j, el.dataset.s ? j.screens.filter(x => x.id === el.dataset.s) : j.screens); break; }
     case 'quickcoat': {   // the same as "+ ขึ้นกาว" on the block page, straight from the job list
       const { s } = find(el.dataset.j, v); if (!s) break;
       const last = s.coats[s.coats.length - 1];
