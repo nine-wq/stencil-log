@@ -485,3 +485,7 @@ div.brow:hover{background:none}
 @keyframes jobflash{0%,100%{box-shadow:0 0 0 0 transparent;border-color:var(--line)}50%{box-shadow:0 0 0 4px color-mix(in srgb,var(--emulsion) 45%,transparent);border-color:var(--emulsion)}}
 .jobcard.flash{animation:jobflash .8s ease-in-out 4}
 @media (prefers-reduced-motion:reduce){.jobcard.flash{animation:none;border-color:var(--emulsion);box-shadow:0 0 0 3px color-mix(in srgb,var(--emulsion) 40%,transparent)}}
+
+/* install button in the top bar: an icon only on phones, so the app name keeps its room */
+.inst-i{display:none}
+@media (max-width:480px){.top [data-a=install]{padding:4px 10px}.top [data-a=install] .inst-l{display:none}.top [data-a=install] .inst-i{display:inline;font-size:1.1rem}}

@@ -5,7 +5,7 @@ Owner: Nine. Staff use it on phones and desktop PCs. The former film-positive ap
 
 ## Workflow
 Everyone who logs in (name + PIN) can do everything. There are no role checks; the `users.role` column is kept but unused.
-One page, no tabs: the job list. The top bar has ⟳, ⚙ and the user. Films are made from the job list (the รอทำฟิล์ม filter shows a "สร้างฟิล์ม →" bar to `/film/`) or from a job/block, and opened from their blocks (ดูฟิล์ม). The artwork library page (`libraryView`) has no menu entry any more: it only opens for files shared from other apps (`/?share=`), with ← กลับ; artworks are otherwise added inside the new-job form and on the screen page.
+One page, no tabs: the job list. The top bar has ติดตั้งแอป (only while the browser offers `beforeinstallprompt`; an icon on phones), ⟳, ⚙ and the user. The film page header has ← ใบงาน + title on the left and the user (avatar + name) on the right, no install button. Films are made from the job list (the รอทำฟิล์ม filter shows a "สร้างฟิล์ม →" bar to `/film/`) or from a job/block, and opened from their blocks (ดูฟิล์ม). The artwork library page (`libraryView`) has no menu entry any more: it only opens for files shared from other apps (`/?share=`), with ← กลับ; artworks are otherwise added inside the new-job form and on the screen page.
 
 1. **Artwork library** (`artworks` table, one row = one design = one left/right pair from a customer file):
    - Upload a customer's files under a customer, from คลังลาย or inside the new-job form.

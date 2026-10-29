@@ -279,6 +279,7 @@ function render() {
   app.innerHTML = `
   <header class="top"><div class="wrap">
     <div class="brand"><div class="mark" aria-hidden="true"></div><h1>บันทึกขึ้นบล็อค</h1></div>
+    <button class="btn sm ghost" data-a="install" ${installEvt ? '' : 'hidden'} title="ติดตั้งเป็นแอปบนเครื่องนี้ รับไฟล์จากปุ่มแชร์ได้" aria-label="ติดตั้งแอป"><span class="inst-i" aria-hidden="true">⤓</span><span class="inst-l">ติดตั้งแอป</span></button>
     <button class="icon-btn" data-a="refresh" title="โหลดข้อมูลล่าสุด" aria-label="โหลดข้อมูลล่าสุด">⟳</button>
     <button class="icon-btn" data-a="settings" title="ตั้งค่า" aria-label="ตั้งค่า" aria-current="${ui.view === 'settings'}">⚙</button>
     <div class="who"><span class="av artwork" style="width:30px;height:30px">${esc(ui.user.name[0])}</span>
@@ -335,6 +336,10 @@ function showNewJob(id) {
   if (el) el.scrollIntoView({ block: 'center' }); else window.scrollTo(0, 0);
   clearTimeout(showNewJob.t); showNewJob.t = setTimeout(() => { ui.flashJob = null; document.querySelectorAll('.jobcard.flash').forEach(e => e.classList.remove('flash')); }, 4000);
 }
+// install the app (Chrome/Edge offer it; the button shows only while the browser allows it)
+let installEvt = null;
+window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); installEvt = e; document.querySelectorAll('[data-a=install]').forEach(b => { b.hidden = false; }); });
+window.addEventListener('appinstalled', () => { installEvt = null; document.querySelectorAll('[data-a=install]').forEach(b => { b.hidden = true; }); });
 function homeView() {
   return `<div class="toprow"><div class="search"><input id="q" type="search" data-search="1" value="${esc(ui.q || '')}" placeholder="ค้นหา ลูกค้า เลขใบงาน ชื่อลาย Customer REF เบอร์ผ้า ชื่อคน…" autocomplete="off" enterkeyhint="search">
     <button class="btn sm ghost" data-a="clearq" aria-label="ล้างคำค้น" ${ui.q ? '' : 'hidden'}>✕</button></div>
@@ -1522,6 +1527,12 @@ document.addEventListener('click', async e => {
       if (ui.arm !== 'deljob') { ui.arm = 'deljob'; render(); break; }
       try { await api('DELETE', '/jobs/' + v); await loadData(); toast('ลบใบงานแล้ว'); go('list'); } catch (x) { toast(x.message); }
       break;
+    case 'install': {
+      if (!installEvt) break;
+      const ev = installEvt; installEvt = null; el.hidden = true;
+      ev.prompt(); try { await ev.userChoice; } catch (x) {}
+      break;
+    }
     case 'openjob': go('job', { jobId: v }); break;
     case 'openscreen': { ui.attachChoice = null; ui.attachOpen = false; ui.attachQ = ''; ui.replaceArt = null; const back = ui.view === 'job' ? 'job' : 'list'; go('screen', { jobId: el.dataset.j, screenId: v, backTo: back }); break; }
     case 'coat': { const { s } = cur(); await addCoat(s); break; }
