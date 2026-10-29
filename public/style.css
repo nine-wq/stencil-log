@@ -422,3 +422,14 @@ div.brow:hover{background:none}
 .brow[role=button]:hover{background:var(--bg)}
 .brow[role=button]:focus-visible{outline:2px solid var(--emulsion);outline-offset:-2px}
 .coatbtn{min-width:84px}
+
+/* แถวรายการใบงาน: คอลัมน์สถานะแคบลง ไม่เบียดข้อความ */
+.brow[role=button] .bstate{gap:4px}
+.brow[role=button] .bstate .chip{font-size:.72rem;padding:1px 8px;gap:4px}
+.brow[role=button] .bstate .chip::before{width:6px;height:6px}
+.brow[role=button] .coatbtn{min-width:0;padding:4px 12px;font-size:.8rem}
+@media (max-width:520px){
+  .brow[role=button]{grid-template-columns:68px minmax(0,1fr) auto;gap:10px;padding:10px 12px}
+  .brow[role=button] .thumb{width:68px;height:68px}
+  .brow[role=button] .sidtxt{font-size:.7rem}
+}

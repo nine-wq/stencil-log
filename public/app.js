@@ -231,6 +231,9 @@ function dueText(j) {
   return when + ' · ' + (d < 0 ? `เลยกำหนด ${-d} วัน` : d === 0 ? 'ส่งวันนี้' : d === 1 ? 'ส่งพรุ่งนี้' : `อีก ${d} วัน`);
 }
 const chip = st => `<span class="chip st-${st}">${STATUS[st]}</span>`;
+// short chips for the job list rows (full wording in the tooltip)
+const STATUS_SHORT = { ordered: 'รอขึ้น', coating: 'กำลังขึ้น', qc: 'รอตรวจ', rework: 'ตีกลับ', ready: 'เสร็จแล้ว', sent: 'เสร็จแล้ว' };
+const chipShort = st => `<span class="chip st-${st}" title="${STATUS[st]}">${STATUS_SHORT[st] || STATUS[st]}</span>`;
 function delta(v, target) {
   if (v === '' || v == null || !target) return '';
   const d = v - target, a = Math.abs(d), T = tol();
@@ -427,8 +430,8 @@ function blockRow(j, s) {
     ${s.preview ? `<img class="thumb" src="${fileUrl(s.preview, true)}" alt="" loading="lazy">` : '<span class="thumb none" aria-hidden="true"></span>'}
     <span class="bt"><b>${esc(s.design || '(ยังไม่ตั้งชื่อ)')}</b>${s.stencilId ? `<span class="sidtxt">${esc(s.stencilId)}</span>` : ''}
       <span class="muted small">${s.frameSource === 'customer' ? '<span class="fsrc">บล็อคเดิมลูกค้า</span>' : 'บล็อคใหม่'} · ${(s.sizes || []).length ? `ไซส์ ${esc(s.sizes.join(', '))} · ` : ''}<span class="num">${esc(s.mesh)}</span> · <span class="num">${esc(s.target)} µm</span>${s.coats.length ? ` · กาว ${s.coats.length} รอบ` : ''}${th}</span></span>
-    <span class="bstate">${waitingFile(s) ? '<span class="chip fl-wait">รอไฟล์จากลูกค้า</span>' : needsFilm(s) ? '<span class="chip fl-need">ยังไม่ทำฟิล์ม</span>' : ''}${chip(s.status)}
-      ${['ordered', 'coating', 'rework'].includes(s.status) ? `<button class="btn sm primary coatbtn" data-a="quickcoat" data-j="${j.id}" data-v="${s.id}" title="บันทึกรอบขึ้นกาวของบล็อคนี้ (เหมือนกด + ขึ้นกาว ในหน้าบล็อค)">ขึ้นกาว</button>` : ''}</span>
+    <span class="bstate">${waitingFile(s) ? '<span class="chip fl-wait" title="รอไฟล์จากลูกค้า">รอไฟล์</span>' : needsFilm(s) ? '<span class="chip fl-need" title="ยังไม่ทำฟิล์ม">รอฟิล์ม</span>' : ''}${chipShort(s.status)}
+      ${['ordered', 'coating', 'rework'].includes(s.status) ? `<button class="btn sm primary coatbtn" data-a="quickcoat" data-j="${j.id}" data-v="${s.id}" title="บันทึกรอบขึ้นกาวของบล็อคนี้ (เหมือนกด + ขึ้นกาว ในหน้าบล็อค)">+ ขึ้นกาว</button>` : ''}</span>
   </div>`;
 }
 // ไซส์ที่ลูกค้าระบุ: เลือกได้หลายไซส์ หรือไม่ระบุ (รายการแก้ได้ที่ ⚙ ตั้งค่า)
