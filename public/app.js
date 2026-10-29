@@ -989,7 +989,9 @@ function makeViewer() {
     const b = e.target.closest('[data-z]'); if (!b) return;
     const z = b.dataset.z;
     if (z === 'in') zoomAt(v.scale * 1.6); else if (z === 'out') zoomAt(v.scale / 1.6); else if (z === 'fit') fit();
-    else if (z === 'full') { const on = !el.classList.contains('full'); el.classList.toggle('full', on); document.body.style.overflow = on ? 'hidden' : ''; b.textContent = on ? 'ย่อกลับ' : 'ขยาย'; area.style.height = on ? '' : area.style.height; requestAnimationFrame(fit); }
+    else if (z === 'full') { const on = !el.classList.contains('full');
+      if (b.dataset.nohist) delete b.dataset.nohist;   // closed by the back button: history already moved
+      else if (on) openOverlay(); else if (history.state && history.state.overlay) { history.back(); return; } el.classList.toggle('full', on); document.body.style.overflow = on ? 'hidden' : ''; b.textContent = on ? 'ย่อกลับ' : 'ขยาย'; area.style.height = on ? '' : area.style.height; requestAnimationFrame(fit); }
   });
   // inside the picture the mouse wheel always zooms (at the pointer); outside it scrolls the page as usual
   area.addEventListener('wheel', e => {
@@ -1369,7 +1371,32 @@ ${sheets.map(sh => `<div class="sheet">${sh.map(one).join('')}</div>`).join('')}
 }
 
 /* ---------- actions ---------- */
-function go(view, o = {}) { Object.assign(ui, { view, arm: null }, o); render(); window.scrollTo(0, 0); }
+/* ---------- navigation + browser history: Android's back button / swipe-back steps back like "← กลับ" ---------- */
+// every page change (list → job → block …) is a history entry; filters and search stay in the same entry
+const navState = () => ({ app: 1, view: ui.view, jobId: ui.jobId, screenId: ui.screenId, backTo: ui.backTo, tab: ui.tab });
+function go(view, o = {}) {
+  const changes = view !== ui.view || ('jobId' in o && o.jobId !== ui.jobId) || ('screenId' in o && o.screenId !== ui.screenId);
+  if (changes) try { history.replaceState({ ...(history.state || navState()), y: window.scrollY }, ''); } catch (e) {}   // come back to the same scroll spot
+  Object.assign(ui, { view, arm: null }, o); render(); window.scrollTo(0, 0);
+  try { if (changes) history.pushState(navState(), ''); else history.replaceState({ ...navState(), y: 0 }, ''); } catch (e) {}
+}
+// overlays (photo, full-screen viewer) also take a history entry, so back closes them first
+function openOverlay() { try { history.pushState({ ...navState(), overlay: 1 }, ''); } catch (e) {} }
+function closeOverlays() {
+  let closed = false;
+  if (!$('#lb').hidden) { $('#lb').hidden = true; closed = true; }
+  const f = document.querySelector('.fv.full'); if (f) { f.querySelector('[data-z="full"]').dataset.nohist = '1'; f.querySelector('[data-z="full"]').click(); closed = true; }
+  return closed;
+}
+window.addEventListener('popstate', e => {
+  const st = e.state;
+  if (closeOverlays() && st && st.app) return;   // the back press closed a photo / full-screen view
+  if (!st || !st.app || !ui.user) return;
+  ui.attachChoice = null; ui.attachOpen = false; ui.replaceArt = null;
+  Object.assign(ui, { view: st.view || 'list', jobId: st.jobId || null, screenId: st.screenId || null, backTo: st.backTo || 'list', tab: st.tab || ui.tab, arm: null });
+  render(); window.scrollTo(0, st.y || 0); requestAnimationFrame(() => window.scrollTo(0, st.y || 0));
+});
+try { history.scrollRestoration = 'manual'; if (!history.state || !history.state.app) history.replaceState(navState(), ''); } catch (e) {}   // the app restores the scroll spot itself
 document.addEventListener('click', async e => {
   const el = e.target.closest('[data-a]'); if (!el || el.disabled) return;
   const a = el.dataset.a, v = el.dataset.v;
@@ -1451,7 +1478,7 @@ document.addEventListener('click', async e => {
       else d.screens.push(screenFromArt(a));
       render(); break;
     }
-    case 'back': go(ui.view === 'screen' && ui.backTo === 'job' ? 'job' : 'list'); break;
+    case 'back': if (history.length > 1 && history.state && history.state.app && history.state.view === ui.view && ui.view !== 'list') history.back(); else go(ui.view === 'screen' && ui.backTo === 'job' ? 'job' : 'list'); break;
     case 'newjob':
       ui.draft = { customer: '', specApplied: '', date: localDate(), due: localDate(Date.now() + 3 * 864e5), note: '', screens: [] };
       go('newjob'); break;
@@ -1500,8 +1527,8 @@ document.addEventListener('click', async e => {
       try { await api('DELETE', '/photos/' + v); s.photos = s.photos.filter(p => p.id !== v); if (s.photoKind && s.photoKind[v]) { delete s.photoKind[v]; saveScreen(s); } render(); } catch (x) { toast(x.message); }
       break;
     }
-    case 'zoom': $('#lbimg').src = photoSrc(v); $('#lb').hidden = false; break;
-    case 'zoomfile': $('#lbimg').src = fileUrl(v, true); $('#lb').hidden = false; break;
+    case 'zoom': $('#lbimg').src = photoSrc(v); $('#lb').hidden = false; openOverlay(); break;
+    case 'zoomfile': $('#lbimg').src = fileUrl(v, true); $('#lb').hidden = false; openOverlay(); break;
     case 'ainame': aiName(v); break;
     case 'delfile': {
       // data-k = "d:<row>:originals" (ฟอร์มใหม่) หรือ "s:<originals|prepared>" (บล็อคที่เปิดอยู่)
@@ -1539,7 +1566,7 @@ document.addEventListener('click', async e => {
     case 'settingssave': await saveSettings(); break;
   }
 });
-$('#lb').addEventListener('click', () => $('#lb').hidden = true);
+$('#lb').addEventListener('click', () => { if (history.state && history.state.overlay) history.back(); else $('#lb').hidden = true; });
 
 function updateResults() { const el = $('#q'), r = $('#homeres'); if (el) ui.q = el.value; if (r) r.innerHTML = homeResults(); }
 // คีย์บอร์ดมือถือบางรุ่นส่งคำทีละช่วง: เช็กค่าซ้ำเมื่อพิมพ์จบคำหรือปล่อยปุ่ม
