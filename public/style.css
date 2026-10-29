@@ -433,3 +433,16 @@ div.brow:hover{background:none}
   .brow[role=button] .thumb{width:68px;height:68px}
   .brow[role=button] .sidtxt{font-size:.7rem}
 }
+
+/* ปัดขวาเพื่อขึ้นกาว (จอสัมผัส) */
+.swipe{position:relative;overflow:hidden;border-top:1px solid var(--line)}
+.jobhead+.swipe,.jobcard>.swipe:first-child{border-top:0}
+.swipe>.brow{border-top:0;background:var(--surface);position:relative;z-index:1;touch-action:pan-y}
+.swipebg{position:absolute;inset:0;display:flex;align-items:center;padding-left:18px;font-weight:600;font-size:.9rem;color:var(--on-emulsion);background:color-mix(in srgb,var(--emulsion) 55%,var(--surface));opacity:0;transition:opacity .1s}
+.swipe.swiping .swipebg{opacity:1}
+.swipe.armed .swipebg{background:var(--ok);color:#fff}
+.swipehint{display:none}
+@media (hover:none) and (pointer:coarse){
+  .swipehint{display:block}
+  .swipe .coatbtn{display:none}
+}

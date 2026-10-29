@@ -343,6 +343,7 @@ function homeResults() {
     <div class="list">${g.xs.map(({ j, ss }) => jobCard(j, ss)).join('')}</div>` : '';
   const waitN = allScreens().filter(x => needsFilm(x.s)).length;
   return `<div class="filters" role="tablist">${FILTERS.map(([k, label, t]) => { const n = count(t); return `<button role="tab" data-a="tab" data-v="${k}" aria-selected="${k === f[0]}">${label} <span class="count">${n}</span></button>`; }).join('')}</div>
+  ${allScreens().some(x => ['ordered', 'coating', 'rework'].includes(x.s.status)) ? '<div class="swipehint small muted">ปัดแถวไปทางขวาเพื่อบันทึก "ขึ้นกาว" · แตะแถวเพื่อเปิดบล็อค</div>' : ''}
   ${f[0] === 'film' && waitN ? `<a class="filmwait" href="/film/"><span><b class="num">${waitN}</b> บล็อครอลงแผ่นฟิล์ม · รวมหลายใบงานลงแผ่นเดียวได้</span><span>สร้างฟิล์ม →</span></a>` : ''}
   ${q.length ? `<div class="muted small">พบ <span class="num">${hits.reduce((n, x) => n + x.ss.length, 0)}</span> บล็อค ใน <span class="num">${hits.length}</span> ใบงาน</div>` : ''}
   ${hits.length ? groups.map(sec).join('') + (more > 0 ? `<button class="btn ghost morejobs" data-a="morejobs">แสดงใบงานเก่ากว่านี้ (อีก <span class="num">${more}</span> ใบงาน)</button>` : '') : `<div class="empty">${q.length ? `ไม่พบงานที่ตรงกับ "${esc(ui.q)}"` : `ไม่มีงานในขั้นตอน "${f[1]}"`}</div>`}`;
@@ -427,13 +428,16 @@ function jobBlockRow(j, s) {
 }
 function blockRow(j, s) {
   const th = s.thAfter !== '' && s.thAfter != null ? ` · วัดจริง <span class="num">${s.thAfter} µm</span>` : '';
-  return `<div class="brow" role="button" tabindex="0" data-a="openscreen" data-j="${j.id}" data-v="${s.id}">
+  const canCoat = ['ordered', 'coating', 'rework'].includes(s.status);
+  const row = `<div class="brow" role="button" tabindex="0" data-a="openscreen" data-j="${j.id}" data-v="${s.id}">
     ${s.preview ? `<img class="thumb" src="${fileUrl(s.preview, true)}" alt="" loading="lazy">` : '<span class="thumb none" aria-hidden="true"></span>'}
     <span class="bt"><b>${esc(s.design || '(ยังไม่ตั้งชื่อ)')}</b>${s.stencilId ? `<span class="sidtxt">${esc(s.stencilId)}</span>` : ''}
       <span class="muted small">${s.frameSource === 'customer' ? '<span class="fsrc">บล็อคเดิมลูกค้า</span>' : 'บล็อคใหม่'} · ${(s.sizes || []).length ? `ไซส์ ${esc(s.sizes.join(', '))} · ` : ''}<span class="num">${esc(s.mesh)}</span> · <span class="num">${esc(s.target)} µm</span>${s.coats.length ? ` · กาว ${s.coats.length} รอบ` : ''}${th}</span></span>
     <span class="bstate">${waitingFile(s) ? '<span class="chip fl-wait" title="รอไฟล์จากลูกค้า">รอไฟล์</span>' : needsFilm(s) ? '<span class="chip fl-need" title="ยังไม่ทำฟิล์ม">รอฟิล์ม</span>' : ''}${chipShort(s.status)}
-      ${['ordered', 'coating', 'rework'].includes(s.status) ? `<button class="btn sm primary coatbtn" data-a="quickcoat" data-j="${j.id}" data-v="${s.id}" title="บันทึกรอบขึ้นกาวของบล็อคนี้ (เหมือนกด + ขึ้นกาว ในหน้าบล็อค)">+ ขึ้นกาว</button>` : ''}</span>
+      ${canCoat ? `<button class="btn sm primary coatbtn" data-a="quickcoat" data-j="${j.id}" data-v="${s.id}" title="บันทึกรอบขึ้นกาวของบล็อคนี้ (เหมือนกด + ขึ้นกาว ในหน้าบล็อค)">+ ขึ้นกาว</button>` : ''}</span>
   </div>`;
+  // rows that can take a coat round: swipe right on a touch screen (the strip behind shows what will happen)
+  return canCoat ? `<div class="swipe" data-j="${j.id}" data-v="${s.id}"><div class="swipebg" aria-hidden="true">+ ขึ้นกาว รอบที่ ${s.coats.length + 1}</div>${row}</div>` : row;
 }
 // ไซส์ที่ลูกค้าระบุ: เลือกได้หลายไซส์ หรือไม่ระบุ (รายการแก้ได้ที่ ⚙ ตั้งค่า)
 const DEFAULT_SIZES = ['FREE SIZE', 'XS', 'S', 'M', 'L', 'XL', 'XXL'];
@@ -999,6 +1003,41 @@ function makeViewer() {
   new ResizeObserver(() => { if (!v.data || !v.data.film) return; const ow = v.w; size(); if (!v.zoomed) fit(); else { v.tx += (v.w - ow) / 2; changed(true); } }).observe(area);
   return v;
 }
+// swipe right on a job-list row = "+ ขึ้นกาว" (touch / pen only; vertical scrolling stays with the browser via touch-action: pan-y)
+(function swipeToCoat() {
+  let g = null;
+  const COMMIT = r => Math.min(140, r.width * 0.35);
+  document.addEventListener('pointerdown', e => {
+    if (e.pointerType === 'mouse') return;
+    const w = e.target.closest('.swipe'); if (!w || e.target.closest('button')) return;
+    g = { w, row: w.querySelector('.brow'), x: e.clientX, y: e.clientY, dx: 0, on: false, id: e.pointerId, r: w.getBoundingClientRect() };
+  });
+  document.addEventListener('pointermove', e => {
+    if (!g || e.pointerId !== g.id) return;
+    const dx = e.clientX - g.x, dy = e.clientY - g.y;
+    if (!g.on) { if (Math.abs(dy) > 10 && Math.abs(dy) > Math.abs(dx)) { g = null; return; } if (dx < 12) return; g.on = true; g.w.classList.add('swiping'); }
+    g.dx = Math.max(0, Math.min(dx, g.r.width * 0.8));
+    g.row.style.transform = `translateX(${g.dx}px)`;
+    g.w.classList.toggle('armed', g.dx >= COMMIT(g.r));
+  });
+  const end = async e => {
+    if (!g || (e && e.pointerId !== g.id)) return;
+    const { w, row, on, dx, r } = g; g = null;
+    if (!on) return;
+    const go = e && e.type === 'pointerup' && dx >= COMMIT(r);
+    row.style.transition = 'transform .18s ease'; row.style.transform = 'translateX(0)';
+    setTimeout(() => { row.style.transition = ''; w.classList.remove('swiping', 'armed'); }, 200);
+    w.dataset.swiped = String(Date.now());   // the click that follows a swipe must not open the block
+    if (!go) return;
+    if (navigator.vibrate) try { navigator.vibrate(15); } catch (x) {}
+    const { s } = find(w.dataset.j, w.dataset.v); if (!s) return;
+    const last = s.coats[s.coats.length - 1];
+    if (last && Date.now() - last.t < 3000) return;   // same guard as the button
+    await addCoat(s, true);
+  };
+  document.addEventListener('pointerup', end); document.addEventListener('pointercancel', end);
+  document.addEventListener('click', e => { const w = e.target.closest && e.target.closest('.swipe'); if (w && Date.now() - Number(w.dataset.swiped || 0) < 400) { e.stopPropagation(); e.preventDefault(); } }, true);
+})();
 // rows that act as buttons (they hold their own buttons, so they cannot be <button>s)
 document.addEventListener('keydown', e => { if ((e.key === 'Enter' || e.key === ' ') && e.target.matches && e.target.matches('[role="button"][data-a]')) { e.preventDefault(); e.target.click(); } });
 document.addEventListener('keydown', e => { if (e.key !== 'Escape') return; const f = document.querySelector('.fv.full'); if (f) f.querySelector('[data-z="full"]').click(); });
