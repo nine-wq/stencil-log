@@ -213,8 +213,19 @@ const allScreens = () => db.jobs.flatMap(j => j.screens.map(s => ({ j, s })));
 const find = (jid, sid) => { const j = db.jobs.find(x => x.id === jid); return { j, s: j && sid ? j.screens.find(x => x.id === sid) : null }; };
 const tol = () => (db.master && db.master.tolerance) || 10;
 const defTarget = () => (db.master && db.master.defaultTarget) || 400;
-function dueCls(j) { const h = (dueTs(j) - Date.now()) / 3600e3; return h < 0 ? 'due-late' : h < 24 ? 'due-soon' : ''; }
-function dueText(j) { const h = (dueTs(j) - Date.now()) / 3600e3; if (h < 0) return 'เลยกำหนด ' + fmtD(dueTs(j)); if (h < 24) return 'ส่งภายในวันนี้/พรุ่งนี้'; return 'กำหนดส่ง ' + fmtD(dueTs(j)); }
+// days left to the due date, counted in calendar days (0 = due today, negative = late); null = no due date or already sent
+function dueDays(j) {
+  if (!j.due || j.sentAt) return null;
+  const t0 = new Date(); t0.setHours(0, 0, 0, 0);
+  return Math.round((new Date(j.due + 'T00:00').getTime() - t0.getTime()) / 864e5);
+}
+function dueCls(j) { const d = dueDays(j); return d == null ? '' : d < 0 ? 'due-late' : d <= 1 ? 'due-soon' : ''; }
+function dueText(j) {
+  if (!j.due) return 'ไม่ระบุกำหนดส่ง';
+  const d = dueDays(j), when = 'กำหนดส่ง ' + fmtD(dueTs(j));
+  if (d == null) return when;
+  return when + ' · ' + (d < 0 ? `เลยกำหนด ${-d} วัน` : d === 0 ? 'ส่งวันนี้' : d === 1 ? 'ส่งพรุ่งนี้' : `อีก ${d} วัน`);
+}
 const chip = st => `<span class="chip st-${st}">${STATUS[st]}</span>`;
 function delta(v, target) {
   if (v === '' || v == null || !target) return '';
