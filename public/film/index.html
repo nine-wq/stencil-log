@@ -1035,7 +1035,7 @@ details.settings summary { cursor: pointer; font-weight: 600; font-size: .9rem }
       } catch (e) { rec.error = 'เปิดไฟล์ต้นฉบับไม่ได้'; setStatus('เปิดไฟล์ต้นฉบับของ ' + rec.name + ' ไม่ได้: ' + e.message, true); return null; }
     })();
     origDocs.set(rec, pr);
-    while (origDocs.size > 3) { const [old, p0] = origDocs.entries().next().value; origDocs.delete(old); p0.then(o => o && o.doc.destroy()); }
+    while (origDocs.size > MAX_PDF + 1) { const [old, p0] = origDocs.entries().next().value; origDocs.delete(old); p0.then(o => o && o.doc.destroy()); }
     return pr;
   }
   function dropOrigDocs(keep) { for (const [rec, pr] of [...origDocs]) if (!keep(rec)) { origDocs.delete(rec); pr.then(o => o && o.doc.destroy()); } }
@@ -1044,39 +1044,68 @@ details.settings summary { cursor: pointer; font-weight: 600; font-size: .9rem }
     const p = FV.v.pages[it.si], r = c.rectOf(p), s = FV.v.scale;
     return pts.map(([x, y]) => { const f = toFilm(it, x, y), [vx, vy] = p.vp1.convertToViewportPoint(f.x, f.y); return [r.x + vx * s, r.y + vy * s]; });
   }
+  // How many originals are rendered from the PDF at once: 4 on computers with 8 GB or more, else 2 (phones).
+  // Every other design on screen is drawn from its small preview picture (the artwork's own cut-out, ~640 px),
+  // so the whole sheet can be compared at once; a design switches to its PDF when it is big enough on screen
+  // that the picture would look soft.
+  const MAX_PDF = (navigator.deviceMemory || 4) >= 8 ? 4 : 2;
+  const pvImgs = new Map();   // preview file id -> Promise<Image | null>
+  function pvImage(fid) {
+    if (!pvImgs.has(fid)) pvImgs.set(fid, (async () => { try { const im = new Image(); im.src = tq('/api/files/' + fid + '?inline=1'); await im.decode(); return im; } catch (e) { return null; } })());
+    return pvImgs.get(fid);
+  }
+  const pvOf = (it, rec) => it.pv || (rec && rec.snap && rec.snap.pv) || null;
   async function drawOriginals(g, c) {
     if (!filmPlan) return [];
-    // designs on screen, nearest the middle first; their originals (at most 2 files) go under the film
-    const mid = [c.vw / 2, c.vh / 2], vis = [];
+    const mid = [c.vw / 2, c.vh / 2], vis = [], k = c.k;
     filmPlan.sheets.forEach(sh => sh.forEach(it => {
       if (!FV.v.pages[it.si]) return;
       const b = it.b.bbox, q = blockScreen(it, c, [[b[0], b[1]], [b[2], b[1]], [b[2], b[3]], [b[0], b[3]]]);
       const xs = q.map(t => t[0]), ys = q.map(t => t[1]), x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys);
       if (x1 < 0 || y1 < 0 || x0 > c.vw || y0 > c.vh) return;
       const rec = recOfIt(it); if (!rec) return;
-      vis.push({ it, rec, q, d: Math.hypot((x0 + x1) / 2 - mid[0], (y0 + y1) / 2 - mid[1]) });
+      const pv = pvOf(it, rec);
+      // the picture is sharp enough while the design is shown smaller than the picture itself
+      const big = !pv || !pv.box || Math.max(x1 - x0, y1 - y0) * k > 700;
+      vis.push({ it, rec, q, pv, big, d: Math.hypot((x0 + x1) / 2 - mid[0], (y0 + y1) / 2 - mid[1]) });
     }));
     vis.sort((a, b) => a.d - b.d);
-    const files = []; vis.forEach(x => { if (!files.includes(x.rec) && files.length < 2) files.push(x.rec); });
-    const areas = [], k = c.k;
-    for (const x of vis) {
-      if (!files.includes(x.rec)) continue;
-      const o = await origPage(x.rec); if (c.stale()) return null; if (!o) continue;
-      // affine map: original viewport (scale 1) -> this canvas, from three corners of the design
-      const b = x.it.b.bbox, P = [[b[0], b[1]], [b[2], b[1]], [b[0], b[3]]];
-      const u = P.map(([px, py]) => o.vp1.convertToViewportPoint(px, py)), w = blockScreen(x.it, c, P).map(t => [t[0] * k, t[1] * k]);
+    const files = []; vis.forEach(x => { if (x.big && !files.includes(x.rec) && files.length < MAX_PDF) files.push(x.rec); });
+    const areas = [];
+    const clipTo = (qk) => { g.beginPath(); qk.forEach((t, i) => g[i ? 'lineTo' : 'moveTo'](t[0], t[1])); g.closePath(); g.clip(); };
+    // affine map from three source points to three canvas points
+    const affine = (u, w) => {
       const du1 = [u[1][0] - u[0][0], u[1][1] - u[0][1]], du2 = [u[2][0] - u[0][0], u[2][1] - u[0][1]];
       const dw1 = [w[1][0] - w[0][0], w[1][1] - w[0][1]], dw2 = [w[2][0] - w[0][0], w[2][1] - w[0][1]];
-      const det = du1[0] * du2[1] - du2[0] * du1[1]; if (Math.abs(det) < 1e-9) continue;
-      const iu = [du2[1] / det, -du1[1] / det, -du2[0] / det, du1[0] / det];   // inverse of [du1 du2] (column-major a,b,c,d)
+      const det = du1[0] * du2[1] - du2[0] * du1[1]; if (Math.abs(det) < 1e-9) return null;
+      const iu = [du2[1] / det, -du1[1] / det, -du2[0] / det, du1[0] / det];
       const a = dw1[0] * iu[0] + dw2[0] * iu[1], bb = dw1[1] * iu[0] + dw2[1] * iu[1];
       const cc = dw1[0] * iu[2] + dw2[0] * iu[3], d = dw1[1] * iu[2] + dw2[1] * iu[3];
-      const e = w[0][0] - (a * u[0][0] + cc * u[0][1]), f = w[0][1] - (bb * u[0][0] + d * u[0][1]);
+      return [a, bb, cc, d, w[0][0] - (a * u[0][0] + cc * u[0][1]), w[0][1] - (bb * u[0][0] + d * u[0][1])];
+    };
+    for (const x of vis) {
       const qk = x.q.map(t => [t[0] * k, t[1] * k]);
-      g.save(); g.beginPath(); qk.forEach((t, i) => g[i ? 'lineTo' : 'moveTo'](t[0], t[1])); g.closePath(); g.clip();
-      const t = o.pg.render({ canvasContext: g, viewport: o.vp1, transform: [a, bb, cc, d, e, f], background: 'rgba(0,0,0,0)' }); c.task(t);
-      try { await t.promise; } catch (er) { g.restore(); return null; }
-      g.restore(); if (c.stale()) return null;
+      if (files.includes(x.rec)) {   // sharp: the original PDF page
+        const o = await origPage(x.rec); if (c.stale()) return null;
+        if (o) {
+          const b = x.it.b.bbox, P = [[b[0], b[1]], [b[2], b[1]], [b[0], b[3]]];
+          const M = affine(P.map(([px, py]) => o.vp1.convertToViewportPoint(px, py)), blockScreen(x.it, c, P).map(t => [t[0] * k, t[1] * k]));
+          if (M) {
+            g.save(); clipTo(qk);
+            const t = o.pg.render({ canvasContext: g, viewport: o.vp1, transform: M, background: 'rgba(0,0,0,0)' }); c.task(t);
+            try { await t.promise; } catch (er) { g.restore(); return null; }
+            g.restore(); if (c.stale()) return null;
+            areas.push(qk); continue;
+          }
+        }
+      }
+      if (!x.pv || !x.pv.box) continue;
+      // quick: the preview picture = the design's box + 4 % margin (as cut by the library), unrotated page
+      const im = await pvImage(x.pv.id); if (c.stale()) return null; if (!im) continue;
+      const bx = x.pv.box, pad = Math.max(bx[2] - bx[0], bx[3] - bx[1]) * 0.04, B = [bx[0] - pad, bx[1] - pad, bx[2] + pad, bx[3] + pad];
+      const M = affine([[0, 0], [im.naturalWidth, 0], [0, im.naturalHeight]], blockScreen(x.it, c, [[B[0], B[3]], [B[2], B[3]], [B[0], B[1]]]).map(t => [t[0] * k, t[1] * k]));
+      if (!M) continue;
+      g.save(); clipTo(qk); g.setTransform(...M); g.drawImage(im, 0, 0); g.restore();
       areas.push(qk);
     }
     return areas;
@@ -1245,7 +1274,7 @@ details.settings summary { cursor: pointer; font-weight: 600; font-size: .9rem }
       recs.forEach(rec => jobs.push(rec));
       const sheets = [];
       items.forEach(x => { if (!x.place || !x.place.bbox) return; const rec = recOf.get(x.orig + ':' + (x.page || 0));
-        x._pl = { ...x.place, label: [x.stencilId, x.design].filter(Boolean).join(' ') || x.origName, b: { bbox: x.place.bbox, job: rec ? rec.job : {} } }; (sheets[x.place.si || 0] ||= []).push(x._pl); });
+        x._pl = { ...x.place, pv: x.pv || null, label: [x.stencilId, x.design].filter(Boolean).join(' ') || x.origName, b: { bbox: x.place.bbox, job: rec ? rec.job : {} } }; (sheets[x.place.si || 0] ||= []).push(x._pl); });
       const n = Math.max(info.sheets || 1, sheets.length); for (let i = 0; i < n; i++) sheets[i] = sheets[i] || [];
       setStatus(recs.length ? '' : 'ฟิล์มนี้ไม่มีไฟล์ต้นฉบับเก็บไว้เทียบ (ฟิล์มที่ทำก่อนมีการเก็บ snapshot)');
       await preview(pdf, buildId, null, { sheets });
@@ -1359,7 +1388,7 @@ details.settings summary { cursor: pointer; font-weight: 600; font-size: .9rem }
         const rec = { id: ++seq, name: `${s.design || a.name || ref}`, bytes: bytes.slice(0), page: a.page || 0, src: a.fileName || label, srcBytes: bytes,
           screen: { id: s.id, stencilId: s.stencilId || '', jobNo: j.no, design: s.design || a.name || '', customer: j.customer, thick: Number(s.target) || null },
           // snapshot stored with the film: the block as it is now, and which original (file, page) it came from
-          snap: { stencilId: s.stencilId || '', customerRef: s.customerRef || a.customerRef || '', sizes: s.sizes || [], frameSource: s.frameSource || 'new',
+          snap: { pv: a.preview && Array.isArray(a.box) ? { id: a.preview, box: a.box } : null, stencilId: s.stencilId || '', customerRef: s.customerRef || a.customerRef || '', sizes: s.sizes || [], frameSource: s.frameSource || 'new',
             mesh: s.mesh || '', frame: s.frame || '', emulsion: s.emulsion || '', preview: s.preview || a.preview || '', orig: a.file || '', origName: a.fileName || '', page: a.page || 0 } };
         rec.job = await C.analyze(bytes, label, a.page || 0);
         // text printed under the design on the film (film number is added when the film is saved)

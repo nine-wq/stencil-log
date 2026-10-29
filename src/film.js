@@ -52,6 +52,7 @@ function cleanInfo(raw, me) {
     screenId: str(it.screenId, 40), jobNo: str(it.jobNo, 40), design: str(it.design, 80), thumb: false,
     stencilId: str(it.stencilId, 30), customerRef: str(it.customerRef, 120), sizes: Array.isArray(it.sizes) ? it.sizes.slice(0, 20).map(x => str(x, 30)) : [],
     frameSource: it.frameSource === 'customer' ? 'customer' : 'new', mesh: str(it.mesh, 40), frame: str(it.frame, 60), emulsion: str(it.emulsion, 60),
+    pv: it.pv && id(it.pv.id) && Array.isArray(it.pv.box) ? { id: id(it.pv.id), box: nums(it.pv.box, 4) } : null,   // preview picture + the box it was cut from
     preview: id(it.preview), orig: id(it.orig), origName: str(it.origName, 200), page: num(it.page) || 0,
     place: it.place && typeof it.place === 'object' ? { si: num(it.place.si) || 0, x: num(it.place.x), y: num(it.place.y), w: num(it.place.w), h: num(it.place.h),
       W: num(it.place.W), H: num(it.place.H), rot: !!it.place.rot, bbox: nums(it.place.bbox, 4) } : null
