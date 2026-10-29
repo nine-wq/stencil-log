@@ -1159,7 +1159,8 @@ function screenView() {
       <div class="muted small">กดตอนเริ่มปาดกาวแต่ละรอบ ระบบบันทึกวันและเวลาให้อัตโนมัติ</div>` : ''}
     <div class="thick">${thickField('thBefore', 'ความหนาก่อนถ่ายบล็อค', s, canCoat)}</div>
     <div class="field"><label for="c-note">หมายเหตุการขึ้นบล็อค</label>${canCoat ? `<textarea id="c-note" data-f="coatNote" placeholder="สภาพห้อง เวลาถ่าย ปัญหาที่พบ">${esc(s.coatNote)}</textarea>` : `<div>${esc(s.coatNote) || '<span class="muted">-</span>'}</div>`}</div>
-    ${canCoat ? `<div class="row" style="justify-content:flex-end"><span class="err" id="cerr"></span><button class="btn primary" data-a="toqc">เสร็จแล้ว ส่งตรวจ</button></div>` : ''}
+    ${canCoat ? (() => { const miss = qcMissing(s);
+      return `<div class="row" style="justify-content:flex-end"><span class="err" id="cerr">${miss.length ? 'ยังส่งตรวจไม่ได้: ' + miss.join(' · ') : ''}</span><button class="btn primary" data-a="toqc" ${miss.length ? 'disabled' : ''}>เสร็จแล้ว ส่งตรวจ</button></div>`; })() : ''}
   </div>`;
 
   if (['qc', 'ready', 'sent', 'rework'].includes(s.status) || s.photos.length) {
@@ -1299,6 +1300,13 @@ async function saveSettings() {
   if (fails.length) { const e2 = $('#serr'); if (e2) e2.textContent = fails.join(' · '); toast('บันทึกไม่ครบ'); } else toast('บันทึกการตั้งค่าแล้ว');
 }
 
+// what still stops a block from going to QC: the customer's file and at least one coat round
+function qcMissing(s) {
+  const m = [];
+  if (waitingFile(s)) m.push('ยังไม่มีไฟล์ลายจากลูกค้า');
+  if (!s.coats.length) m.push('ยังไม่ได้ขึ้นกาว');
+  return m;
+}
 // one coat round: time + person; the first round moves the block from รอขึ้นบล็อค (or ตีกลับ) to กำลังขึ้นกาว
 async function addCoat(s, named) {
   s.coats.push({ t: Date.now(), side: '', by: ui.user.name });
@@ -1482,7 +1490,7 @@ document.addEventListener('click', async e => {
     case 'undocoat': { const { s } = cur(); s.coats.pop(); if (!s.coats.length && s.status === 'coating') s.status = 'ordered'; render(); saveScreen(s); break; }
     case 'toqc': {
       const { s } = cur();
-      if (!s.coats.length) return $('#cerr').textContent = 'ยังไม่มีรอบขึ้นกาว';
+      const miss = qcMissing(s); if (miss.length) return $('#cerr').textContent = 'ยังส่งตรวจไม่ได้: ' + miss.join(' · ');
       s.status = 'qc'; logEv(s, 'ส่งตรวจ');
       if (await saveScreen(s)) { toast('ส่งให้ฝ่ายตรวจแล้ว'); go('list'); }
       break;
@@ -1509,6 +1517,7 @@ document.addEventListener('click', async e => {
     }
     case 'pass': {
       const { s } = cur();
+      if (waitingFile(s)) return $('#qerr').textContent = 'บล็อคนี้ยังไม่มีไฟล์ลายจากลูกค้า เพิ่มไฟล์ลายก่อน';
       if (s.thAfter === '' || s.thAfter == null) return $('#qerr').textContent = 'ใส่ความหนาจริงที่วัดได้ก่อน';
       const miss = QC_PHOTOS.filter(([k]) => !s.photos.some(p => photoKindOf(s, p) === k)).map(x => x[1]);
       if (miss.length) return $('#qerr').textContent = 'ยังไม่มีรูป: ' + miss.join(', ');
