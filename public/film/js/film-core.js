@@ -776,7 +776,7 @@
       if (d.off) continue;
       const ds = job.dset && job.dset[d.index];
       const um = compensation(ds, st);
-      const lay = markLayout(d, st), marks = markOps(lay, st.markGrey / 100, st.markWidthMm != null ? st.markWidthMm * MM : (st.markWidth || 0.4));
+      const lay = markLayout(d, st), marks = st.marks === false ? '' : markOps(lay, st.markGrey / 100, st.markWidthMm != null ? st.markWidthMm * MM : (st.markWidth || 0.4));
       const all = d.frames.reduce(union);
       let b = union(all, [lay.cx - lay.L, all[1], lay.cx + lay.L, all[3]]);
       let label = null;

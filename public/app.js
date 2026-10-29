@@ -1340,56 +1340,95 @@ async function addCoat(s, named) {
   if (await saveScreen(s)) toast(`ขึ้นกาวรอบที่ ${s.coats.length} แล้ว${named ? ' · ' + (s.design || s.stencilId || '') : ''}`);
 }
 /* ---------- stencil labels: 200 × 22 mm, stacked with no gap on A4 sticker paper (13 per sheet), cut along the lines ---------- */
-function printLabels(j, screens) {
-  const abs = u => location.origin + u;
-  const ymd = t => { const d = new Date(t); return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`; };
-  const one = s => {
-    const date = s.coats && s.coats.length ? s.coats[0].t : Date.now();   // the day the stencil was coated (or today)
-    const cell = (k, v, cls = '') => `<div class="c ${cls}"><span class="k">${k}</span><span class="v">${v}</span></div>`;
+// the label picture = the design as it goes on the film (black, compensation applied), without the crosses or the
+// text under it; cropped to the ink and turned sideways when it is taller than wide, so it fills the 22 mm strip
+function labelPic(s) {
+  const a = s.artworkId && artOf(s.artworkId);
+  const fallback = s.preview ? location.origin + fileUrl(s.preview, true) : '';
+  if (!a || !a.filmable || !a.file) return Promise.resolve(fallback);
+  return (fpBusy = fpBusy.then(async () => {   // one film job at a time (shares the analysed file with the viewers)
+    let doc = null;
+    try {
+      const C = await loadFilmTools(), f = filmSetCache || (filmSetCache = { ...FILM_DEF, ...(await filmSet()) });
+      const st = { ...f, autoFactor: f.factor, labels: false, cropMarks: false, marks: false, dateText: '' };
+      const bytes = await artBytes(a), jk = a.file + ':' + (a.page || 0);
+      if (!jobCache.has(jk)) jobCache.set(jk, await C.analyze(bytes, a.customerRef || 'artwork', a.page || 0));
+      const job = jobCache.get(jk), p = prepOf(s);
+      job.notArt = new Set(p.notArt); job.excluded = new Set();
+      const pick = pickDesign(C, job, a, st); if (!pick) return fallback;
+      C.describe(job, st).designs.forEach(d => { if (d.index !== pick.index) job.excluded.add(d.index); });
+      job.dset = { [pick.index]: { thick: +s.target || 0, thickSet: true, mode: p.mode, manualUm: +p.manualUm || 0 } };
+      const res = await C.render(C.blocksFor(job, st), st), it = res.plan.sheets[0] && res.plan.sheets[0][0];
+      if (!it) return fallback;
+      doc = await window.pdfjsLib.getDocument({ data: res.bytes, isEvalSupported: false, verbosity: 0 }).promise;
+      const pg = await doc.getPage(1), v1 = pg.getViewport({ scale: 1 });
+      const p1 = v1.convertToViewportPoint(it.x, it.y), p2 = v1.convertToViewportPoint(it.x + it.W, it.y + it.H);
+      const bx = Math.min(p1[0], p2[0]), by = Math.min(p1[1], p2[1]), bw = Math.abs(p2[0] - p1[0]), bh = Math.abs(p2[1] - p1[1]);
+      const k = 900 / Math.max(bw, bh), c = document.createElement('canvas');
+      c.width = Math.ceil(bw * k); c.height = Math.ceil(bh * k);
+      const g = c.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, c.width, c.height);
+      await pg.render({ canvasContext: g, viewport: pg.getViewport({ scale: k }), transform: [1, 0, 0, 1, -bx * k, -by * k] }).promise;
+      // crop to the ink
+      const d = g.getImageData(0, 0, c.width, c.height).data; let x0 = c.width, y0 = c.height, x1 = -1, y1 = -1;
+      for (let y = 0; y < c.height; y++) for (let x = 0; x < c.width; x++) if (d[(y * c.width + x) * 4] < 160) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
+      if (x1 < 0) return fallback;
+      const pad = 6, w = x1 - x0 + 1 + 2 * pad, h = y1 - y0 + 1 + 2 * pad, turn = h > w;
+      const o = document.createElement('canvas'); o.width = turn ? h : w; o.height = turn ? w : h;
+      const og = o.getContext('2d'); og.fillStyle = '#fff'; og.fillRect(0, 0, o.width, o.height);
+      if (turn) { og.translate(0, o.height); og.rotate(-Math.PI / 2); }
+      og.drawImage(c, x0 - pad, y0 - pad, w, h, 0, 0, w, h);
+      return o.toDataURL('image/png');
+    } catch (e) { return fallback; }
+    finally { if (doc) doc.destroy(); }
+  }));
+}
+async function printLabels(j, screens) {
+  // the window opens at once (pop-up blockers allow it only straight from the tap), the pictures are made meanwhile
+  const w = window.open('', '_blank');
+  if (!w) { toast('เบราว์เซอร์บล็อกหน้าต่างใหม่ อนุญาตป๊อปอัปให้เว็บนี้แล้วกดอีกครั้ง'); return; }
+  w.document.write(`<!doctype html><meta charset="utf-8"><title>ลาเบล ${esc(j.no)}</title><p style="font:16px sans-serif;padding:24px">กำลังเตรียมลาเบล ${screens.length} ชิ้น…</p>`);
+  const pics = [];
+  for (const s of screens) pics.push(await labelPic(s));
+  const due = j.due ? (() => { const d = new Date(j.due + 'T00:00:00'); return `${pad2(d.getDate())}/${pad2(d.getMonth() + 1)}/${d.getFullYear()}`; })() : '-';
+  const one = (s, n) => {
+    const cell = (k, v) => `<div class="c"><span class="k">${k}</span><span class="v">${v}</span></div>`;
     return `<div class="lb">
-      <div class="pic">${s.preview ? `<img src="${abs(fileUrl(s.preview, true))}" alt="">` : ''}</div>
-      ${cell('Code', esc(s.stencilId || '-'), 'mono')}${cell('Date', ymd(date), 'mono')}
-      ${cell('Design', `${esc(s.design || '-')}${(s.sizes || []).length ? ` <small>· ${esc(s.sizes.join(', '))}</small>` : ''}`, 'wide')}
-      ${cell('Job', esc(j.no), 'mono')}
-      ${cell('Mesh', esc(s.mesh || '-'), 'mono')}${cell('Thickness', `${esc(s.target || '-')} µm`, 'mono')}
-      ${cell('Customer', `${esc(j.customer)}${s.customerRef ? ` <small>· ${esc(s.customerRef)}</small>` : ''}`, 'wide')}
-      <div class="c last"><span class="k">Frame</span><span class="v">${esc(s.frame || '-')}${s.frameSource === 'customer' ? ' <small>(ลูกค้า)</small>' : ''}</span><span class="by">prepared by VICZO INTERNATIONAL co.,ltd.</span></div>
+      <div class="pic">${pics[n] ? `<img src="${pics[n]}" alt="">` : ''}</div>
+      ${cell('ST', esc(s.stencilId || '-'))}${cell('ลูกค้า', esc(j.customer || '-'))}${cell('กำหนดส่ง', due)}
+      ${cell('Mesh', esc(s.mesh || '-'))}${cell('Customer Ref', esc(s.customerRef || '-'))}${cell('Thickness', `${esc(s.target || '-')} µm`)}
     </div>`;
   };
   const per = 13, sheets = [];
-  for (let i = 0; i < screens.length; i += per) sheets.push(screens.slice(i, i + per));
+  for (let i = 0; i < screens.length; i += per) sheets.push(screens.slice(i, i + per).map((s, k) => one(s, i + k)));
   const html = `<!doctype html><html lang="th"><head><meta charset="utf-8"><title>ลาเบล ${esc(j.no)}</title>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;600&family=IBM+Plex+Mono:wght@500;600&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;700&display=swap">
 <style>
 @page { size: A4 portrait; margin: 0 }
 * { box-sizing: border-box; margin: 0; padding: 0 }
 body { font-family: "IBM Plex Sans Thai", sans-serif; color: #000; background: #fff; -webkit-print-color-adjust: exact; print-color-adjust: exact }
 .sheet { width: 210mm; height: 297mm; padding: 5.5mm 5mm; break-after: page; page-break-after: always }
 .sheet:last-child { break-after: auto; page-break-after: auto }
-.lb { width: 200mm; height: 22mm; display: grid; grid-template-columns: 30mm 34mm 34mm 68mm 34mm; grid-template-rows: 1fr 1fr;
+.lb { width: 200mm; height: 22mm; display: grid; grid-template-columns: 40mm 46mm 66mm 48mm; grid-template-rows: 1fr 1fr;
   border: .3mm solid #000; margin-top: -.3mm; overflow: hidden }
 .lb:first-child { margin-top: 0 }
 .pic { grid-row: span 2; border-right: .3mm solid #000; display: grid; place-items: center; padding: .8mm; overflow: hidden }
 .pic img { max-width: 100%; max-height: 20mm; object-fit: contain; display: block }
-.c { display: grid; grid-template-columns: auto 1fr; align-items: center; gap: 1.2mm; padding: 0 1.4mm; border-right: .2mm solid #000; border-bottom: .2mm solid #000; min-width: 0; overflow: hidden }
-.c:nth-child(n+6) { border-bottom: 0 }
-.c .k { font-size: 6pt; color: #333 }
-.c .v { font-size: 9pt; font-weight: 600; line-height: 1.15; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; word-break: break-word }
-.c .v small { font-size: 7pt; font-weight: 400 }
-.c.mono .v { font-family: "IBM Plex Mono", monospace; font-size: 9pt }
-.c.last { border-right: 0; grid-template-rows: auto auto; align-content: center; row-gap: 0 }
-.c.last .by { grid-column: 1 / -1; font-size: 5pt; color: #333; line-height: 1.1 }
-.lb > .c:nth-child(5) { border-right: 0 }
+.c { display: flex; flex-direction: column; justify-content: center; padding: 0 2mm; border-right: .2mm solid #000; border-bottom: .2mm solid #000; min-width: 0; overflow: hidden }
+.lb > .c:nth-child(4) { border-right: 0 }
+.lb > .c:nth-child(n+5) { border-bottom: 0 }
+.lb > .c:nth-child(7) { border-right: 0 }
+.c .k { font-size: 6.5pt; color: #333; line-height: 1.1 }
+.c .v { font-size: 15pt; font-weight: 700; line-height: 1.15; white-space: nowrap; overflow: hidden }
 .tip { font: 12px sans-serif; color: #555; padding: 8px 12px; background: #f3f3f3 } @media print { .tip { display: none } }
 </style></head><body>
 <div class="tip">ลาเบล ${screens.length} ชิ้น · พิมพ์ที่ขนาด A4 · Scale 100% (ไม่ใช่ Fit to page) · ไม่มีขอบกระดาษ</div>
-${sheets.map(sh => `<div class="sheet">${sh.map(one).join('')}</div>`).join('')}
+${sheets.map(sh => `<div class="sheet">${sh.join('')}</div>`).join('')}
 <script>
+  // long text (customer, Customer REF) shrinks until it fits its box
+  const fit = () => document.querySelectorAll('.c .v').forEach(el => { let f = 15; while (el.scrollWidth > el.clientWidth && f > 7) el.style.fontSize = (f -= 0.5) + 'pt'; });
   Promise.all([document.fonts ? document.fonts.ready : 0, ...[...document.images].map(i => i.complete ? 0 : new Promise(r => { i.onload = i.onerror = r; }))])
-    .then(() => setTimeout(() => window.print(), 200));
+    .then(() => { fit(); setTimeout(() => window.print(), 200); });
 <\/script></body></html>`;
-  const w = window.open('', '_blank');
-  if (!w) { toast('เบราว์เซอร์บล็อกหน้าต่างใหม่ อนุญาตป๊อปอัปให้เว็บนี้แล้วกดอีกครั้ง'); return; }
   w.document.open(); w.document.write(html); w.document.close();
 }
 
