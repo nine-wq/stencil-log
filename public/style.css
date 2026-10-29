@@ -415,3 +415,4 @@ div.brow:hover{background:none}
 .qcslot{display:flex;flex-direction:column;gap:6px}
 .qcslot .ph,.qcslot .addph{width:100%;aspect-ratio:1}
 .req{color:var(--bad)}
+.morejobs{justify-self:center;margin:6px auto 0;display:block}

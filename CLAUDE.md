@@ -70,6 +70,7 @@ One page, no tabs: the job list. The top bar has ⟳, ⚙ and the user. Films ar
 - Search box and "+ สร้างใบงาน" on one row (`.toprow`), no page title.
 - Stage filters: ทั้งหมด (every block, done ones included; inside a job done blocks sort last), รอทำฟิล์ม (with the สร้างฟิล์ม bar), ขึ้นบล็อค, รอตรวจ, ตรวจสอบและจัดส่งแล้ว (`isDone`: status sent, or old `ready`). Every filter shows its count.
 - Always grouped by job date, newest first (no group-by switch).
+- Shows 20 jobs at a time (`HOME_PAGE`, `ui.homeLimit`); "แสดงใบงานเก่ากว่านี้ (อีก n ใบงาน)" adds 20 more. Changing the filter or the search starts again at 20. Counts on the filters are always for everything. (`/api/data` still sends every job; if that grows too big, the next step is to send only recent/unfinished jobs and fetch older ones on search.)
 - The search box matches jobs, blocks, files and people.
 - Job cards: header = customer on the left; job number · due date + days left on the right (`dueText`: อีก n วัน / ส่งพรุ่งนี้ / ส่งวันนี้ / เลยกำหนด n วัน, calendar days; orange from 1 day, red when late; nothing extra once every block is done) in the same plain small text. Block rows (`blockRow`): 97 px picture; name first, then the stencil ID as plain muted text; บล็อคใหม่ / บล็อคเดิมลูกค้า (orange) · sizes · mesh · thickness; on the right one column: the film chip first (`chip fl-wait` / `chip fl-need`), then the block status chip.
 

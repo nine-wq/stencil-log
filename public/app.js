@@ -310,6 +310,7 @@ function homeView() {
     <button class="btn primary" data-a="newjob">+ สร้างใบงาน</button></div>
   <div id="homeres">${homeResults()}</div>`;
 }
+const HOME_PAGE = 20;
 function homeResults() {
   const f = FILTERS.find(x => x[0] === ui.tab) || FILTERS[0];
   const q = searchTerms(ui.q);
@@ -322,6 +323,8 @@ function homeResults() {
     return { j, ss: ss.sort((a, b) => order[a.status] - order[b.status]), t: jobTs(j) };
   }).filter(x => x.ss.length).sort((a, b) => b.t - a.t || (b.j.createdAt || 0) - (a.j.createdAt || 0));
   const count = t => q.length ? hits.reduce((n, x) => n + x.j.screens.filter(t).filter(s => x.ss.includes(s) || matches(jobText(x.j) + ' ' + screenText(s), q)).length, 0) : allScreens().filter(x => t(x.s)).length;
+  // แสดงทีละ HOME_PAGE ใบงาน (ล่าสุดก่อน) กด "แสดงเพิ่ม" เพื่อดูเก่ากว่านี้; เปลี่ยนตัวกรองหรือคำค้นแล้วเริ่มนับใหม่
+  const limit = ui.homeLimit || HOME_PAGE, shown = hits.slice(0, limit), more = hits.length - shown.length;
   // จัดกลุ่มตามวันที่รับงาน (กลุ่มแรกที่เข้าเงื่อนไข)
   let groups;
   if (byCust) {   // จัดกลุ่มตามลูกค้า: ลูกค้าที่มีงานล่าสุดขึ้นก่อน
@@ -330,7 +333,7 @@ function homeResults() {
     groups = [...m.values()];
   } else {
     groups = dateGroups().map(g => ({ ...g, xs: [] }));
-    for (const x of hits) (groups.find(g => x.t >= g.from) || groups[groups.length - 1]).xs.push(x);
+    for (const x of shown) (groups.find(g => x.t >= g.from) || groups[groups.length - 1]).xs.push(x);
   }
   const sec = g => g.xs.length ? `<div class="sec-h"><h3>${esc(g.title)}</h3><span class="muted small num">${g.xs.length} ใบงาน</span></div>
     <div class="list">${g.xs.map(({ j, ss }) => jobCard(j, ss)).join('')}</div>` : '';
@@ -338,7 +341,7 @@ function homeResults() {
   return `<div class="filters" role="tablist">${FILTERS.map(([k, label, t]) => { const n = count(t); return `<button role="tab" data-a="tab" data-v="${k}" aria-selected="${k === f[0]}">${label} <span class="count">${n}</span></button>`; }).join('')}</div>
   ${f[0] === 'film' && waitN ? `<a class="filmwait" href="/film/"><span><b class="num">${waitN}</b> บล็อครอลงแผ่นฟิล์ม · รวมหลายใบงานลงแผ่นเดียวได้</span><span>สร้างฟิล์ม →</span></a>` : ''}
   ${q.length ? `<div class="muted small">พบ <span class="num">${hits.reduce((n, x) => n + x.ss.length, 0)}</span> บล็อค ใน <span class="num">${hits.length}</span> ใบงาน</div>` : ''}
-  ${hits.length ? groups.map(sec).join('') : `<div class="empty">${q.length ? `ไม่พบงานที่ตรงกับ "${esc(ui.q)}"` : `ไม่มีงานในขั้นตอน "${f[1]}"`}</div>`}`;
+  ${hits.length ? groups.map(sec).join('') + (more > 0 ? `<button class="btn ghost morejobs" data-a="morejobs">แสดงใบงานเก่ากว่านี้ (อีก <span class="num">${more}</span> ใบงาน)</button>` : '') : `<div class="empty">${q.length ? `ไม่พบงานที่ตรงกับ "${esc(ui.q)}"` : `ไม่มีงานในขั้นตอน "${f[1]}"`}</div>`}`;
 }
 // ช่วงเวลา: ล่าสุด (3 วัน) → สัปดาห์นี้ (เริ่มวันจันทร์) → เดือนนี้ → 3 เดือนที่ผ่านมา → ปีนี้ → ก่อนหน้านี้
 function dateGroups() {
@@ -1264,7 +1267,8 @@ document.addEventListener('click', async e => {
     case 'pindel': ui.pin = ui.pin.slice(0, -1); render(); break;
     case 'logout': try { await api('POST', '/logout'); } catch (x) {} signOutLocal(); break;
     case 'refresh': await loadData(); toast('อัปเดตแล้ว'); break;
-    case 'tab': go('list', { tab: v }); break;
+    case 'tab': go('list', { tab: v, homeLimit: HOME_PAGE }); break;
+    case 'morejobs': ui.homeLimit = (ui.homeLimit || HOME_PAGE) + HOME_PAGE; updateResults(); break;
     case 'clearq': ui.q = ''; render(); setTimeout(() => { const el = $('#q'); if (el) el.focus(); }); break;
     case 'settings': ui.admin = null; ui.editUser = null; ui.filmSet = null; go('settings'); break;
     case 'nav': go(v === 'library' ? 'library' : 'list'); break;
@@ -1407,7 +1411,7 @@ for (const ev of ['compositionupdate', 'compositionend', 'keyup']) document.addE
 document.addEventListener('input', e => {
   const t = e.target;
   if (t.dataset.search) {
-    ui.q = t.value;
+    ui.q = t.value; ui.homeLimit = HOME_PAGE;
     const x = t.parentNode.querySelector('[data-a="clearq"]'); if (x) x.hidden = !ui.q;
     // อัปเดตเฉพาะผลค้นหา (ไม่วาดช่องพิมพ์ใหม่) จึงทำได้แม้คีย์บอร์ดยังขีดเส้นใต้คำที่กำลังพิมพ์อยู่
     clearTimeout(ui.qTimer); ui.qTimer = setTimeout(updateResults, 120);
