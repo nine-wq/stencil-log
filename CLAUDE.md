@@ -30,6 +30,7 @@ Main menu (tabs in the app): ใบงาน (jobs) · ฟิล์ม (film his
    - **One original per screen**: the screen page's "ไฟล์ต้นฉบับจากลูกค้า" is read-only and shows the artwork's own file (no "+ เพิ่ม", no ✕); film, viewer and combine page all read `artwork.file`.
      - "เปลี่ยนไฟล์ลาย" (`ui.replaceArt`) reopens the same attach card for a revised file: upload into the library (asks which design if several) or pick another library artwork.
      - Replacing sets `artworkId`, `preview`, `originals = [file]`, Customer REF; keeps the name; clears `filmPrep.notArt`; removes `film` (the screen waits for film again) and logs it.
+   - **Job page rows** (`jobBlockRow`): picture, Stencil ID + Customer REF, name, then a label/value grid: ไซส์ · เฟรม (+ บล็อคเดิมลูกค้า) · ผ้าสกรีน · กาว · ความหนา · ชดเชยขอบ (`compText`) · ฟิล์ม (`filmState`: รอไฟล์ / ยังไม่ทำฟิล์ม / ทำฟิล์มแล้ว + time), and the block status chip. The home list keeps the compact `blockRow`.
    - Each block row: header (บล็อคที่ n, predicted Stencil ID, buttons), one viewer on the left, and groups on the right: ลาย (name, Customer REF) · สเปคบล็อค (mesh, frame, emulsion, thickness) · ฟิล์ม.
    - **Viewer** (`makeViewer`, shown at once, no toggle; it loads when scrolled into view):
      - The same area of the original with the design's film laid over it. The slider (ต้นฉบับ ↔ ฟิล์ม, remembered per browser) sets the film's opacity.
@@ -70,7 +71,7 @@ Main menu (tabs in the app): ใบงาน (jobs) · ฟิล์ม (film his
 **Settings** (⚙, everyone): users/PINs, pick lists, customer default specs (`master.customerSpecs`), tolerance, film settings (`settings.key='film'`: sheet size, margins, marks, compensation factor, near-white, specks, thickness list), CSV export.
 - One save button for the whole page ("บันทึกการตั้งค่า", sticky at the bottom, `saveSettings()`): it checks everything first (user form, film numbers), then saves pick lists + customer specs (`PUT /master`), film settings (`PUT /film-settings`, 409 on stale base) and the user being added/edited. The user form only has ยกเลิก.
 - Unsaved values survive redraws on this page (`formSnapshot`/`formRestore` in `render()`); after a save the page shows what the server holds (`ui.dropEdits`).
-- One-time reset `oneTimeReset()` in src/index.js (key `reset-2026-10-29` in settings): on the first request after deploy it cleared artworks, jobs, screens, photos, files, film_outputs and the whole R2 bucket, and set `seq`/`sseq` back to 1. The claimed settings row stops it from ever running again; remove the function once it has run in production.
+- A one-time reset of all test data ran on 2026-10-29 (settings row `reset-2026-10-29` marks it); its code was removed afterwards.
 
 Prepared-film uploads (the old "ไฟล์ที่เตรียมแล้ว ส่งยิงฟิล์ม" section, `screen.prepared`) are removed from the UI: every film is made in the app (`screen.film`). Old `prepared` ids are kept in the data, still searchable and protected from file deletion; the CSV column is now แผ่นฟิล์ม (film name).
 

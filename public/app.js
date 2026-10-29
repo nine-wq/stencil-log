@@ -435,6 +435,40 @@ function jobCard(j, ss) {
     ${ss.map(s => blockRow(j, s)).join('')}
   </div>`;
 }
+// one block in the job page: everything needed to make the stencil, at a glance
+function compText(s) {
+  const p = prepOf(s);
+  if (p.mode === 'none') return 'ไม่ชดเชย';
+  if (p.mode === 'manual') return `${esc(p.manualUm)} µm <span class="muted">(ระบุเอง)</span>`;
+  return `${Math.round((+s.target || 0) * filmFactor())} µm <span class="muted">(อัตโนมัติ)</span>`;
+}
+function filmState(s) {
+  if (waitingFile(s)) return '<span class="fstate wait">รอไฟล์จากลูกค้า</span>';
+  if (s.film) return `<span class="fstate ok">ทำฟิล์มแล้ว</span> <span class="muted small">${fmtT(s.film.at)}</span>`;
+  if (needsFilm(s)) return '<span class="fstate">ยังไม่ทำฟิล์ม</span>';
+  const a = s.artworkId && artOf(s.artworkId);
+  return a && !a.filmable ? '<span class="muted small">ไฟล์ลายทำฟิล์มอัตโนมัติไม่ได้</span>' : '<span class="muted small">-</span>';
+}
+function jobBlockRow(j, s) {
+  const kv = (k, v) => `<span class="kv"><span class="k">${k}</span><span class="v">${v}</span></span>`;
+  return `<button class="brow jb" data-a="openscreen" data-j="${j.id}" data-v="${s.id}">
+    ${s.preview ? `<img class="thumb" src="${fileUrl(s.preview, true)}" alt="" loading="lazy">` : '<span class="thumb none" aria-hidden="true"></span>'}
+    <span class="bt">
+      <span class="jbid">${s.stencilId ? `<span class="sid sm">${esc(s.stencilId)}</span>` : ''}${s.customerRef ? `<span class="cref">${esc(s.customerRef)}</span>` : ''}</span>
+      <b>${esc(s.design || '(ยังไม่ตั้งชื่อ)')}</b>
+      <span class="kvs">
+        ${kv('ไซส์', (s.sizes || []).length ? esc(s.sizes.join(', ')) : '<span class="muted">ไม่ระบุ</span>')}
+        ${kv('เฟรม', `${esc(s.frame || '-')}${s.frameSource === 'customer' ? ' <span class="fsrc">บล็อคเดิมลูกค้า</span>' : ''}`)}
+        ${kv('ผ้าสกรีน', `<span class="num">${esc(s.mesh || '-')}</span>`)}
+        ${kv('กาว', esc(s.emulsion || '-'))}
+        ${kv('ความหนา', `<span class="num">${esc(s.target || '-')} µm</span>`)}
+        ${kv('ชดเชยขอบ', compText(s))}
+        ${kv('ฟิล์ม', filmState(s))}
+      </span>
+    </span>
+    ${chip(s.status)}
+  </button>`;
+}
 function blockRow(j, s) {
   const th = s.thAfter !== '' ? ` · หลังถ่าย <span class="num">${s.thAfter}</span>` : '';
   return `<button class="brow" data-a="openscreen" data-j="${j.id}" data-v="${s.id}">
@@ -1053,7 +1087,7 @@ function jobView() {
   <div class="muted small">สั่งโดย ${esc(j.createdBy)} · ${fmtT(j.createdAt)}${j.sentAt ? ` · ส่งลูกค้า ${fmtT(j.sentAt)}` : ''}</div>
   ${waitFilm.length ? `<div class="card spread"><span><b>ยังไม่ทำฟิล์ม ${waitFilm.length} บล็อค</b><br><span class="muted small">เปิดหน้าทำฟิล์มพร้อมบล็อคเหล่านี้ เรียงลงแผ่นได้ร่วมกับงานอื่น</span></span>
     <a class="btn primary" href="/film/?add=${waitFilm.map(s => s.id).join(',')}">ทำฟิล์ม</a></div>` : ''}
-  <div class="jobcard">${j.screens.map(s => blockRow(j, s)).join('')}</div>
+  <div class="jobcard">${j.screens.map(s => jobBlockRow(j, s)).join('')}</div>
   <div class="row" style="justify-content:space-between">
     ${canDel ? `<button class="btn bad" data-a="deljob" data-v="${j.id}">${ui.arm === 'deljob' ? 'กดอีกครั้งเพื่อลบใบงานนี้' : 'ลบใบงาน'}</button>` : '<span></span>'}
     ${j.screens.every(s => s.status === 'ready') ? `<button class="btn ok" data-a="sendjob" data-v="${j.id}">บันทึกว่าส่งลูกค้าแล้ว</button>` : ''}
