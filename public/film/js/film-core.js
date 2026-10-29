@@ -754,6 +754,18 @@
     if (base.length > 70) base = base.slice(0, 67) + '…';
     const comp = !ds || ds.mode === 'none' || um === 0 ? 'ไม่ชดเชยขอบ'
       : `ชดเชยขอบ +${um} µm` + (ds.mode === 'manual' ? ' (ระบุเอง)' : ' (อัตโนมัติ)');
+    const cut = (t, n) => (t.length > n ? t.slice(0, n - 1) + '…' : t);
+    // a block from a job (job.labelInfo, set by the film page): 3 lines
+    //   customer · design · sizes · Customer REF / film no · job no · stencil ID / frame · mesh · thickness · compensation
+    const L = job.labelInfo;
+    if (L) {
+      const j = (xs) => xs.filter(Boolean).join('  ·  ');
+      return [
+        cut(j([L.customer || (ds && ds.customer) || 'ไม่ระบุลูกค้า', L.design, (L.sizes || []).length ? 'ไซส์ ' + L.sizes.join(', ') : '', L.customerRef]), 110),
+        j([st.filmNo || 'FM-…', L.jobNo, L.stencilId]),
+        cut(j([L.frame ? 'บล็อค ' + L.frame : '', L.mesh ? 'ผ้า ' + L.mesh : '', ds && ds.thick ? `หนา ${ds.thick} µm` : '', comp]), 110)
+      ];
+    }
     const line1 = `${(ds && ds.customer) || 'ไม่ระบุลูกค้า'} - ${base}`;
     const line2 = [ds && ds.thick ? `บล็อก ${ds.thick} µm` : null, comp, st.dateText || new Date().toLocaleDateString('en-GB')].filter(Boolean).join('  ·  ');
     return [line1, line2];
@@ -849,6 +861,12 @@
         if (cref && cref.objectNumber != null) { src.context.assign(cref, stream); p.node.set(PDFName.of('Contents'), cref); }
         else p.node.set(PDFName.of('Contents'), src.context.register(stream));
         mergeResources(src, p, b.job.merges);
+        // the rewritten content draws no XObjects (groups are spliced in, images dropped), no patterns/shadings and sets no colour spaces:
+        // leave those resources out, or the copy drags along everything they point to (Illustrator keeps its whole editing data there)
+        { const res = p.node.Resources(); if (res) { const keep = src.context.obj({});
+          for (const [k, v] of res.entries()) if (!['/XObject', '/Pattern', '/Shading', '/ColorSpace'].includes(k.asString())) keep.set(k, v);
+          p.node.set(PDFName.of('Resources'), keep); } }
+        ['PieceInfo', 'Thumb', 'Metadata', 'Annots', 'LastModified'].forEach(k => p.node.delete(PDFName.of(k)));   // Illustrator editing data, preview, etc.
         const emb = await out.embedPage(p, { left: b.bbox[0], bottom: b.bbox[1], right: b.bbox[2], top: b.bbox[3] });
         const map = it.rot ? (x, y) => ({ x: it.x + it.h - (y - b.bbox[1]), y: it.y + (x - b.bbox[0]) })
                            : (x, y) => ({ x: it.x + (x - b.bbox[0]), y: it.y + (y - b.bbox[1]) });

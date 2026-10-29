@@ -58,6 +58,11 @@ function cleanInfo(raw, me) {
   })) : [];
   return { sheets: num(o.sheets), blocks: num(o.blocks), sheetW: num(o.sheetW), sheetH: num(o.sheetH), date: str(o.date, 20), by: me.name, items, originals: [] };
 }
+async function nextFilmNo(env) {
+  const r = await env.DB.prepare("UPDATE settings SET value = CAST(value AS INTEGER) + 1 WHERE key = 'fseq' RETURNING value").first();
+  const th = new Date(Date.now() + 7 * 3600e3), p2 = n => String(n).padStart(2, '0');
+  return `FM-${p2((th.getUTCFullYear() + 543) % 100)}${p2(th.getUTCMonth() + 1)}-${String(Number(r ? r.value : 1) - 1).padStart(3, '0')}`;
+}
 function contentDisposition(kind, name) {
   const ascii = name.replace(/[^\x20-\x7e]/g, '_').replace(/"/g, '');
   return `${kind}; filename="${ascii}"; filename*=UTF-8''${encodeURIComponent(name)}`;
@@ -118,6 +123,9 @@ export async function filmApi(req, env, url, p, m, me) {
   if (p !== '/films' && !p.startsWith('/films/')) return null;
   if (!env.FILES) return json({ error: 'no_r2', message: 'ยังไม่ได้เชื่อม R2 (binding FILES)' }, 503);
 
+  // reserve the next film number before the PDF is drawn (it is printed under each design)
+  if (p === '/films/reserve' && m === 'POST') return json({ no: await nextFilmNo(env) });
+
   if (p === '/films' && m === 'POST') {
     const len = Number(req.headers.get('content-length') || 0);
     if (len > MAX_PDF + 2e6) return json({ error: 'too_large' }, 413);
@@ -130,10 +138,10 @@ export async function filmApi(req, env, url, p, m, me) {
     if (String.fromCharCode(...new Uint8Array(buf, 0, Math.min(5, buf.byteLength))) !== '%PDF-') return json({ error: 'not_pdf' }, 400);
     const info = cleanInfo(form.get('info'), me);
     const id = fid(), created = Date.now();
-    // film number FM-<Thai YY><MM>-<NNN>; the file is named <number>_<date>_<time>.pdf (the browser's local time)
-    const fs = await env.DB.prepare("UPDATE settings SET value = CAST(value AS INTEGER) + 1 WHERE key = 'fseq' RETURNING value").first();
-    const th = new Date(created + 7 * 3600e3), p2 = n => String(n).padStart(2, '0');
-    info.no = `FM-${p2((th.getUTCFullYear() + 543) % 100)}${p2(th.getUTCMonth() + 1)}-${String(Number(fs ? fs.value : 1) - 1).padStart(3, '0')}`;
+    // film number FM-<Thai YY><MM>-<NNN> (reserved by the page, or a new one); the file is named <number>_<date>_<time>.pdf (the browser's local time)
+    const th = new Date(created + 7 * 3600e3);
+    const given = String(form.get('no') || '');
+    info.no = /^FM-\d{4}-\d{3,6}$/.test(given) ? given : await nextFilmNo(env);
     const stamp = String(form.get('stamp') || '');
     const name = safeName(`${info.no}_${/^\d{4}-\d{2}-\d{2}_\d{4,6}$/.test(stamp) ? stamp : th.toISOString().slice(0, 16).replace('T', '_').replace(':', '')}.pdf`);
     await env.FILES.put(`film/${id}.pdf`, buf, { httpMetadata: { contentType: 'application/pdf' }, customMetadata: { name } });

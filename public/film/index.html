@@ -658,7 +658,7 @@ details.settings summary { cursor: pointer; font-weight: 600; font-size: .9rem }
     });
     const info = { sheets: plan ? plan.sheets.length : 0, blocks: items.length, sheetW: st.sheetW, sheetH: st.sheetH, date: st.dateText, items };
     const fd = new FormData();
-    fd.append('stamp', stamp); fd.append('info', JSON.stringify(info));
+    fd.append('stamp', stamp); fd.append('no', reservedNo || ''); fd.append('info', JSON.stringify(info));
     fd.append('file', new Blob([bytes], { type: 'application/pdf' }), 'film.pdf');
     try { (await makeThumbs(bytes, plan, order)).forEach((t, n) => { if (t) fd.append('thumb_' + n, t, `t${n}`); }); } catch (e) {}
     try {
@@ -1068,11 +1068,22 @@ details.settings summary { cursor: pointer; font-weight: 600; font-size: .9rem }
 
   /* ---------- save ---------- */
   // while copies are being stored, warn before the page is closed
-  let busy = false;
+  let busy = false, reservedNo = '';
   window.addEventListener('beforeunload', e => { if (busy) { e.preventDefault(); e.returnValue = ''; } });
   $('save').addEventListener('click', async () => {
     if (!lastPdf || busy) return;
-    const pdf = lastPdf, plan = lastPlan, blocks = lastBlocks;   // the film as shown now
+    let pdf = lastPdf, plan = lastPlan, blocks = lastBlocks;   // the film as shown now
+    // the film number goes into the text under each design: reserve it, then draw the sheet again with it
+    busy = true; $('save').disabled = true; $('save').textContent = 'กำลังบันทึก…';
+    try {
+      const r = await apiFetch('/api/films/reserve', { method: 'POST' }); const d0 = await r.json();
+      if (!r.ok || !d0.no) throw new Error(d0.error || r.status);
+      const st2 = { ...st, filmNo: d0.no };
+      const ready = jobs.filter(x => x.job && !x.off);
+      blocks = []; ready.forEach(x => { blocks = blocks.concat(C.blocksFor(x.job, st2)); });
+      const res = await C.render(blocks, st2); pdf = res.bytes; plan = res.plan; reservedNo = d0.no;
+    } catch (e) { busy = false; $('save').disabled = false; $('save').textContent = 'บันทึก PDF ฟิล์ม'; setStatus('ขอเลขฟิล์มไม่สำเร็จ ลองอีกครั้ง (' + e.message + ')', true); return; }
+    busy = false; $('save').textContent = 'บันทึก PDF ฟิล์ม';
     // the server gives the film its number; the file is named <number>_<date>_<time>.pdf
     const d = new Date(); const p2 = (n) => String(n).padStart(2, '0'); const stamp = `${d.getFullYear()}-${p2(d.getMonth() + 1)}-${p2(d.getDate())}_${p2(d.getHours())}${p2(d.getMinutes())}`;
     // 1) store the copy and the originals on the server first, 2) then hand the file to the browser
@@ -1290,6 +1301,9 @@ details.settings summary { cursor: pointer; font-weight: 600; font-size: .9rem }
           snap: { stencilId: s.stencilId || '', customerRef: s.customerRef || a.customerRef || '', sizes: s.sizes || [], frameSource: s.frameSource || 'new',
             mesh: s.mesh || '', frame: s.frame || '', emulsion: s.emulsion || '', preview: s.preview || a.preview || '', orig: a.file || '', origName: a.fileName || '', page: a.page || 0 } };
         rec.job = await C.analyze(bytes, label, a.page || 0);
+        // text printed under the design on the film (film number is added when the film is saved)
+        rec.job.labelInfo = { customer: j.customer, design: s.design || a.name || '', sizes: s.sizes || [], customerRef: s.customerRef || a.customerRef || '',
+          jobNo: j.no, stencilId: s.stencilId || '', frame: s.frame || '', mesh: s.mesh || '' };
         const d = C.describe(rec.job, st);
         if (!d.designs.length) throw new Error('ไม่พบลายในไฟล์');
         let pick = d.designs.find(ds => ds.index === a.design) || d.designs[0];

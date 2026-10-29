@@ -115,7 +115,11 @@ Screen status flow: `ordered → coating → qc → ready → sent`, with `qc �
 - Clipping masks are tracked: an element's box is cut to its clip, so clipped line art counts by its visible part. Clipped or open fills never count as ring frames; a ring frame needs a hole inset evenly by the line width (`isRing`).
 - Objects drawn at 0 % opacity (ExtGState `ca`/`CA` 0, or inside a group drawn at 0 %) are invisible and ignored.
 - Edge compensation: auto = thickness × factor (default 0.5), or a manual µm value, or none.
-- Marks: 3 faint crosses plus a 2-line faint label.
+- Marks: 3 faint crosses plus a faint label under each design.
+  - Job blocks (`job.labelInfo`, set by the film page) get 3 lines: customer · design · ไซส์ … · Customer REF / film number · job number · stencil ID / บล็อค <frame> · ผ้า <mesh> · หนา <µm> · compensation. Before saving, the film number shows as "FM-…".
+  - Saving first reserves the number (`POST /api/films/reserve`), draws the sheet again with `st.filmNo`, and stores that PDF with `no` (an abandoned save skips a number).
+  - Other files keep the old 2 lines (customer - file / thickness · compensation · date).
+- Film size: before `embedPage`, the copied source page drops `/XObject /Pattern /Shading /ColorSpace` resources (the rewritten content never uses them) and `/PieceInfo /Thumb /Metadata /Annots`; Illustrator keeps its whole editing data there (a 59 MB .ai gave a 59 MB film, now 0.7 MB).
 
 ## Rules
 - **Schema changes** go in `src/schema.js` and must be idempotent (`CREATE ... IF NOT EXISTS`, `INSERT OR IGNORE`).
