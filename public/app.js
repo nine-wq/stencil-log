@@ -53,13 +53,25 @@ async function loadData(quiet) {
   try {
     const d = await api('GET', '/data');
     db.master = d.master; db.jobs = d.jobs; db.artworks = d.artworks || []; db.stencilNext = d.stencilNext || 1; ui.user = d.me;
+    keepRecentPhotos();
     Object.assign(db.files, d.files || {}); db.features = d.features || {};
     if (!quiet || !isEditing()) render();
   } catch (e) { if (!quiet && e.status !== 401) toast('โหลดข้อมูลไม่สำเร็จ: ' + e.message); }
 }
-const isEditing = () => { const a = document.activeElement; return pending > 0 || Object.keys(timers).length > 0 || ui.view === 'newjob' || ui.editUser || ui.lib.busy.length > 0 || (a && /INPUT|TEXTAREA|SELECT/.test(a.tagName)); };
+const isEditing = () => { const a = document.activeElement; return pending > 0 || (ui.phPending || []).length > 0 || Object.keys(timers).length > 0 || ui.view === 'newjob' || ui.editUser || ui.lib.busy.length > 0 || (a && /INPUT|TEXTAREA|SELECT/.test(a.tagName)); };
 // photos just taken on this device are shown from the local copy (no download after uploading)
 const localPhotos = new Map();
+// photos uploaded in the last 2 minutes: re-attached when a data load that started before them arrives late
+const recentPhotos = [];
+function keepRecentPhotos() {
+  const now = Date.now();
+  for (let i = recentPhotos.length - 1; i >= 0; i--) if (now - recentPhotos[i].at > 120000) recentPhotos.splice(i, 1);
+  for (const r of recentPhotos) {
+    const s = db.jobs.flatMap(j => j.screens).find(x => x.id === r.sid); if (!s) continue;
+    if (!s.photos.some(x => x.id === r.p.id)) s.photos.push(r.p);
+    if (r.kind !== 'other' && !(s.photoKind || {})[r.p.id]) s.photoKind = { ...(s.photoKind || {}), [r.p.id]: r.kind };
+  }
+}
 const photoSrc = id => localPhotos.get(id) || `/api/photos/${id}?t=${encodeURIComponent(token)}`;
 const fileUrl = (id, inline) => `/api/files/${id}?t=${encodeURIComponent(token)}${inline ? '&inline=1' : ''}`;
 const fmtSize = n => n == null ? '' : n < 1024 * 1024 ? `${Math.max(1, Math.round(n / 1024))} KB` : `${(n / 1048576).toFixed(1)} MB`;
@@ -1640,16 +1652,19 @@ document.addEventListener('change', async e => {
         try {
           const blob = await shrink(jb.f); if (!blob) throw new Error('อ่านรูปไม่ได้');
           const p = await api('POST', `/screens/${s.id}/photos`, blob, true);
-          localPhotos.set(p.id, URL.createObjectURL(blob));
-          s.photos.push(p); n++;
-          if (kind !== 'other') s.photoKind = { ...(s.photoKind || {}), [p.id]: kind };
+          localPhotos.set(p.id, URL.createObjectURL(blob)); recentPhotos.push({ sid: s.id, p, kind, at: Date.now() });
+          // the block on screen may be a fresh copy by now (data reloaded): attach the photo to that one
+          const cur = find(ui.jobId, s.id).s || s;
+          if (!cur.photos.some(x => x.id === p.id)) cur.photos.push(p);
+          if (kind !== 'other') cur.photoKind = { ...(cur.photoKind || {}), [p.id]: kind };
+          n++;
         } catch (x) { toast('อัปโหลดรูปไม่สำเร็จ: ' + x.message); }
         ui.phPending = (ui.phPending || []).filter(x => x !== jb); URL.revokeObjectURL(jb.url);
         if (ui.view === 'screen') render();
       }
     };
     await Promise.all([work(), work(), work()]);
-    if (n && kind !== 'other') saveScreen(s);   // the photo's kind; no need to wait for it
+    if (n && kind !== 'other') { const cur = find(ui.jobId, s.id).s; if (cur) saveScreen(cur); }   // the photo's kind; no need to wait for it
     if (n) toast(`เพิ่ม ${n} รูปแล้ว`);
   }
 });
