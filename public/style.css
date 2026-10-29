@@ -403,3 +403,9 @@ div.brow:hover{background:none}
 .filmline{display:flex;flex-direction:column;gap:8px;padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:var(--sunk)}
 .filmline .row{gap:6px;margin:0;flex-wrap:wrap}
 .chip.fl-ok{background:var(--ok-soft);color:var(--ok)}
+
+/* หน้าเดียว: ช่องค้นหากับปุ่มสร้างใบงานแถวเดียวกัน; ตรวจสอบและจัดส่งแล้ว = สีเขียว */
+.toprow{display:flex;gap:10px;align-items:center}
+.toprow .search{flex:1;min-width:0}
+.toprow>.btn{flex:none;white-space:nowrap}
+.st-sent{background:var(--ok-soft);color:var(--ok)}

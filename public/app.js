@@ -1,17 +1,18 @@
 (function () {
 'use strict';
 // ทุกคนทำได้ทุกขั้นตอน (ยังไม่แยกสิทธิ์ตามฝ่าย)
-const STATUS = { ordered: 'รอขึ้นบล็อค', coating: 'กำลังขึ้นกาว', qc: 'รอตรวจ', rework: 'ตีกลับแก้ไข', ready: 'พร้อมส่ง', sent: 'ส่งแล้ว' };
+const STATUS = { ordered: 'รอขึ้นบล็อค', coating: 'กำลังขึ้นกาว', qc: 'รอตรวจ', rework: 'ตีกลับแก้ไข', ready: 'ตรวจสอบและจัดส่งแล้ว', sent: 'ตรวจสอบและจัดส่งแล้ว' };   // ready = old data from before the merge
 const QC_CHECKS = [['pinhole', 'ไม่มีรูเข็ม / ฟองอากาศ'], ['detail', 'ลายคมชัด ครบทุกเส้น'], ['edge', 'ปิดเทปขอบเรียบร้อย'], ['label', 'ติดป้ายชื่อลูกค้า / ลาย ที่เฟรม']];
 // ตัวกรองหน้าแรก
 const FILTERS = [
-  ['all', 'ทั้งหมด', s => s.status !== 'sent'],
+  ['all', 'ทั้งหมด', s => !isDone(s)],
   ['film', 'รอทำฟิล์ม', s => needsFilm(s)],
   ['coat', 'ขึ้นบล็อค', s => ['ordered', 'coating', 'rework'].includes(s.status)],
   ['qc', 'รอตรวจ', s => s.status === 'qc'],
-  ['ready', 'พร้อมส่ง', s => s.status === 'ready'],
-  ['sent', 'ส่งแล้ว', s => s.status === 'sent']
+  ['done', 'ตรวจสอบและจัดส่งแล้ว', s => isDone(s)]
 ];
+// "ตรวจสอบและจัดส่งแล้ว": QC passed = done (old 'ready' blocks count as done too)
+function isDone(s) { return s.status === 'sent' || s.status === 'ready'; }
 const TOKEN_KEY = 'stencil-token';
 
 const $ = s => document.querySelector(s);
@@ -215,7 +216,7 @@ const tol = () => (db.master && db.master.tolerance) || 10;
 const defTarget = () => (db.master && db.master.defaultTarget) || 400;
 // days left to the due date, counted in calendar days (0 = due today, negative = late); null = no due date or already sent
 function dueDays(j) {
-  if (!j.due || j.sentAt) return null;
+  if (!j.due || j.sentAt || (j.screens || []).every(isDone)) return null;
   const t0 = new Date(); t0.setHours(0, 0, 0, 0);
   return Math.round((new Date(j.due + 'T00:00').getTime() - t0.getTime()) / 864e5);
 }
@@ -263,11 +264,7 @@ function render() {
       <span class="who-n"><b>${esc(ui.user.name)}</b></span>
       <button class="btn sm ghost" data-a="logout">ออก</button></div>
   </div>
-  <nav class="wrap tabs mainnav" aria-label="เมนูหลัก">
-    <button data-a="nav" data-v="list" aria-current="${!['library', 'settings', 'films'].includes(ui.view)}">ใบงาน</button>
-    <button data-a="nav" data-v="films" aria-current="${ui.view === 'films'}">ฟิล์ม${(() => { const n = allScreens().filter(x => needsFilm(x.s)).length; return n ? ` <span class="count" title="บล็อครอลงแผ่นฟิล์ม">${n}</span>` : ''; })()}</button>
-    <button data-a="nav" data-v="library" aria-current="${ui.view === 'library'}">คลังลาย</button>
-  </nav></header>
+  </header>
   <main class="wrap">${body()}</main>`;
   if (keep) formRestore(keep);
   mountViewers();
@@ -279,7 +276,6 @@ function body() {
   if (ui.view === 'screen') return screenView();
   if (ui.view === 'settings') return settingsView();
   if (ui.view === 'library') return libraryView();
-  if (ui.view === 'films') return filmsView();
   return homeView();
 }
 
@@ -304,72 +300,11 @@ function loginView() {
   </div>`;
 }
 
-/* --- ฟิล์ม: ประวัติแผ่นฟิล์มที่บันทึกไว้ (ล่าสุดก่อน) + ปุ่มสร้างฟิล์ม (ไปหน้ารวมแผ่นฟิล์ม /film/) --- */
-const films = { items: null, more: false, loading: false, err: '', q: '' };
-const tqs = u => u + (u.includes('?') ? '&' : '?') + 't=' + encodeURIComponent(token);
-const fmtDT = t => { const d = new Date(t); return `${fmtD(t)} ${pad2(d.getHours())}:${pad2(d.getMinutes())}`; };
-async function loadFilms(fresh) {
-  if (films.loading) return;
-  films.loading = true; films.err = ''; if (fresh) updateFilms();
-  try {
-    const ps = new URLSearchParams({ limit: '50' });
-    if (!fresh && films.items && films.items.length) ps.set('before', films.items[films.items.length - 1].created);
-    if (films.q.trim()) ps.set('q', films.q.trim());
-    const d = await api('GET', '/films?' + ps);
-    films.items = fresh || !films.items ? d.items : films.items.concat(d.items); films.more = !!d.more;
-  } catch (e) { films.err = e.message; }
-  films.loading = false; updateFilms();
-}
-function updateFilms() { const r = $('#filmres'); if (r && ui.view === 'films') r.innerHTML = filmResults(); }
-function filmsView() {
-  if (!films.items && !films.loading && !films.err) setTimeout(() => loadFilms(true));
-  const n = allScreens().filter(x => needsFilm(x.s)).length;
-  return `<div class="spread"><h2>ฟิล์ม</h2><a class="btn primary" href="/film/">+ สร้างฟิล์ม</a></div>
-  ${n ? `<a class="filmwait" href="/film/"><span><b class="num">${n}</b> บล็อครอลงแผ่นฟิล์ม</span><span aria-hidden="true">→</span></a>` : ''}
-  <div class="search"><input id="fq" type="search" data-fq="1" value="${esc(films.q)}" placeholder="ค้นหา ชื่อไฟล์ ลูกค้า เลขใบงาน ความหนา…" autocomplete="off" enterkeyhint="search"></div>
-  <div id="filmres">${filmResults()}</div>`;
-}
-function filmResults() {
-  if (films.err) return `<div class="empty">โหลดประวัติฟิล์มไม่สำเร็จ (${esc(films.err)})<br><button class="btn" data-a="filmreload" style="margin-top:10px">ลองใหม่</button></div>`;
-  if (!films.items) return '<div class="empty">กำลังโหลด…</div>';
-  if (!films.items.length) return `<div class="empty">${films.q.trim() ? `ไม่พบฟิล์มที่ตรงกับ "${esc(films.q)}"` : 'ยังไม่มีฟิล์มที่บันทึกไว้ กด "+ สร้างฟิล์ม" เพื่อรวมบล็อคลงแผ่นฟิล์ม'}</div>`;
-  const groups = dateGroups().map(g => ({ ...g, xs: [] }));
-  for (const it of films.items) (groups.find(g => it.created >= g.from) || groups[groups.length - 1]).xs.push(it);
-  const sec = g => g.xs.length ? `<div class="sec-h"><h3>${esc(g.title)}</h3><span class="muted small num">${g.xs.length} ไฟล์</span></div>
-    <div class="list">${g.xs.map(filmHistCard).join('')}</div>` : '';
-  return groups.map(sec).join('')
-    + (films.more ? `<button class="btn ghost" data-a="filmmore" ${films.loading ? 'disabled' : ''} style="justify-self:center">${films.loading ? 'กำลังโหลด…' : 'โหลดรายการเก่ากว่านี้'}</button>` : '');
-}
-function filmHistCard(it) {
-  const info = it.info || {}, items = info.items || [];
-  const scr = new Map(allScreens().map(x => [x.s.id, x]));
-  const title = info.no || String(it.name || '').replace(/\.pdf$/i, '');
-  // rows show the film's own snapshot of each block (what was on the film), not the block as it is now
-  return `<div class="jobcard filmcard">
-    <button class="jobhead" data-a="openfilm" data-v="${it.id}" title="เปิดดูฟิล์มเทียบกับต้นฉบับ">
-      <span class="t">${esc(title)}</span>
-      <span class="small">${fmtDT(it.created)} · ${items.length || info.blocks || 0} ลาย${info.sheets != null ? ` · ${info.sheets} แผ่น` : ''}</span>
-    </button>
-    ${items.map((x, n) => {
-      const hit = x.screenId && scr.get(x.screenId), s = hit && hit.s;
-      const pv = x.preview || (s && s.preview);
-      const pic = pv ? `<img class="thumb" src="${fileUrl(pv, true)}" alt="" loading="lazy">` : x.thumb ? `<img class="thumb" src="${tqs(`/api/films/${it.id}/t${n}`)}" alt="" loading="lazy">` : '<span class="thumb none" aria-hidden="true"></span>';
-      const sid = x.stencilId || (s && s.stencilId) || '';
-      const src = x.frameSource || (s && s.frameSource);
-      const txt = `<span class="bt"><b>${esc(x.design || (s && s.design) || x.file || '(ไม่มีชื่อ)')}</b>
-        <span class="sidtxt">${[sid, x.customer || 'ไม่ระบุลูกค้า', x.jobNo || (x.screenId ? '' : 'ไม่มีใบงาน')].filter(Boolean).map(esc).join(' · ')}</span>
-        <span class="muted small">${x.screenId ? (src === 'customer' ? '<span class="fsrc">บล็อคเดิมลูกค้า</span> · ' : 'บล็อคใหม่ · ') : ''}${(x.sizes || []).length ? `ไซส์ ${esc(x.sizes.join(', '))} · ` : ''}${x.mesh ? `<span class="num">${esc(x.mesh)}</span> · ` : ''}<span class="num">${x.thick ? x.thick + ' µm' : '—'}</span> · ${x.compUm ? `ชดเชย <span class="num">${x.compUm} µm</span>` : 'ไม่ชดเชย'}</span></span>`;
-      return hit ? `<button class="brow" data-a="openscreen" data-j="${hit.j.id}" data-v="${hit.s.id}">${pic}${txt}<span class="bstate">${chip(s.status)}</span></button>`
-        : `<div class="brow">${pic}${txt}<span></span></div>`;
-    }).join('')}
-  </div>`;
-}
-
 /* --- หน้าแรก: ใบงานทั้งหมด กรองตามขั้นตอน --- */
 function homeView() {
-  return `<div class="spread"><h2>ใบงาน</h2><button class="btn primary" data-a="newjob">+ สร้างใบงาน</button></div>
-  <div class="search"><input id="q" type="search" data-search="1" value="${esc(ui.q || '')}" placeholder="ค้นหา ลูกค้า เลขใบงาน ชื่อลาย Customer REF เบอร์ผ้า ชื่อคน…" autocomplete="off" enterkeyhint="search">
+  return `<div class="toprow"><div class="search"><input id="q" type="search" data-search="1" value="${esc(ui.q || '')}" placeholder="ค้นหา ลูกค้า เลขใบงาน ชื่อลาย Customer REF เบอร์ผ้า ชื่อคน…" autocomplete="off" enterkeyhint="search">
     <button class="btn sm ghost" data-a="clearq" aria-label="ล้างคำค้น" ${ui.q ? '' : 'hidden'}>✕</button></div>
+    <button class="btn primary" data-a="newjob">+ สร้างใบงาน</button></div>
   <div id="homeres">${homeResults()}</div>`;
 }
 function homeResults() {
@@ -378,7 +313,7 @@ function homeResults() {
   // ตอนค้นหาด้วยตัวกรอง "ทั้งหมด" ให้ค้นรวมงานที่ส่งแล้วด้วย
   const test = q.length && f[0] === 'all' ? () => true : f[2];
   const order = { rework: 0, coating: 1, ordered: 2, qc: 3, ready: 4, sent: 5 };
-  const byCust = ui.groupBy === 'customer';
+  const byCust = false;   // newest job date first, grouped by date
   const hits = db.jobs.map(j => {
     let ss = j.screens.filter(test);
     if (q.length) { const jt = jobText(j); ss = ss.filter(s => matches(jt + ' ' + screenText(s), q)); }
@@ -397,10 +332,9 @@ function homeResults() {
   }
   const sec = g => g.xs.length ? `<div class="sec-h"><h3>${esc(g.title)}</h3><span class="muted small num">${g.xs.length} ใบงาน</span></div>
     <div class="list">${g.xs.map(({ j, ss }) => jobCard(j, ss)).join('')}</div>` : '';
-  return `<div class="groupby small"><span class="muted">จัดกลุ่มตาม</span>
-    <button class="btn sm ${byCust ? 'ghost' : ''}" data-a="groupby" data-v="date" aria-pressed="${!byCust}">วันที่รับงาน</button>
-    <button class="btn sm ${byCust ? '' : 'ghost'}" data-a="groupby" data-v="customer" aria-pressed="${byCust}">ลูกค้า</button></div>
-  <div class="filters" role="tablist">${FILTERS.map(([k, label, t]) => { const n = count(t); return `<button role="tab" data-a="tab" data-v="${k}" aria-selected="${k === f[0]}">${label}${k !== 'sent' || q.length ? ` <span class="count">${n}</span>` : ''}</button>`; }).join('')}</div>
+  const waitN = allScreens().filter(x => needsFilm(x.s)).length;
+  return `<div class="filters" role="tablist">${FILTERS.map(([k, label, t]) => { const n = count(t); return `<button role="tab" data-a="tab" data-v="${k}" aria-selected="${k === f[0]}">${label}${k !== 'done' || q.length ? ` <span class="count">${n}</span>` : ''}</button>`; }).join('')}</div>
+  ${f[0] === 'film' && waitN ? `<a class="filmwait" href="/film/"><span><b class="num">${waitN}</b> บล็อครอลงแผ่นฟิล์ม · รวมหลายใบงานลงแผ่นเดียวได้</span><span>สร้างฟิล์ม →</span></a>` : ''}
   ${q.length ? `<div class="muted small">พบ <span class="num">${hits.reduce((n, x) => n + x.ss.length, 0)}</span> บล็อค ใน <span class="num">${hits.length}</span> ใบงาน${f[0] === 'all' ? ' (รวมงานที่ส่งแล้ว)' : ''}</div>` : ''}
   ${hits.length ? groups.map(sec).join('') : `<div class="empty">${q.length ? `ไม่พบงานที่ตรงกับ "${esc(ui.q)}"` : `ไม่มีงานในขั้นตอน "${f[1]}"`}</div>`}`;
 }
@@ -693,7 +627,8 @@ function libraryView() {
   db.artworks.forEach(a => { if (!a.hidden) counts.set(a.customer, (counts.get(a.customer) || 0) + 1); });
   const custs = allCustomers().sort((a, b) => (counts.get(b) || 0) - (counts.get(a) || 0) || a.localeCompare(b, 'th'));
   const arts = custArts(c), ed = ui.lib.edit && artOf(ui.lib.edit);
-  return `<div class="spread"><h2>คลังลาย</h2><span class="muted small"><span class="num">${db.artworks.filter(a => !a.hidden).length}</span> ลาย</span></div>
+  return `<button class="btn ghost back" data-a="back">← กลับ</button>
+  <div class="spread"><h2>คลังลาย</h2><span class="muted small"><span class="num">${db.artworks.filter(a => !a.hidden).length}</span> ลาย</span></div>
   <div class="muted small">เก็บไฟล์ลายของลูกค้าไว้ที่นี่ครั้งเดียว แล้วเลือกใช้ตอนสร้างใบงาน แอปแยกลายจากกรอบแป้นในไฟล์ให้เอง และให้ AI ตั้งชื่อ</div>
   <div class="field"><label for="lib-cust">ลูกค้า</label><input id="lib-cust" list="custs2" value="${esc(c)}" data-libcust="1" placeholder="พิมพ์ชื่อลูกค้า หรือเลือกด้านล่าง" autocomplete="off"><datalist id="custs2">${custs.map(x => `<option value="${esc(x)}">`).join('')}</datalist></div>
   <div class="filters wrapchips">${custs.map(x => `<button data-a="libcust" data-v="${esc(x)}" aria-selected="${x === c}">${esc(x)} <span class="count">${counts.get(x) || 0}</span></button>`).join('')}</div>
@@ -1090,7 +1025,7 @@ function jobView() {
   <div class="jobcard">${j.screens.map(s => jobBlockRow(j, s)).join('')}</div>
   <div class="row" style="justify-content:space-between">
     ${canDel ? `<button class="btn bad" data-a="deljob" data-v="${j.id}">${ui.arm === 'deljob' ? 'กดอีกครั้งเพื่อลบใบงานนี้' : 'ลบใบงาน'}</button>` : '<span></span>'}
-    ${j.screens.every(s => s.status === 'ready') ? `<button class="btn ok" data-a="sendjob" data-v="${j.id}">บันทึกว่าส่งลูกค้าแล้ว</button>` : ''}
+
   </div>`;
 }
 
@@ -1301,7 +1236,7 @@ function go(view, o = {}) { Object.assign(ui, { view, arm: null }, o); render();
 document.addEventListener('click', async e => {
   const el = e.target.closest('[data-a]'); if (!el || el.disabled) return;
   const a = el.dataset.a, v = el.dataset.v;
-  if (a !== 'deljob' && a !== 'delfile' && a !== 'rmart' && a !== 'artdel' && a !== 'delfilm') ui.arm = null;
+  if (a !== 'deljob' && a !== 'delfile' && a !== 'rmart' && a !== 'artdel') ui.arm = null;
   const cur = () => find(ui.jobId, ui.screenId);
   switch (a) {
     case 'pick': ui.pickUser = v; ui.pin = ''; ui.pinErr = ''; render(); break;
@@ -1326,22 +1261,11 @@ document.addEventListener('click', async e => {
       break;
     case 'pindel': ui.pin = ui.pin.slice(0, -1); render(); break;
     case 'logout': try { await api('POST', '/logout'); } catch (x) {} signOutLocal(); break;
-    case 'refresh': await loadData(); if (ui.view === 'films') loadFilms(true); toast('อัปเดตแล้ว'); break;
+    case 'refresh': await loadData(); toast('อัปเดตแล้ว'); break;
     case 'tab': go('list', { tab: v }); break;
     case 'clearq': ui.q = ''; render(); setTimeout(() => { const el = $('#q'); if (el) el.focus(); }); break;
     case 'settings': ui.admin = null; ui.editUser = null; ui.filmSet = null; go('settings'); break;
-    case 'nav': if (v === 'films') { go('films'); loadFilms(true); } else go(v === 'library' ? 'library' : 'list'); break;
-    case 'filmreload': loadFilms(true); break;
-    case 'filmmore': loadFilms(false); break;
-    case 'openfilm': location.href = '/film/?view=' + encodeURIComponent(v); break;
-    case 'delfilm': {
-      if (ui.arm !== 'delfilm:' + v) { ui.arm = 'delfilm:' + v; updateFilms(); break; }
-      ui.arm = null; el.disabled = true; el.textContent = 'กำลังลบ…';
-      try { await api('DELETE', '/films/' + v); films.items = (films.items || []).filter(x => x.id !== v); toast('ลบฟิล์มแล้ว บล็อคที่อยู่บนแผ่นนี้กลับไปรอลงแผ่นฟิล์ม'); await loadData(true); }
-      catch (x) { toast('ลบไม่สำเร็จ: ' + x.message); }
-      render(); break;
-    }
-    case 'groupby': ui.groupBy = v; try { localStorage.setItem('stencil-groupby', v); } catch (x) {} updateResults(); break;
+    case 'nav': go(v === 'library' ? 'library' : 'list'); break;
     case 'libcust': ui.lib.cust = v; ui.lib.edit = null; render(); break;
     case 'sharedadd': { const fs = ui.lib.pending || []; ui.lib.pending = null; render(); await addArtworkFiles(ui.lib.cust, fs); break; }
     case 'shareddrop': ui.lib.pending = null; render(); break;
@@ -1455,8 +1379,8 @@ document.addEventListener('click', async e => {
       const { s } = cur();
       if (s.photos.length < 2) return $('#qerr').textContent = 'ถ่ายรูปอย่างน้อย 2 มุมก่อนผ่าน';
       if (QC_CHECKS.some(([k]) => !s.qc.checks[k])) return $('#qerr').textContent = 'ติ๊กรายการตรวจให้ครบ';
-      Object.assign(s.qc, { by: ui.user.name, at: Date.now() }); s.status = 'ready'; logEv(s, 'ผ่านตรวจ พร้อมส่ง');
-      if (await saveScreen(s)) { toast('พร้อมส่งแล้ว'); go('list'); }
+      Object.assign(s.qc, { by: ui.user.name, at: Date.now() }); s.status = 'sent'; logEv(s, 'ตรวจสอบและจัดส่งแล้ว');
+      if (await saveScreen(s)) { toast('ตรวจสอบและจัดส่งแล้ว'); go('list'); }
       break;
     }
     case 'rework': {
@@ -1465,14 +1389,6 @@ document.addEventListener('click', async e => {
       Object.assign(s.qc, { by: ui.user.name, at: Date.now() }); s.status = 'rework'; logEv(s, 'ตีกลับแก้ไข');
       if (await saveScreen(s)) { toast('ตีกลับให้ฝ่ายขึ้นบล็อคแล้ว'); go('list'); }
       break;
-    }
-    case 'sendjob': {
-      const { j } = find(v);
-      j.screens.forEach(s => { s.status = 'sent'; logEv(s, 'ส่งลูกค้าแล้ว'); });
-      const ok = await Promise.all(j.screens.map(saveScreen));
-      try { await api('PATCH', '/jobs/' + j.id, { sentAt: Date.now() }); } catch (x) {}
-      if (ok.every(Boolean)) toast('บันทึกการส่งแล้ว');
-      await loadData(); break;
     }
     case 'uadd': ui.editUser = { name: '', role: 'artwork', pin: '', active: true }; render(); break;
     case 'uedit': { const u = ui.admin.find(x => x.id === v); ui.editUser = { ...u, active: !!u.active, pin: '' }; render(); break; }
@@ -1494,7 +1410,6 @@ document.addEventListener('input', e => {
     clearTimeout(ui.qTimer); ui.qTimer = setTimeout(updateResults, 120);
     return;
   }
-  if (t.dataset.fq) { films.q = t.value; clearTimeout(ui.fqTimer); ui.fqTimer = setTimeout(() => loadFilms(true), 300); return; }
   if (t.dataset.attq) {
     ui.attachQ = t.value; const box = document.getElementById('attgrid'); if (!box) return;
     const { j, s } = find(ui.jobId, ui.screenId), q = searchTerms(t.value), lib = custArts(j.customer).filter(a => !s || a.id !== s.artworkId);
@@ -1680,10 +1595,9 @@ async function takeShared() {
 }
 
 // เริ่มต้น
-try { ui.groupBy = localStorage.getItem('stencil-groupby') === 'customer' ? 'customer' : 'date'; } catch (e) {}
 // ลิงก์ตรงไปที่บล็อค: /#screen=<id> (จากหน้ารวมแผ่นฟิล์ม)
 function openFromHash() {
-  if (location.hash === '#films' && ui.user) { history.replaceState(null, '', location.pathname + location.search); go('films'); return; }
+  if (location.hash === '#films' && ui.user) { history.replaceState(null, '', location.pathname + location.search); return; }   // old link: the job list
   const m = location.hash.match(/^#screen=([\w-]+)$/); if (!m || !ui.user) return;
   history.replaceState(null, '', location.pathname + location.search);
   const x = allScreens().find(y => y.s.id === m[1]); if (!x) return;

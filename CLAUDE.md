@@ -5,7 +5,7 @@ Owner: Nine. Staff use it on phones and desktop PCs. The former film-positive ap
 
 ## Workflow
 Everyone who logs in (name + PIN) can do everything. There are no role checks; the `users.role` column is kept but unused.
-Main menu (tabs in the app): ใบงาน (jobs) · ฟิล์ม (film history, with a count of screens waiting for film) · คลังลาย (artwork library).
+One page, no tabs: the job list. The top bar has ⟳, ⚙ and the user. Films are made from the job list (the รอทำฟิล์ม filter shows a "สร้างฟิล์ม →" bar to `/film/`) or from a job/block, and opened from their blocks (ดูฟิล์ม). The artwork library page (`libraryView`) has no menu entry any more: it only opens for files shared from other apps (`/?share=`), with ← กลับ; artworks are otherwise added inside the new-job form and on the screen page.
 
 1. **Artwork library** (`artworks` table, one row = one design = one left/right pair from a customer file):
    - Upload a customer's files under a customer, from คลังลาย or inside the new-job form.
@@ -48,14 +48,12 @@ Main menu (tabs in the app): ใบงาน (jobs) · ฟิล์ม (film his
    - **Film group**: compensation and the colours to leave out.
      - It sets the compensation (auto = target × factor / manual µm / none) and the colours to leave out.
      - These are saved as `screen.filmPrep = {mode, manualUm, notArt[]}`. Thickness always comes from the screen's `target`.
-3. **ฟิล์ม tab** (`filmsView()` in app.js, view `films`, deep link `/#films`):
-   - Like the job list: heading + "+ สร้างฟิล์ม" (→ `/film/`), a "n บล็อครอลงแผ่นฟิล์ม" bar, a search box (server-side `q`, all words must match), then saved films newest first in date groups (`dateGroups()`), 50 at a time with "โหลดรายการเก่ากว่านี้".
-   - **Film number**: every saved film gets `info.no` = `FM-<Thai YY><MM>-<NNN>` from the `settings.fseq` counter (server, `POST /api/films`). The file name is `<no>_<YYYY-MM-DD>_<HHMM>.pdf` (the browser sends `stamp`; the download uses the name the server returns).
-   - Each film card (`filmHistCard`): the header (film number, date/time · designs · sheets; no size, no buttons) opens the view page `/film/?view=<id>`. Rows look like the job list rows: picture, name, then stencil ID · customer · job number (muted), บล็อคใหม่/เดิม · sizes · mesh · thickness · compensation, and the block's live status chip; a row opens its block while the block exists.
-   - **Snapshot**: the saved PDF never changes. `info.items[]` also keeps each block as it was (stencilId, design, customer, customerRef, jobNo, sizes, frameSource, mesh, frame, emulsion, thick, compUm, mode, `preview` and `orig` file ids, origName, page) and where it sits on the sheet (`place {si, x, y, w, h, W, H, rot, bbox}`). Cards and the view page read this snapshot, not the live blocks.
+3. **Films** (no tab; there is no film-history list any more):
+   - **Film number**: every saved film gets `info.no` = `FM-<Thai YY><MM>-<NNN>` from the `settings.fseq` counter. The file name is `<no>_<YYYY-MM-DD>_<HHMM>.pdf`.
+   - **Snapshot**: the saved PDF never changes. `info.items[]` also keeps each block as it was (stencilId, design, customer, customerRef, jobNo, sizes, frameSource, mesh, frame, emulsion, thick, compUm, mode, `preview` and `orig` file ids, origName, page) and where it sits on the sheet (`place {si, x, y, w, h, W, H, rot, bbox}`).
      - Files named in a film snapshot (`orig`, `preview`) are never deleted by job delete, artwork delete or `DELETE /api/files/:id`; deleting the film removes them when nothing else uses them.
-   - **View page** (`/film/?view=<id>`, `viewFilm()` in public/film/index.html; `GET /api/films/:id/info`): read-only. Left: film number, date · designs · sheets · by, the snapshot rows (tap = show that original), "เปิด PDF" and "ลบฟิล์ม" (tap twice, then back to `/#films`). Right: the same compare panes as when making a film: the saved PDF | the originals kept with the film, linked zoom through `place`. Films saved before snapshots existed show the film only.
-   **Combine onto sheet** (`public/film/`, title "สร้างฟิล์ม", back link "← ฟิล์ม" to `/#films`; its own tabs are hidden, history lives in the ฟิล์ม tab):
+   - **View page** (`/film/?view=<id>`, `viewFilm()`; `GET /api/films/:id/info`; opened from the screen page's film line): read-only. Left: film number, date · designs · sheets · by, the snapshot rows (tap = show that original), "เปิด PDF" and "ลบฟิล์ม" (tap twice, then back to `/`). Right: the saved PDF | the originals kept with the film, linked zoom through `place`.
+   **Combine onto sheet** (`public/film/`, title "สร้างฟิล์ม", back link "← ใบงาน" to `/`; its own tabs are hidden):
    - One list, "บล็อคที่รอลงแผ่นฟิล์ม": screens with a filmable artwork, no `film`, and not sent, from every job and customer. **Ticked = on the sheet**; ticking/unticking adds/removes it at once (`Q.sel`, `syncSheet()`). All are ticked when the page opens (or only the `?add=` ids). Buttons เลือกทั้งหมด / ไม่เลือก.
      - Each row: checkbox, picture, name, stencil ID · thickness · compensation, and "แก้" (`/#screen=<id>`). Job screens have no card below; film settings are edited in the job.
    - Each one loads the artwork's original from R2, keeps only that design (nearest `box`), and applies the job's customer, the screen's `target` and its `filmPrep`.
@@ -68,11 +66,12 @@ Main menu (tabs in the app): ใบงาน (jobs) · ฟิล์ม (film his
 4. **Coater**: logs coat rounds (ด้านพิมพ์ / ด้านปาด) and thickness before/after exposure, then sends to QC.
 5. **QC/finishing**: at least 2 photos plus the checklist, then pass (→ ready) or rework.
 
-**Home list**:
-- Stage filters: ทั้งหมด, รอทำฟิล์ม, ขึ้นบล็อค, รอตรวจ, พร้อมส่ง, ส่งแล้ว.
-- Grouping by job date or by customer (remembered per browser).
+**Home list** (the only page):
+- Search box and "+ สร้างใบงาน" on one row (`.toprow`), no page title.
+- Stage filters: ทั้งหมด (everything not done), รอทำฟิล์ม (with the สร้างฟิล์ม bar), ขึ้นบล็อค, รอตรวจ, ตรวจสอบและจัดส่งแล้ว (`isDone`: status sent, or old `ready`).
+- Always grouped by job date, newest first (no group-by switch).
 - The search box matches jobs, blocks, files and people.
-- Job cards: header = customer on the left; job number · due date + days left on the right (`dueText`: อีก n วัน / ส่งพรุ่งนี้ / ส่งวันนี้ / เลยกำหนด n วัน, calendar days; orange from 1 day, red when late; nothing extra once the job is sent) in the same plain small text (no received date, no done/total count). Block rows (`blockRow`): 97 px picture; name first, then the stencil ID as plain muted text; บล็อคใหม่ / บล็อคเดิมลูกค้า (orange) · sizes · mesh · thickness (no word สเปค); on the right one column: the film chip first (`chip fl-wait` รอไฟล์จากลูกค้า / `chip fl-need` ยังไม่ทำฟิล์ม, same dot style as status chips, warn colours), then the block status chip.
+- Job cards: header = customer on the left; job number · due date + days left on the right (`dueText`: อีก n วัน / ส่งพรุ่งนี้ / ส่งวันนี้ / เลยกำหนด n วัน, calendar days; orange from 1 day, red when late; nothing extra once every block is done) in the same plain small text. Block rows (`blockRow`): 97 px picture; name first, then the stencil ID as plain muted text; บล็อคใหม่ / บล็อคเดิมลูกค้า (orange) · sizes · mesh · thickness; on the right one column: the film chip first (`chip fl-wait` / `chip fl-need`), then the block status chip.
 
 **Settings** (⚙, everyone): users/PINs, pick lists, customer default specs (`master.customerSpecs`), tolerance, film settings (`settings.key='film'`: sheet size, margins, marks, compensation factor, near-white, specks, thickness list), CSV export.
 - One save button for the whole page ("บันทึกการตั้งค่า", sticky at the bottom, `saveSettings()`): it checks everything first (user form, film numbers), then saves pick lists + customer specs (`PUT /master`), film settings (`PUT /film-settings`, 409 on stale base) and the user being added/edited. The user form only has ยกเลิก.
@@ -81,7 +80,7 @@ Main menu (tabs in the app): ใบงาน (jobs) · ฟิล์ม (film his
 
 Prepared-film uploads (the old "ไฟล์ที่เตรียมแล้ว ส่งยิงฟิล์ม" section, `screen.prepared`) are removed from the UI: every film is made in the app (`screen.film`). Old `prepared` ids are kept in the data, still searchable and protected from file deletion; the CSV column is now แผ่นฟิล์ม (film name).
 
-Screen status flow: `ordered → coating → qc → ready → sent`, with `qc → rework → coating`. Film is a separate flag (`screen.film`), not a status.
+Screen status flow: `ordered → coating → qc → sent`, with `qc → rework → coating`. Passing QC finishes the block: status `sent`, shown as "ตรวจสอบและจัดส่งแล้ว" (there is no separate send step; old `ready` blocks show the same label). Film is a separate flag (`screen.film`), not a status.
 
 ## Stack
 - Cloudflare Worker `src/index.js` serves `/api/*`. Film routes are in `src/film.js` (`/api/film-settings`, `/api/films*`, `/api/originals*`), and all routes need login.
