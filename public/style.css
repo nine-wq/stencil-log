@@ -452,3 +452,4 @@ div.brow:hover{background:none}
 /* แถวรายการใบงาน: รายละเอียดบรรทัดละเรื่อง */
 .brow .bt .bl{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
 .brow .bt .faint{color:var(--muted);opacity:.6}
+.bstate .rounds{font-size:.8rem;color:var(--muted);font-weight:600;padding-right:6px}
