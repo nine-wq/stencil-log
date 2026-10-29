@@ -480,3 +480,8 @@ div.brow:hover{background:none}
   .brow.jr .bstate{grid-column:2;flex-direction:row;flex-wrap:wrap;align-items:center;justify-content:flex-start}
   .jrspec{gap:1px 12px;font-size:.8rem}
 }
+
+/* the job just created blinks on the home list */
+@keyframes jobflash{0%,100%{box-shadow:0 0 0 0 transparent;border-color:var(--line)}50%{box-shadow:0 0 0 4px color-mix(in srgb,var(--emulsion) 45%,transparent);border-color:var(--emulsion)}}
+.jobcard.flash{animation:jobflash .8s ease-in-out 4}
+@media (prefers-reduced-motion:reduce){.jobcard.flash{animation:none;border-color:var(--emulsion);box-shadow:0 0 0 3px color-mix(in srgb,var(--emulsion) 40%,transparent)}}

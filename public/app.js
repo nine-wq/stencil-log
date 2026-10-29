@@ -322,6 +322,19 @@ function loginView() {
 }
 
 /* --- หน้าแรก: ใบงานทั้งหมด กรองตามขั้นตอน --- */
+// after saving a new job: back to the home list, unfiltered, and the new job's card blinks
+// (the new-job form's history entry is replaced, so Back does not reopen the empty form)
+function showNewJob(id) {
+  Object.assign(ui, { view: 'list', jobId: null, screenId: null, tab: 'all', q: '', homeLimit: HOME_PAGE, flashJob: id, arm: null });
+  render();
+  try { history.replaceState(navState(), ''); } catch (e) {}
+  let el = document.querySelector(`.jobcard[data-job="${CSS.escape(String(id))}"]`);
+  for (let n = 0; !el && n < 50 && ui.homeLimit < db.jobs.length; n++) {   // an older receive date can put it past the first 20
+    ui.homeLimit += HOME_PAGE; render(); el = document.querySelector(`.jobcard[data-job="${CSS.escape(String(id))}"]`);
+  }
+  if (el) el.scrollIntoView({ block: 'center' }); else window.scrollTo(0, 0);
+  clearTimeout(showNewJob.t); showNewJob.t = setTimeout(() => { ui.flashJob = null; document.querySelectorAll('.jobcard.flash').forEach(e => e.classList.remove('flash')); }, 4000);
+}
 function homeView() {
   return `<div class="toprow"><div class="search"><input id="q" type="search" data-search="1" value="${esc(ui.q || '')}" placeholder="ค้นหา ลูกค้า เลขใบงาน ชื่อลาย Customer REF เบอร์ผ้า ชื่อคน…" autocomplete="off" enterkeyhint="search">
     <button class="btn sm ghost" data-a="clearq" aria-label="ล้างคำค้น" ${ui.q ? '' : 'hidden'}>✕</button></div>
@@ -400,7 +413,7 @@ const localDate = (t = Date.now()) => { const d = new Date(t); return `${d.getFu
 const jobDate = j => j.date || (j.createdAt ? localDate(j.createdAt) : '');
 const jobTs = j => { const d = jobDate(j); return d ? new Date(d + 'T00:00').getTime() : 0; };
 function jobCard(j, ss) {
-  return `<div class="jobcard">
+  return `<div class="jobcard${ui.flashJob === j.id ? ' flash' : ''}" data-job="${esc(j.id)}">
     <button class="jobhead" data-a="openjob" data-v="${j.id}">
       <span class="t">${esc(j.customer)}</span>
       <span class="small">${esc(j.no)} · <span class="${dueCls(j)}">${dueText(j)}</span></span>
@@ -1505,7 +1518,7 @@ document.addEventListener('click', async e => {
       ui.busy = true; render();
       try {
         const r = await api('POST', '/jobs', { customer: d.customer.trim(), date: d.date, due: d.due, note: d.note.trim(), screens: d.screens.map(({ key, ...s }) => s) });
-        ui.busy = false; await loadData(); toast(`สร้าง ${r.no} แล้ว`); go('job', { jobId: r.id });
+        ui.busy = false; await loadData(); toast(`สร้าง ${r.no} แล้ว`); showNewJob(r.id);
       } catch (x) { ui.busy = false; render(); toast('สร้างใบงานไม่สำเร็จ: ' + x.message); }
       break;
     }

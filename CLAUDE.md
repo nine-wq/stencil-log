@@ -19,6 +19,7 @@ One page, no tabs: the job list. The top bar has ⟳, ⚙ and the user. Films ar
    - Pick the customer, then upload new files at the top. Newly uploaded artworks are ticked automatically, and each ticked artwork = one screen (บล็อค).
    - Artworks uploaded in this form get a ✕ (tap twice) that removes them from the job and deletes them from the library.
    - Older library artworks of that customer are folded under "เลือกจากลายเก่าในคลัง (n)", which has a search box.
+   - **After saving** (`showNewJob`): back to the home list with no filter (ทั้งหมด, search cleared, first 20 jobs, more if needed to reach it); the new job's card scrolls into view and blinks (`.jobcard.flash`, ~3 s). The new-job form's history entry is replaced, so Back does not reopen it.
    - **Stencil ID**: every new screen gets `stencilId` = `ST-<Thai YY><MM>-<NNNN>` from the `settings.sseq` counter when the job is saved. The form shows the predicted number (`/api/data` returns `stencilNext`). It appears on rows, the screen page, the film queue and cards, the film label (stencil ID + Customer REF), search and CSV.
    - The screen gets `artworkId`, `originals: [artwork.file]`, `preview`, `design` (artwork name) and `customerRef`, plus the customer's default spec (frame, mesh, emulsion, target µm).
    - **Waiting for the customer's file**: "+ เพิ่มบล็อครอไฟล์จากลูกค้า" adds a screen with no artwork yet. Its name may be empty, and the job can be saved so stencil prep starts in parallel.
