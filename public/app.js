@@ -1391,11 +1391,12 @@ async function printLabels(j, screens) {
   for (const s of screens) pics.push(await labelPic(s));
   const due = j.due ? (() => { const d = new Date(j.due + 'T00:00:00'); return `${pad2(d.getDate())}/${pad2(d.getMonth() + 1)}/${d.getFullYear()}`; })() : '-';
   const one = (s, n) => {
-    const cell = (k, v) => `<div class="c"><span class="k">${k}</span><span class="v">${v}</span></div>`;
+    const cell = (k, v, cls = '') => `<div class="c ${cls}"><span class="k">${k}</span><span class="v">${v}</span></div>`;
     return `<div class="lb">
       <div class="pic">${pics[n] ? `<img src="${pics[n]}" alt="">` : ''}</div>
-      ${cell('ST', esc(s.stencilId || '-'))}${cell('ลูกค้า', esc(j.customer || '-'))}${cell('กำหนดส่ง', due)}
-      ${cell('Mesh', esc(s.mesh || '-'))}${cell('Customer Ref', esc(s.customerRef || '-'))}${cell('Thickness', `${esc(s.target || '-')} µm`)}
+      ${cell('SID', esc(s.stencilId || '-'), 'sid')}${cell('Customer', esc(j.customer || '-'))}${cell('กำหนดส่ง', due, 'end')}
+      ${cell('Mesh', esc(s.mesh || '-'), 'bot')}${cell('Thickness', `${esc(s.target || '-')} µm`, 'bot')}${cell('Customer Ref', esc(s.customerRef || '-'), 'bot')}
+      <div class="c bot end by">prepared by<br><b>VICZO INTERNATIONAL co.,ltd.</b></div>
     </div>`;
   };
   const per = 13, sheets = [];
@@ -1408,15 +1409,17 @@ async function printLabels(j, screens) {
 body { font-family: "IBM Plex Sans Thai", sans-serif; color: #000; background: #fff; -webkit-print-color-adjust: exact; print-color-adjust: exact }
 .sheet { width: 210mm; height: 297mm; padding: 5.5mm 5mm; break-after: page; page-break-after: always }
 .sheet:last-child { break-after: auto; page-break-after: auto }
-.lb { width: 200mm; height: 22mm; display: grid; grid-template-columns: 40mm 46mm 66mm 48mm; grid-template-rows: 1fr 1fr;
+.lb { width: 200mm; height: 22mm; display: grid; grid-template-columns: 40mm 23mm 23mm 66mm 48mm; grid-template-rows: 1fr 1fr;
   border: .3mm solid #000; margin-top: -.3mm; overflow: hidden }
 .lb:first-child { margin-top: 0 }
 .pic { grid-row: span 2; border-right: .3mm solid #000; display: grid; place-items: center; padding: .8mm; overflow: hidden }
 .pic img { max-width: 100%; max-height: 20mm; object-fit: contain; display: block }
 .c { display: flex; flex-direction: column; justify-content: center; padding: 0 2mm; border-right: .2mm solid #000; border-bottom: .2mm solid #000; min-width: 0; overflow: hidden }
-.lb > .c:nth-child(4) { border-right: 0 }
-.lb > .c:nth-child(n+5) { border-bottom: 0 }
-.lb > .c:nth-child(7) { border-right: 0 }
+.c.sid { grid-column: span 2 }
+.c.end { border-right: 0 }
+.c.bot { border-bottom: 0 }
+.c.by { font-size: 7pt; line-height: 1.3; color: #222 }
+.c.by b { font-size: 7.5pt; color: #000; white-space: nowrap }
 .c .k { font-size: 6.5pt; color: #333; line-height: 1.1 }
 .c .v { font-size: 15pt; font-weight: 700; line-height: 1.15; white-space: nowrap; overflow: hidden }
 .tip { font: 12px sans-serif; color: #555; padding: 8px 12px; background: #f3f3f3 } @media print { .tip { display: none } }
