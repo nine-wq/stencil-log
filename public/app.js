@@ -329,6 +329,8 @@ function homeView() {
   <div id="homeres">${homeResults()}</div>`;
 }
 const HOME_PAGE = 20;
+// blocks inside a job: stencil ID ascending (blocks without one keep their order, last)
+const bySid = (a, b) => (a.stencilId ? 0 : 1) - (b.stencilId ? 0 : 1) || String(a.stencilId || '').localeCompare(String(b.stencilId || '')) || (a.idx || 0) - (b.idx || 0);
 function homeResults() {
   const f = FILTERS.find(x => x[0] === ui.tab) || FILTERS[0];
   const q = searchTerms(ui.q);
@@ -338,7 +340,7 @@ function homeResults() {
   const hits = db.jobs.map(j => {
     let ss = j.screens.filter(test);
     if (q.length) { const jt = jobText(j); ss = ss.filter(s => matches(jt + ' ' + screenText(s), q)); }
-    return { j, ss: ss.sort((a, b) => order[a.status] - order[b.status]), t: jobTs(j) };
+    return { j, ss: ss.sort(bySid), t: jobTs(j) };
   }).filter(x => x.ss.length).sort((a, b) => b.t - a.t || (b.j.createdAt || 0) - (a.j.createdAt || 0));
   const count = t => q.length ? hits.reduce((n, x) => n + x.j.screens.filter(t).filter(s => x.ss.includes(s) || matches(jobText(x.j) + ' ' + screenText(s), q)).length, 0) : allScreens().filter(x => t(x.s)).length;
   // แสดงทีละ HOME_PAGE ใบงาน (ล่าสุดก่อน) กด "แสดงเพิ่ม" เพื่อดูเก่ากว่านี้; เปลี่ยนตัวกรองหรือคำค้นแล้วเริ่มนับใหม่
@@ -357,7 +359,7 @@ function homeResults() {
     <div class="list">${g.xs.map(({ j, ss }) => jobCard(j, ss)).join('')}</div>` : '';
   const waitN = allScreens().filter(x => needsFilm(x.s)).length;
   return `<div class="filters" role="tablist">${FILTERS.map(([k, label, t]) => { const n = count(t); return `<button role="tab" data-a="tab" data-v="${k}" aria-selected="${k === f[0]}">${label} <span class="count">${n}</span></button>`; }).join('')}</div>
-  ${allScreens().some(x => ['ordered', 'coating', 'rework'].includes(x.s.status)) ? '<div class="swipehint small muted">ปัดแถวไปทางขวาเพื่อบันทึก "ขึ้นกาว" · แตะแถวเพื่อเปิดบล็อค</div>' : ''}
+  ${['all', 'coat'].includes(f[0]) && allScreens().some(x => ['ordered', 'coating', 'rework'].includes(x.s.status)) ? '<div class="swipehint small muted">ปัดแถวไปทางขวาเพื่อบันทึก "ขึ้นกาว" · แตะแถวเพื่อเปิดบล็อค</div>' : ''}
   ${f[0] === 'film' && waitN ? `<a class="filmwait" href="/film/"><span><b class="num">${waitN}</b> บล็อครอลงแผ่นฟิล์ม · รวมหลายใบงานลงแผ่นเดียวได้</span><span>สร้างฟิล์ม →</span></a>` : ''}
   ${q.length ? `<div class="muted small">พบ <span class="num">${hits.reduce((n, x) => n + x.ss.length, 0)}</span> บล็อค ใน <span class="num">${hits.length}</span> ใบงาน</div>` : ''}
   ${hits.length ? groups.map(sec).join('') + (more > 0 ? `<button class="btn ghost morejobs" data-a="morejobs">แสดงใบงานเก่ากว่านี้ (อีก <span class="num">${more}</span> ใบงาน)</button>` : '') : `<div class="empty">${q.length ? `ไม่พบงานที่ตรงกับ "${esc(ui.q)}"` : `ไม่มีงานในขั้นตอน "${f[1]}"`}</div>`}`;
@@ -441,12 +443,13 @@ function jobBlockRow(j, s) {
   </button>`;
 }
 function blockRow(j, s) {
-  const th = s.thAfter !== '' && s.thAfter != null ? ` · วัดจริง <span class="num">${s.thAfter} µm</span>` : '';
+  const th = s.thAfter !== '' && s.thAfter != null;
   const canCoat = ['ordered', 'coating', 'rework'].includes(s.status);
   const row = `<div class="brow" role="button" tabindex="0" data-a="openscreen" data-j="${j.id}" data-v="${s.id}">
     ${s.preview ? `<img class="thumb" src="${fileUrl(s.preview, true)}" alt="" loading="lazy">` : '<span class="thumb none" aria-hidden="true"></span>'}
     <span class="bt"><b>${esc(s.design || '(ยังไม่ตั้งชื่อ)')}</b>${s.stencilId ? `<span class="sidtxt">${esc(s.stencilId)}</span>` : ''}
-      <span class="muted small">${s.frameSource === 'customer' ? '<span class="fsrc">บล็อคเดิมลูกค้า</span>' : 'บล็อคใหม่'} · ${(s.sizes || []).length ? `ไซส์ ${esc(s.sizes.join(', '))} · ` : ''}<span class="num">${esc(s.mesh)}</span> · <span class="num">${esc(s.target)} µm</span>${s.coats.length ? ` · กาว ${s.coats.length} รอบ` : ''}${th}</span></span>
+      <span class="muted small bl">${s.frameSource === 'customer' ? '<span class="fsrc">เดิม</span>' : 'ใหม่'} · <span class="num">${esc(s.mesh)}</span> · <span class="num">${esc(s.target)} µm</span>${(s.sizes || []).length ? ` · ${esc(s.sizes.join(', '))}` : ''}</span>
+      ${s.coats.length || th ? `<span class="small bl"><span class="num" title="ขึ้นกาว ${s.coats.length} รอบ">${s.coats.length} R</span>${th ? ` · <span class="num faint" title="ความหนาจริงที่วัดได้">${esc(s.thAfter)} µm</span>` : ''}</span>` : ''}</span>
     <span class="bstate">${waitingFile(s) ? '<span class="chip fl-wait" title="รอไฟล์จากลูกค้า">รอไฟล์</span>' : needsFilm(s) ? '<span class="chip fl-need" title="ยังไม่ทำฟิล์ม">รอฟิล์ม</span>' : ''}${chipShort(s.status)}
       ${canCoat ? `<button class="btn sm primary coatbtn" data-a="quickcoat" data-j="${j.id}" data-v="${s.id}" title="บันทึกรอบขึ้นกาวของบล็อคนี้ (เหมือนกด + ขึ้นกาว ในหน้าบล็อค)">+ ขึ้นกาว</button>` : ''}</span>
   </div>`;
@@ -1088,7 +1091,7 @@ function jobView() {
     <button class="btn sm" data-a="labels" data-v="${j.id}" title="ลาเบล 20 × 2.2 cm เรียงต่อกันบนกระดาษสติกเกอร์ A4">พิมพ์ลาเบลติดบล็อค (${j.screens.length})</button></div>
   ${waitFilm.length ? `<div class="card spread"><span><b>ยังไม่ทำฟิล์ม ${waitFilm.length} บล็อค</b><br><span class="muted small">เปิดหน้าทำฟิล์มพร้อมบล็อคเหล่านี้ เรียงลงแผ่นได้ร่วมกับงานอื่น</span></span>
     <a class="btn primary" href="/film/?add=${waitFilm.map(s => s.id).join(',')}">ทำฟิล์ม</a></div>` : ''}
-  <div class="jobcard">${j.screens.map(s => jobBlockRow(j, s)).join('')}</div>
+  <div class="jobcard">${j.screens.slice().sort(bySid).map(s => jobBlockRow(j, s)).join('')}</div>
   <div class="row" style="justify-content:space-between">
     ${canDel ? `<button class="btn bad" data-a="deljob" data-v="${j.id}">${ui.arm === 'deljob' ? 'กดอีกครั้งเพื่อลบใบงานนี้' : 'ลบใบงาน'}</button>` : '<span></span>'}
 

@@ -448,3 +448,7 @@ div.brow:hover{background:none}
 }
 .ph.pending img{opacity:.55}
 .ph.pending .cap{background:rgba(0,0,0,.6)}
+
+/* แถวรายการใบงาน: รายละเอียดบรรทัดละเรื่อง */
+.brow .bt .bl{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+.brow .bt .faint{color:var(--muted);opacity:.6}
