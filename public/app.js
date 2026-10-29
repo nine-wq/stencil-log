@@ -58,7 +58,9 @@ async function loadData(quiet) {
   } catch (e) { if (!quiet && e.status !== 401) toast('โหลดข้อมูลไม่สำเร็จ: ' + e.message); }
 }
 const isEditing = () => { const a = document.activeElement; return pending > 0 || Object.keys(timers).length > 0 || ui.view === 'newjob' || ui.editUser || ui.lib.busy.length > 0 || (a && /INPUT|TEXTAREA|SELECT/.test(a.tagName)); };
-const photoSrc = id => `/api/photos/${id}?t=${encodeURIComponent(token)}`;
+// photos just taken on this device are shown from the local copy (no download after uploading)
+const localPhotos = new Map();
+const photoSrc = id => localPhotos.get(id) || `/api/photos/${id}?t=${encodeURIComponent(token)}`;
 const fileUrl = (id, inline) => `/api/files/${id}?t=${encodeURIComponent(token)}${inline ? '&inline=1' : ''}`;
 const fmtSize = n => n == null ? '' : n < 1024 * 1024 ? `${Math.max(1, Math.round(n / 1024))} KB` : `${(n / 1048576).toFixed(1)} MB`;
 const stem = n => String(n).replace(/\.[^.]+$/, '').trim();
@@ -1149,14 +1151,15 @@ function screenView() {
   if (['qc', 'ready', 'sent', 'rework'].includes(s.status) || s.photos.length) {
     const ro = !canQC;
     const ph = (p, i) => `<div class="ph"><img src="${photoSrc(p.id)}" alt="รูปที่ ${i + 1}" loading="lazy" data-a="zoom" data-v="${p.id}"><span class="cap">${esc(p.by)} ${fmtT(p.t)}</span>${ro ? '' : `<button class="x" data-a="delph" data-v="${p.id}" aria-label="ลบรูป">✕</button>`}</div>`;
-    const add = (k, label, sub) => ro ? '' : `<label class="addph" for="phin-${k}">${ui.busy ? 'กำลังอัปโหลด…' : `+ ${label}${sub ? `<br><span class="small">${sub}</span>` : ''}`}</label><input id="phin-${k}" type="file" accept="image/*" ${k === 'other' ? 'multiple' : 'capture="environment"'} hidden data-phk="${k}">`;
+    const add = (k, label, sub) => ro ? '' : `<label class="addph" for="phin-${k}">+ ${label}${sub ? `<br><span class="small">${sub}</span>` : ''}</label><input id="phin-${k}" type="file" accept="image/*" ${k === 'other' ? 'multiple' : 'capture="environment"'} hidden data-phk="${k}">`;
     const others = s.photos.filter(p => photoKindOf(s, p) === 'other');
+    const pend = k => (ui.phPending || []).filter(x => x.sid === s.id && x.kind === k).map(x => `<div class="ph pending"><img src="${x.url}" alt=""><span class="cap">กำลังอัปโหลด…</span></div>`).join('');
     h += `<div class="card" style="display:flex;flex-direction:column;gap:12px">
       <div class="spread"><h3>ตรวจงานก่อนส่ง</h3><span class="muted small">${s.photos.length} รูป</span></div>
       <div class="thick">${thickField('thAfter', 'ความหนาจริง (วัดตอนตรวจ)', s, canQC)}</div>
       <div class="qcphotos">${QC_PHOTOS.map(([k, label, sub]) => { const p = s.photos.find(x => photoKindOf(s, x) === k);
-        return `<div class="qcslot"><span class="label">${label} <span class="req">*</span></span>${p ? ph(p, 0) : add(k, label, sub) || '<span class="muted small">ไม่มีรูป</span>'}</div>`; }).join('')}</div>
-      <div><span class="label">รูปอื่น ๆ</span><div class="photos">${others.map(ph).join('')}${add('other', 'เพิ่มรูป', 'เลือกได้หลายรูป')}</div></div>
+        return `<div class="qcslot"><span class="label">${label} <span class="req">*</span></span>${p ? ph(p, 0) : pend(k) || add(k, label, sub) || '<span class="muted small">ไม่มีรูป</span>'}</div>`; }).join('')}</div>
+      <div><span class="label">รูปอื่น ๆ</span><div class="photos">${others.map(ph).join('')}${pend('other')}${add('other', 'เพิ่มรูป', 'เลือกได้หลายรูป')}</div></div>
       <div class="checks">${QC_CHECKS.map(([k, t]) => `<label class="check"><input type="checkbox" data-chk="${k}" ${s.qc.checks[k] ? 'checked' : ''} ${ro ? 'disabled' : ''}><span>${t}</span></label>`).join('')}</div>
       <div class="field"><label for="q-note">หมายเหตุการตรวจ</label>${ro ? `<div>${esc(s.qc.note) || '<span class="muted">-</span>'}${s.qc.by ? ` <span class="muted small">— ${esc(s.qc.by)} ${fmtT(s.qc.at)}</span>` : ''}</div>` : `<textarea id="q-note" data-q="note" placeholder="ถ้าตีกลับ ระบุสิ่งที่ต้องแก้">${esc(s.qc.note)}</textarea>`}</div>
       ${canQC ? `<div class="row" style="justify-content:flex-end"><span class="err" id="qerr"></span><button class="btn bad" data-a="rework">ตีกลับแก้ไข</button><button class="btn ok" data-a="pass">ผ่าน ตรวจสอบและจัดส่ง</button></div>` : ''}
@@ -1626,19 +1629,28 @@ document.addEventListener('change', async e => {
     return;
   }
   if (t.dataset.phk && t.files.length) {
-    const { s } = find(ui.jobId, ui.screenId), files = [...t.files], kind = t.dataset.phk;
-    ui.busy = true; render();
-    let n = 0;
-    for (const f of files) {
-      try {
-        const blob = await shrink(f); if (!blob) continue;
-        const p = await api('POST', `/screens/${s.id}/photos`, blob, true);
-        s.photos.push(p); n++;
-        if (kind !== 'other') s.photoKind = { ...(s.photoKind || {}), [p.id]: kind };
-      } catch (x) { toast('อัปโหลดรูปไม่สำเร็จ: ' + x.message); }
-    }
-    if (n && kind !== 'other') await saveScreen(s);
-    ui.busy = false; render(); if (n) toast(`เพิ่ม ${n} รูปแล้ว`);
+    const { s } = find(ui.jobId, ui.screenId), files = [...t.files], kind = t.dataset.phk; t.value = '';
+    // show each photo at once (local copy, "กำลังอัปโหลด…"), shrink and upload up to 3 at a time
+    const jobs = files.map(f => ({ key: Math.random().toString(36).slice(2), sid: s.id, kind, url: URL.createObjectURL(f), f }));
+    ui.phPending = [...(ui.phPending || []), ...jobs]; render();
+    let n = 0, next = 0;
+    const work = async () => {
+      while (next < jobs.length) {
+        const jb = jobs[next++];
+        try {
+          const blob = await shrink(jb.f); if (!blob) throw new Error('อ่านรูปไม่ได้');
+          const p = await api('POST', `/screens/${s.id}/photos`, blob, true);
+          localPhotos.set(p.id, URL.createObjectURL(blob));
+          s.photos.push(p); n++;
+          if (kind !== 'other') s.photoKind = { ...(s.photoKind || {}), [p.id]: kind };
+        } catch (x) { toast('อัปโหลดรูปไม่สำเร็จ: ' + x.message); }
+        ui.phPending = (ui.phPending || []).filter(x => x !== jb); URL.revokeObjectURL(jb.url);
+        if (ui.view === 'screen') render();
+      }
+    };
+    await Promise.all([work(), work(), work()]);
+    if (n && kind !== 'other') saveScreen(s);   // the photo's kind; no need to wait for it
+    if (n) toast(`เพิ่ม ${n} รูปแล้ว`);
   }
 });
 // วางรูปจากคลิปบอร์ด (Ctrl+V) ลงช่องรูปตัวอย่าง

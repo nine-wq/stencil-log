@@ -411,7 +411,7 @@ div.brow:hover{background:none}
 .st-sent{background:var(--ok-soft);color:var(--ok)}
 
 /* ตรวจงาน: รูปที่ต้องมี */
-.qcphotos{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:10px}
+.qcphotos{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
 .qcslot{display:flex;flex-direction:column;gap:6px}
 .qcslot .ph,.qcslot .addph{width:100%;aspect-ratio:1}
 .req{color:var(--bad)}
@@ -446,3 +446,5 @@ div.brow:hover{background:none}
   .swipehint{display:block}
   .swipe .coatbtn{display:none}
 }
+.ph.pending img{opacity:.55}
+.ph.pending .cap{background:rgba(0,0,0,.6)}
