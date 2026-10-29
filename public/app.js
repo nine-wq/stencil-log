@@ -430,7 +430,7 @@ function jobCard(j, ss) {
   return `<div class="jobcard">
     <button class="jobhead" data-a="openjob" data-v="${j.id}">
       <span class="t">${esc(j.customer)} <span class="jobno">${esc(j.no)}</span></span>
-      <span class="small"><span class="muted">รับงาน ${fmtD(jobTs(j))}</span> · <span class="${dueCls(j)}">${dueText(j)}</span> · <span class="num">${done}/${n}</span> บล็อค</span>
+      <span class="small"><span class="${dueCls(j)}">${dueText(j)}</span> · <span class="num">${done}/${n}</span> บล็อค</span>
     </button>
     ${ss.map(s => blockRow(j, s)).join('')}
   </div>`;
@@ -473,10 +473,9 @@ function blockRow(j, s) {
   const th = s.thAfter !== '' ? ` · หลังถ่าย <span class="num">${s.thAfter}</span>` : '';
   return `<button class="brow" data-a="openscreen" data-j="${j.id}" data-v="${s.id}">
     ${s.preview ? `<img class="thumb" src="${fileUrl(s.preview, true)}" alt="" loading="lazy">` : '<span class="thumb none" aria-hidden="true"></span>'}
-    <span class="bt">${s.stencilId ? `<span class="sid sm">${esc(s.stencilId)}</span>` : ''}<b>${esc(s.design || '(ยังไม่ตั้งชื่อ)')}</b>
-      <span class="muted small">${s.frameSource === 'customer' ? '<span class="fsrc">บล็อคเดิมลูกค้า</span> · ' : ''}${(s.sizes || []).length ? `ไซส์ ${esc(s.sizes.join(', '))} · ` : ''}<span class="num">${esc(s.mesh)}</span> · สเปค <span class="num">${esc(s.target)} µm</span>${s.coats.length ? ` · กาว ${s.coats.length} รอบ` : ''}${th}</span>
-      ${waitingFile(s) ? '<span class="fstate wait">รอไฟล์จากลูกค้า</span>' : needsFilm(s) ? '<span class="fstate">ยังไม่ทำฟิล์ม</span>' : ''}</span>
-    ${chip(s.status)}
+    <span class="bt"><b>${esc(s.design || '(ยังไม่ตั้งชื่อ)')}</b>${s.stencilId ? `<span class="sidtxt">${esc(s.stencilId)}</span>` : ''}
+      <span class="muted small">${s.frameSource === 'customer' ? '<span class="fsrc">บล็อคเดิมลูกค้า</span> · ' : ''}${(s.sizes || []).length ? `ไซส์ ${esc(s.sizes.join(', '))} · ` : ''}<span class="num">${esc(s.mesh)}</span> · <span class="num">${esc(s.target)} µm</span>${s.coats.length ? ` · กาว ${s.coats.length} รอบ` : ''}${th}</span></span>
+    <span class="bstate">${chip(s.status)}${waitingFile(s) ? '<span class="fstate wait">รอไฟล์จากลูกค้า</span>' : needsFilm(s) ? '<span class="fstate">ยังไม่ทำฟิล์ม</span>' : ''}</span>
   </button>`;
 }
 // ไซส์ที่ลูกค้าระบุ: เลือกได้หลายไซส์ หรือไม่ระบุ (รายการแก้ได้ที่ ⚙ ตั้งค่า)

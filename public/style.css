@@ -388,3 +388,10 @@ div.brow:hover{background:none}
 .kv .k{font-size:.72rem;color:var(--muted)}
 .kv .v{overflow-wrap:anywhere}
 @media (max-width:520px){.brow.jb{grid-template-columns:64px minmax(0,1fr)}.brow.jb .thumb{width:64px;height:64px}.brow.jb>.chip{grid-column:2;justify-self:start}.kvs{grid-template-columns:1fr 1fr}}
+
+/* หน้ารวมใบงาน: ชื่อลายก่อน รหัส ST ตามมาแบบเรียบ, สถานะบล็อค + ฟิล์มรวมคอลัมน์เดียว, รูปใหญ่ขึ้น 10% */
+.brow:not(.sm):not(.jb){grid-template-columns:97px minmax(0,1fr) auto}
+.brow:not(.sm):not(.jb) .thumb{width:97px;height:97px}
+.sidtxt{font-family:var(--mono);font-size:.76rem;color:var(--muted);letter-spacing:.02em}
+.bstate{display:flex;flex-direction:column;align-items:flex-end;gap:6px}
+.bstate .fstate{white-space:nowrap}
