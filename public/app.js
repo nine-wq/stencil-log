@@ -1079,24 +1079,26 @@ function filmSettingsCard() {
 
 function jobView() {
   const { j } = find(ui.jobId); if (!j) { ui.view = 'list'; return body(); }
-  const canDel = true;
-  const waitFilm = j.screens.filter(needsFilm);
+  const waitFilm = j.screens.filter(needsFilm), cs = custSpec(j.customer);
+  // laid out like the new-job form: the job card (customer, dates, spec, note), then the blocks
   return `<button class="btn ghost back" data-a="back">← กลับ</button>
-  <div class="spread"><div><div class="jobno">${esc(j.no)}</div><h2>${esc(j.customer)}</h2></div><span class="${dueCls(j)}">${dueText(j)}</span></div>
-  ${canDel ? `<div class="grid2">
-    <div class="field"><label for="j-date">วันที่รับงาน</label><input id="j-date" type="date" value="${esc(jobDate(j))}" data-jf="date" data-v="${j.id}"></div>
-    <div class="field"><label for="j-due">กำหนดส่ง</label><input id="j-due" type="date" value="${esc(j.due || '')}" data-jf="due" data-v="${j.id}"></div>
-  </div>` : `<div class="muted small">รับงาน ${fmtD(jobTs(j))}</div>`}
-  ${j.note ? `<div class="card">${esc(j.note)}</div>` : ''}
-  <div class="spread"><span class="muted small">สั่งโดย ${esc(j.createdBy)} · ${fmtT(j.createdAt)}${j.sentAt ? ` · ส่งลูกค้า ${fmtT(j.sentAt)}` : ''}</span>
+  <div class="spread"><h2>ใบงาน <span class="jobno h">${esc(j.no)}</span></h2><span class="${dueCls(j)}">${dueText(j)}</span></div>
+  <div class="card" style="display:flex;flex-direction:column;gap:12px">
+    <div class="grid2">
+      <div class="field"><label for="j-cust">ลูกค้า</label><input id="j-cust" value="${esc(j.customer)}" readonly title="เปลี่ยนลูกค้าไม่ได้หลังบันทึกใบงาน"></div>
+      <div class="field"><label for="j-date">วันที่รับงาน</label><input id="j-date" type="date" value="${esc(jobDate(j))}" data-jf="date" data-v="${j.id}"></div>
+      <div class="field"><label for="j-due">กำหนดส่ง</label><input id="j-due" type="date" value="${esc(j.due || '')}" data-jf="due" data-v="${j.id}"></div>
+    </div>
+    ${cs ? `<div class="spechint"><span class="label">สเปคประจำลูกค้า</span><span>${esc(specText(cs))}</span><span class="muted small">ค่าที่ใช้จริงของแต่ละบล็อคอยู่ในรายการด้านล่าง · แก้สเปคประจำได้ที่ ⚙ ตั้งค่า</span></div>` : ''}
+    <div class="field"><label for="j-note">รายละเอียด / ข้อควรระวัง</label><textarea id="j-note" data-jf="note" data-v="${j.id}" placeholder="เช่น ชนิดหมึก งานเส้นเล็ก">${esc(j.note || '')}</textarea></div>
+    <span class="muted small">สั่งโดย ${esc(j.createdBy)} · ${fmtT(j.createdAt)}${j.sentAt ? ` · ส่งลูกค้า ${fmtT(j.sentAt)}` : ''}</span>
+  </div>
+  <div class="spread"><h3>บล็อคที่ต้องขึ้น (${j.screens.length} ลาย)</h3>
     <button class="btn sm" data-a="labels" data-v="${j.id}" title="ลาเบล 20 × 2.2 cm เรียงต่อกันบนกระดาษสติกเกอร์ A4">พิมพ์ลาเบลติดบล็อค (${j.screens.length})</button></div>
   ${waitFilm.length ? `<div class="card spread"><span><b>ยังไม่ทำฟิล์ม ${waitFilm.length} บล็อค</b><br><span class="muted small">เปิดหน้าทำฟิล์มพร้อมบล็อคเหล่านี้ เรียงลงแผ่นได้ร่วมกับงานอื่น</span></span>
     <a class="btn primary" href="/film/?add=${waitFilm.map(s => s.id).join(',')}">ทำฟิล์ม</a></div>` : ''}
   <div class="jobcard">${j.screens.slice().sort(bySid).map(s => jobBlockRow(j, s)).join('')}</div>
-  <div class="row" style="justify-content:space-between">
-    ${canDel ? `<button class="btn bad" data-a="deljob" data-v="${j.id}">${ui.arm === 'deljob' ? 'กดอีกครั้งเพื่อลบใบงานนี้' : 'ลบใบงาน'}</button>` : '<span></span>'}
-
-  </div>`;
+  <div class="row"><button class="btn bad" data-a="deljob" data-v="${j.id}">${ui.arm === 'deljob' ? 'กดอีกครั้งเพื่อลบใบงานนี้' : 'ลบใบงาน'}</button></div>`;
 }
 
 /* --- screen detail --- */
@@ -1654,8 +1656,8 @@ document.addEventListener('change', async e => {
     return;
   }
   if (t.dataset.jf) {
-    const { j } = find(t.dataset.v); if (!j || !t.value) return;
-    const k = t.dataset.jf, old = j[k]; j[k] = t.value;
+    const { j } = find(t.dataset.v), k = t.dataset.jf; if (!j || (!t.value && k !== 'note')) return;   // the note may be emptied
+    const old = j[k]; j[k] = t.value;
     try { await api('PATCH', '/jobs/' + j.id, { [k]: t.value }); toast('บันทึกแล้ว'); render(); }
     catch (x) { j[k] = old; toast('บันทึกไม่สำเร็จ: ' + x.message); render(); }
     return;
