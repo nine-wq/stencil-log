@@ -1394,9 +1394,9 @@ async function printLabels(j, screens) {
     const cell = (k, v, cls = '') => `<div class="c ${cls}"><span class="k">${k}</span><span class="v">${v}</span></div>`;
     return `<div class="lb">
       <div class="pic">${pics[n] ? `<img src="${pics[n]}" alt="">` : ''}</div>
-      ${cell('SID', esc(s.stencilId || '-'), 'sid')}${cell('Customer', esc(j.customer || '-'))}${cell('กำหนดส่ง', due, 'end')}
+      ${cell('SID', esc(s.stencilId || '-'), 'sid')}${cell('Customer', esc(j.customer || '-'))}${cell('Delivery Date', due, 'end')}
       ${cell('Mesh', esc(s.mesh || '-'), 'bot')}${cell('Thickness', `${esc(s.target || '-')} µm`, 'bot')}${cell('Customer Ref', esc(s.customerRef || '-'), 'bot')}
-      <div class="c bot end by">prepared by<br><b>VICZO INTERNATIONAL co.,ltd.</b></div>
+      <div class="c bot end by">prepared by <b>VICZO</b></div>
     </div>`;
   };
   const per = 13, sheets = [];
@@ -1418,8 +1418,8 @@ body { font-family: "IBM Plex Sans Thai", sans-serif; color: #000; background: #
 .c.sid { grid-column: span 2 }
 .c.end { border-right: 0 }
 .c.bot { border-bottom: 0 }
-.c.by { font-size: 7pt; line-height: 1.3; color: #222 }
-.c.by b { font-size: 7.5pt; color: #000; white-space: nowrap }
+.c.by { display: block; align-self: center; font-size: 8pt; line-height: 1.3; color: #222 }
+.c.by b { font-size: 11pt; color: #000 }
 .c .k { font-size: 6.5pt; color: #333; line-height: 1.1 }
 .c .v { font-size: 15pt; font-weight: 700; line-height: 1.15; white-space: nowrap; overflow: hidden }
 .tip { font: 12px sans-serif; color: #555; padding: 8px 12px; background: #f3f3f3 } @media print { .tip { display: none } }

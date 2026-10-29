@@ -100,8 +100,29 @@ async function getSetting(env, key) {
 // สร้าง/อัปเกรดตารางเองครั้งแรกที่ Worker เริ่มทำงาน ไม่ต้องรันคำสั่ง init
 let schemaReady = null;
 function ensureSchema(env) {
-  if (!schemaReady) schemaReady = env.DB.batch(SCHEMA.map(s => env.DB.prepare(s))).catch(e => { schemaReady = null; throw e; });
+  if (!schemaReady) schemaReady = env.DB.batch(SCHEMA.map(s => env.DB.prepare(s))).then(() => oneTimeReset(env)).catch(e => { schemaReady = null; throw e; });
   return schemaReady;
+}
+
+// ONE-TIME RESET (asked by Nine 2026-10-30): clear all data and start fresh. Users, sessions and settings stay;
+// job, stencil and film counters restart at 1. The settings row claimed first makes sure it runs only once, ever.
+// Remove this function after it has run in production.
+const RESET_KEY = 'reset-2026-10-30';
+async function oneTimeReset(env) {
+  const claim = await env.DB.prepare('INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)').bind(RESET_KEY, String(Date.now())).run();
+  if (!claim.meta || claim.meta.changes !== 1) return;
+  await env.DB.batch(['DELETE FROM artworks', 'DELETE FROM film_outputs', 'DELETE FROM photos', 'DELETE FROM screens', 'DELETE FROM jobs', 'DELETE FROM files',
+    "UPDATE settings SET value = '1' WHERE key IN ('seq', 'sseq', 'fseq')"].map(q => env.DB.prepare(q)));
+  if (!env.FILES) return;
+  let cursor, n = 0;
+  try {
+    do {
+      const l = await env.FILES.list({ cursor, limit: 1000 });
+      if (l.objects.length) { await env.FILES.delete(l.objects.map(o => o.key)); n += l.objects.length; }
+      cursor = l.truncated ? l.cursor : null;
+    } while (cursor);
+  } catch (e) { console.log('reset: R2 cleanup stopped', e); }
+  await env.DB.prepare('UPDATE settings SET value = ? WHERE key = ?').bind(JSON.stringify({ at: Date.now(), files: n }), RESET_KEY).run();
 }
 
 export default {
