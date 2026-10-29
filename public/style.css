@@ -394,3 +394,12 @@ div.brow:hover{background:none}
 .bstate{display:flex;flex-direction:column;align-items:flex-end;gap:6px}
 .bstate .fstate{white-space:nowrap}
 .chip.fl-need,.chip.fl-wait{background:var(--warn-soft);color:var(--warn)}
+
+/* หน้าบล็อค: การ์ดเดียวแบบแถวในฟอร์มสร้างใบงาน */
+.shead h2{margin:0}
+.scard{padding:14px}
+.fileline{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.fileline .flist{flex:1;min-width:0}
+.filmline{display:flex;flex-direction:column;gap:8px;padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:var(--sunk)}
+.filmline .row{gap:6px;margin:0;flex-wrap:wrap}
+.chip.fl-ok{background:var(--ok-soft);color:var(--ok)}

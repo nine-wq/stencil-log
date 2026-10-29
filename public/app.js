@@ -827,18 +827,6 @@ async function aiNameArt(id, quiet) {
   delete ui.aiBusy['a:' + id]; render();
 }
 function screenFromArt(a) { return { ...blankScreen(), artworkId: a.id, design: a.name || '', customerRef: a.customerRef || '', originals: a.file ? [a.file] : [], preview: a.preview || null }; }
-function filmCard(s) {
-  const a = s.artworkId ? artOf(s.artworkId) : null, f = s.film;
-  if (!f && !(a && a.filmable)) return '';
-  const t = encodeURIComponent(token), cust = (find(ui.jobId).j || {}).customer || '';
-  return `<div class="card" style="display:flex;flex-direction:column;gap:12px">
-    <div class="spread"><h3>ฟิล์ม</h3>${f ? '<span class="fstate ok">ทำฟิล์มแล้ว</span>' : '<span class="fstate">ยังไม่ทำฟิล์ม</span>'}</div>
-    ${a && a.filmable ? `<div class="srbody">${viewerSlot(pkOf('s', s), s, a, cust)}<div class="srfields">${filmGroup('s', s, a, cust)}</div></div>` : ''}
-    ${f ? `<div class="small">${fmtT(f.at)} โดย ${esc(f.by)}${f.thick ? ` · ความหนาบล็อค <span class="num">${f.thick} µm</span>` : ''}${f.compUm != null ? ` · ชดเชยขอบ <span class="num">${f.compUm} µm</span>` : ''}<br><span class="muted">${esc(f.name)}</span></div>` : '<div class="muted small">ยังไม่ได้ลงแผ่นฟิล์ม · จะรอรวมลงแผ่นที่เมนู "ฟิล์ม" → "+ สร้างฟิล์ม" พร้อมงานอื่น</div>'}
-    <div class="row">${f ? `<a class="btn sm" href="/api/films/${f.id}?dl=1&t=${t}">ดาวน์โหลดแผ่นฟิล์ม</a><a class="btn sm ghost" href="/api/films/${f.id}?t=${t}" target="_blank" rel="noopener">เปิดดู</a>` : ''}
-      ${a && a.filmable && f ? `<a class="btn sm ghost" href="/film/?add=${s.id}">ลงแผ่นฟิล์มใหม่</a>` : ''}</div>
-  </div>`;
-}
 /* --- ฟิล์มของแต่ละบล็อค: การชดเชยขอบ สีที่ไม่ใช่ลาย -> screen.filmPrep --- */
 // filmPrep = { mode: 'auto'|'manual'|'none', manualUm, notArt: [colour keys] }; ความหนามาจากสเปคของบล็อค (target)
 const prepOf = s => ({ mode: 'auto', manualUm: 200, notArt: [], ...(s.filmPrep || {}) });
@@ -1113,43 +1101,50 @@ function screenView() {
   const canCoat = ['ordered', 'coating', 'rework'].includes(s.status);
   const canQC = s.status === 'qc';
   const nextSide = s.coats.length && s.coats[s.coats.length - 1].side === 'ด้านพิมพ์' ? 'ด้านปาด' : 'ด้านพิมพ์';
+  const m = db.master, a = s.artworkId ? artOf(s.artworkId) : null, edit = canCoat;
+  const filmTag = waitingFile(s) ? '<span class="chip fl-wait">รอไฟล์จากลูกค้า</span>' : needsFilm(s) ? '<span class="chip fl-need">ยังไม่ทำฟิล์ม</span>' : s.film ? '<span class="chip fl-ok">ทำฟิล์มแล้ว</span>' : '';
   let h = `<button class="btn ghost back" data-a="back">← กลับ</button>
-  <div class="spread"><div><div class="jobno">${esc(j.no)} · ${esc(j.customer)}${s.stencilId ? ` · <span class="sid">${esc(s.stencilId)}</span>` : ''}</div><h2>${esc(s.design || '(ยังไม่ตั้งชื่อ)')}</h2>${s.customerRef ? `<div class="jobno">Customer REF: ${esc(s.customerRef)}</div>` : ''}</div>${chip(s.status)}</div>
-  ${frameSrcPicker('s', s)}
-  <div class="spec">
-    <div><div class="label">ผ้าสกรีน</div><div class="v num">${esc(s.mesh)}</div></div>
-    <div><div class="label">เฟรม</div><div class="v">${esc(s.frame)}</div></div>
-    <div><div class="label">กาว</div><div class="v">${esc(s.emulsion)}</div></div>
-    <div><div class="label">สเปคความหนา</div><div class="v num">${esc(s.target)} ±${T} µm</div></div>
-    <div><div class="label">กำหนดส่ง</div><div class="v ${dueCls(j)}">${fmtD(dueTs(j))}</div></div>
-  </div>
+  <div class="spread shead"><div><h2>${esc(s.design || '(ยังไม่ตั้งชื่อ)')}</h2>
+    <div class="small muted">${s.stencilId ? `<span class="sidtxt">${esc(s.stencilId)}</span> · ` : ''}${esc(j.no)} · ${esc(j.customer)} · <span class="${dueCls(j)}">${dueText(j)}</span></div></div>
+    <span class="bstate">${filmTag}${chip(s.status)}</span></div>
   ${j.note ? `<div class="card small"><span class="label">หมายเหตุจากอาร์ทเวิร์ค</span><br>${esc(j.note)}</div>` : ''}
   ${s.status === 'rework' && s.qc.note ? `<div class="card" style="border-color:var(--bad)"><span class="label" style="color:var(--bad)">เหตุผลที่ตีกลับ</span><br>${esc(s.qc.note)} <span class="muted small">— ${esc(s.qc.by)} ${fmtT(s.qc.at)}</span></div>` : ''}`;
 
   if ((!s.artworkId || ui.replaceArt === s.id) && db.features.files) h += attachCard(j, s);
-  if (db.features.files) {
-    const art = true;
-    s.originals = s.originals || [];
-    h += `<div class="card" style="display:flex;flex-direction:column;gap:14px">
-      <h3>ไฟล์งาน</h3>
-      <div class="idrow">
-        ${previewZone('s', s, art)}
-        <div class="idfields">
-          ${art ? `<div class="field"><label for="e-cref">Customer REF</label><input id="e-cref" data-f="customerRef" value="${esc(s.customerRef || '')}"></div>
-            ${db.features.ai ? nameField('s', s, 'e-name', 'data-f="design"') : `<div class="field"><label for="e-name">ชื่อลาย</label><input id="e-name" data-f="design" value="${esc(s.design)}"></div>`}`
-          : `<div><span class="label">Customer REF</span><div>${esc(s.customerRef || '-')}</div></div><div><span class="label">ชื่อลาย</span><div>${esc(s.design || '-')}</div></div>`}
-          <div class="field"><span class="flabel">ไซส์</span>${sizeChips('s', s, art)}</div>
+  // one card, laid out like a row of the new-job form: picture/viewer | ลาย · สเปคบล็อค · ฟิล์ม
+  s.originals = s.originals || [];
+  const fileIds = a && a.file ? [a.file] : s.originals;   // read-only: the artwork's own file
+  const sel = (k, list, label) => `<div class="field"><label for="e-${k}">${label}</label>${edit ? `<select id="e-${k}" data-f="${k}">${opt(list, s[k])}</select>` : `<div class="ro-v">${esc(s[k] || '-')}</div>`}</div>`;
+  const f = s.film, t = encodeURIComponent(token);
+  h += `<div class="card sr scard"><div class="srbody">
+    ${a && a.filmable ? viewerSlot(pkOf('s', s), s, a, j.customer) : previewZone('s', s, true)}
+    <div class="srfields">
+      <fieldset class="grp"><legend>ลาย</legend>
+        <div class="stack">
+          ${db.features.ai ? nameField('s', s, 'e-name', 'data-f="design"') : `<div class="field"><label for="e-name">ชื่อลาย</label><input id="e-name" data-f="design" value="${esc(s.design)}"></div>`}
+          <div class="field"><label for="e-cref">Customer REF</label><input id="e-cref" data-f="customerRef" value="${esc(s.customerRef || '')}"></div>
         </div>
-      </div>
-      ${(() => { const a = s.artworkId && artOf(s.artworkId), fs = a && a.file ? [a.file] : s.originals;   // read-only: the artwork's own file
-        return `<div class="fsec"><div class="spread"><span class="label">ไฟล์ต้นฉบับจากลูกค้า</span>
-          ${s.artworkId && ui.replaceArt !== s.id ? '<button class="btn sm" data-a="replaceart">เปลี่ยนไฟล์ลาย</button>' : ''}</div>
-          <div class="flist">${fs.map(id => fileChip(id, false)).join('') || '<span class="muted small">ยังไม่มีไฟล์</span>'}</div></div>`; })()}
-      <div id="uploads"></div>
-    </div>`;
-  }
+        <div class="field"><span class="flabel">ไซส์</span>${sizeChips('s', s, true)}</div>
+        ${db.features.files ? `<div class="field"><span class="flabel">ไฟล์ต้นฉบับจากลูกค้า</span>
+          <div class="fileline"><div class="flist">${fileIds.map(id => fileChip(id, false)).join('') || '<span class="muted small">ยังไม่มีไฟล์</span>'}</div>
+          ${s.artworkId && ui.replaceArt !== s.id ? '<button class="btn sm" data-a="replaceart">เปลี่ยนไฟล์ลาย</button>' : ''}</div></div>` : ''}
+        ${a && !a.filmable ? '<span class="fstate">ไฟล์นี้ทำฟิล์มในแอปไม่ได้</span>' : ''}
+      </fieldset>
+      <fieldset class="grp"><legend>สเปคบล็อค</legend>
+        ${frameSrcPicker('s', s)}
+        <div class="grid4">
+          ${sel('mesh', m.mesh, 'เบอร์ผ้าสกรีน')}${sel('frame', m.frames, 'ขนาดเฟรม')}${sel('emulsion', m.emulsions, 'ชนิดกาว')}
+          <div class="field"><label for="e-target">ความหนาที่ต้องการ</label>${edit ? `<div class="unit"><input id="e-target" type="number" inputmode="numeric" data-f="target" value="${esc(s.target)}"><span>µm</span></div>` : `<div class="ro-v num">${esc(s.target)} µm</div>`}<span class="muted small">±${T} µm</span></div>
+        </div>
+      </fieldset>
+      ${a && a.filmable ? filmGroup('s', s, a, j.customer) : ''}
+      ${f || (a && a.filmable) ? `<div class="filmline small">${f ? `<span><span class="fstate ok">ทำฟิล์มแล้ว</span> <b>${esc(f.name.replace(/\.pdf$/i, ''))}</b> · ${fmtT(f.at)} โดย ${esc(f.by)}${f.compUm != null ? ` · ชดเชย <span class="num">${f.compUm} µm</span>` : ''}</span>
+          <span class="row"><a class="btn sm" href="/api/films/${f.id}?dl=1&t=${t}">ดาวน์โหลด</a><a class="btn sm ghost" href="/film/?view=${f.id}">ดูฟิล์ม</a>${a && a.filmable ? `<a class="btn sm ghost" href="/film/?add=${s.id}">ลงแผ่นใหม่</a>` : ''}</span>`
+        : '<span class="muted">ยังไม่ได้ลงแผ่นฟิล์ม · รอรวมลงแผ่นที่เมนู ฟิล์ม → + สร้างฟิล์ม</span>'}</div>` : ''}
+    </div></div>
+    <div id="uploads"></div>
+  </div>`;
 
-  h += filmCard(s);
   h += `<div class="card" style="display:flex;flex-direction:column;gap:12px">
     <div class="spread"><h3>รอบขึ้นกาว</h3><span class="muted small num">${s.coats.length} รอบ</span></div>
     <div class="coats">${s.coats.map((c, i) => `<div class="coat"><span class="n">${i + 1}</span>
@@ -1549,6 +1544,7 @@ document.addEventListener('change', async e => {
   if (t.dataset.u && ui.editUser) { ui.editUser[t.dataset.u] = t.type === 'checkbox' ? t.checked : t.value; return; }
   if (t.dataset.s) { ui.draft.screens[+t.dataset.s][t.dataset.k] = t.value; if (t.tagName === 'SELECT' || t.dataset.k === 'target') render(); return; }
   if (t.dataset.d === 'customer') { render(); return; }
+  if (t.dataset.f && ['mesh', 'frame', 'emulsion', 'target'].includes(t.dataset.f) && ui.view === 'screen') { const { s } = find(ui.jobId, ui.screenId); if (s) { s[t.dataset.f] = t.dataset.f === 'target' ? +t.value || '' : t.value; logEv(s, 'แก้สเปค: ' + t.dataset.f + ' = ' + t.value); saveScreen(s); render(); } return; }
   if (t.dataset.fp) {
     const k = t.dataset.k, s = targetObj(t.dataset.fp); if (!s) return;
     if (k === 'mode') { const p = prepOf(s); const patch = { mode: t.value };
