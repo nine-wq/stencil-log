@@ -1,7 +1,7 @@
 // Service worker: installable app, offline start of the app shell, and files shared from other apps
 // (manifest share_target -> POST /share-target -> files kept in cache 'film-share' -> /?share=… opens the artwork library).
-const SHELL = 'stencil-shell-v1';
-const ASSETS = ['/', '/app.js', '/style.css', '/favicon.svg', '/manifest.webmanifest', '/icons/icon-192.png',
+const SHELL = 'stencil-shell-v2';
+const ASSETS = ['/', '/app.js', '/style.css', '/favicon.svg', '/update.js', '/manifest.webmanifest', '/icons/icon-192.png',
   '/film/', '/film/js/film-core.js', '/film/vendor/pdf-lib.min.js', '/film/vendor/jszip.min.js', '/film/vendor/pdf.min.js', '/film/vendor/pdf.worker.min.js'];
 
 self.addEventListener('install', e => {

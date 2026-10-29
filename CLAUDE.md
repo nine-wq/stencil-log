@@ -111,6 +111,7 @@ Screen status flow: `ordered → coating → qc → sent`, with `qc → rework �
   - `manifest.webmanifest` + `sw.js`: network-first app shell, offline start, never caches `/api/`.
   - Share target: POST `/share-target` → the service worker stores the files in cache `film-share` → `/?share=…` → the library asks which customer they belong to.
   - Bump `SHELL` in sw.js when the cached asset list changes.
+  - `public/update.js` (both pages): records the server's version (ETag of the page and its code) at load; when the app comes back to the screen (≥30 s apart) and it changed, shows "มีเวอร์ชันใหม่ แตะเพื่ออัปเดต" (tap = reload; never automatic, unsaved work stays).
 
 ## Film core rules (public/film/js/film-core.js; edit it and public/film/index.html directly, there is no build step)
 - Designs are found from platen frames (dashed/solid rectangles, closed sock outlines, outlined rings). Same-size frames side by side = one design (left + right).
