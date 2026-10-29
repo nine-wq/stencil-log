@@ -53,9 +53,9 @@ Main menu (tabs in the app): ใบงาน (jobs) · ฟิล์ม (film his
    - One list, "บล็อคที่รอลงแผ่นฟิล์ม": screens with a filmable artwork, no `film`, and not sent, from every job and customer. **Ticked = on the sheet**; ticking/unticking adds/removes it at once (`Q.sel`, `syncSheet()`). All are ticked when the page opens (or only the `?add=` ids). Buttons เลือกทั้งหมด / ไม่เลือก.
      - Each row: checkbox, picture, name, stencil ID · thickness · compensation, and "แก้" (`/#screen=<id>`). Job screens have no card below; film settings are edited in the job.
    - Each one loads the artwork's original from R2, keeps only that design (nearest `box`), and applies the job's customer, the screen's `target` and its `filmPrep`.
-   - Hand-dropped files are rows in the same list, in a "ไม่มีใบงาน" group (`#handBox`): tick (`rec.off` = not on the sheet), thumbnail, name, one summary line per design, "ตั้งค่า" (opens the full controls under the row, `rec.open`) and ✕. Below it a slim "+ เพิ่มไฟล์ที่ไม่มีใบงาน" drop zone; the whole list accepts dropped files. The count and เลือกทั้งหมด / ไม่เลือก cover both kinds.
+   - **Every film comes from a job**: files cannot be dropped on this page (no drop zone, no shared-file intake, no "เก็บไฟล์ต้นฉบับ" box). New artwork goes into a job first (new job, or ไฟล์ลายของบล็อคนี้ / เปลี่ยนไฟล์ลาย on the screen page); shared files open คลังลาย in the main app.
    - After saving, the linked screens leave the list and the sheet.
-   - Files can also be dropped by hand for work without a job. The "เก็บไฟล์ต้นฉบับ" box (originals to `film/orig/<sha>`) only shows while such hand-dropped files are on the sheet; job screens' originals are already in the library and are never stored again.
+   - Old films made from hand-dropped files keep their stored originals (`film/orig/<sha>`, `/api/originals`); the history still lists and downloads them, and shows "ไม่มีใบงาน" for those rows.
    - Saving always stores the history copy, then `POST /api/films/:id/link` sets `screen.film = {id, name, at, by, compUm, thick}` and adds a log line.
    - Deleting a film from history removes `film` from its screens again.
    - `/film/?add=<screenId,…>` opens the page with those screens (from the job/screen pages).

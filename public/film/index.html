@@ -346,12 +346,6 @@ details.settings summary { cursor: pointer; font-weight: 600; font-size: .9rem }
       <section class="queue" id="queueBox" aria-label="บล็อครอทำฟิล์ม">
         <div class="qhead"><h2 class="sh">บล็อคที่รอลงแผ่นฟิล์ม</h2><span class="qempty" id="queueCount"></span></div>
         <div id="queueList"><div class="qempty">กำลังโหลด…</div></div>
-        <div class="qjob" id="handBox" hidden><b>ไม่มีใบงาน <span>ไฟล์ที่ลากมาเอง</span></b><div id="jobs"></div></div>
-        <label class="drop slim" id="drop" tabindex="0">
-          <strong>+ เพิ่มไฟล์ที่ไม่มีใบงาน</strong>
-          <span>ลากไฟล์ .ai / .pdf / .zip มาวาง หรือแตะเพื่อเลือก</span>
-          <input type="file" id="pick" multiple accept=".ai,.pdf,.zip,application/pdf,application/zip">
-        </label>
         <div class="qbar" id="queueBar" hidden>
           <span class="qempty">ติ๊ก = อยู่บนแผ่นฟิล์ม</span><span style="flex:1"></span>
           <button type="button" class="ghost" id="queueAll">เลือกทั้งหมด</button>
@@ -366,7 +360,6 @@ details.settings summary { cursor: pointer; font-weight: 600; font-size: .9rem }
         <div class="stats" id="stats"></div>
         <div class="saveside">
           <label class="keep" id="keepWrap" hidden><input type="checkbox" id="keepCopy" checked> เก็บสำเนาในประวัติ</label>
-          <label class="keep" id="origWrap" hidden><input type="checkbox" id="keepOrig" checked> เก็บไฟล์ต้นฉบับ</label>
           <button class="btn" id="save" disabled>บันทึก PDF ฟิล์ม</button>
         </div>
       </div>
@@ -606,207 +599,8 @@ details.settings summary { cursor: pointer; font-weight: 600; font-size: .9rem }
     });
   });
 
-  /* ---------- file intake ---------- */
-  const drop = $('drop');
-  const qbox = $('queueBox');   // the whole list accepts dropped files
-  ['dragenter', 'dragover'].forEach(ev => qbox.addEventListener(ev, e => { e.preventDefault(); drop.classList.add('over'); }));
-  qbox.addEventListener('dragleave', e => { if (!qbox.contains(e.relatedTarget)) drop.classList.remove('over'); });
-  qbox.addEventListener('drop', e => { e.preventDefault(); drop.classList.remove('over'); addFiles([...e.dataTransfer.files]); });
-  drop.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); $('pick').click(); } });
-  $('pick').addEventListener('change', e => { addFiles([...e.target.files]); e.target.value = ''; });
-
-  async function addFiles(files) {
-    const items = [];
-    for (const f of files) {
-      if (/\.zip$/i.test(f.name)) {
-        try {
-          const z = await JSZip.loadAsync(await f.arrayBuffer(), { decodeFileName: (b) => {
-            try { return new TextDecoder('utf-8', { fatal: true }).decode(b); } catch (e) {}
-            try { return new TextDecoder('windows-874').decode(b); } catch (e) { return String.fromCharCode.apply(null, b); } } });
-          const entries = Object.values(z.files).filter(e => !e.dir && /\.(ai|pdf)$/i.test(e.name) && !/(^|\/)(__MACOSX|\._)/.test(e.name));
-          if (!entries.length) setStatus('ไม่พบไฟล์ .ai หรือ .pdf ใน ' + f.name, true);
-          for (const e of entries) items.push({ name: e.name.split('/').pop(), bytes: new Uint8Array(await e.async('arraybuffer')) });
-        } catch (err) { setStatus('เปิดไฟล์ zip ไม่ได้: ' + f.name, true); }
-      } else if (/\.(ai|pdf)$/i.test(f.name)) items.push({ name: f.name, bytes: new Uint8Array(await f.arrayBuffer()) });
-      else setStatus('ข้ามไฟล์ ' + f.name + ' (รับเฉพาะ .ai .pdf .zip)', true);
-    }
-    if (!items.length) return;
-    for (let i = jobs.length - 1; i >= 0; i--) if (jobs[i].sample) jobs.splice(i, 1);
-    for (const it of items) await addJob(it.name, it.bytes, false);
-    renderJobs(); schedule(0);
-  }
-  async function addJob(name, bytes, sample) {
-    const fail = (e) => /PDF-compatible/.test(e.message) ? e.message : 'อ่านไฟล์นี้ไม่ได้ ไฟล์อาจเสียระหว่างส่ง ลองบีบเป็น .zip แล้วส่งใหม่ หรือ Save As PDF จาก Illustrator';
-    let n = 1;
-    try { n = await C.pageCount(bytes); } catch (e) { jobs.push({ id: ++seq, name, sample, bytes, error: fail(e) }); return; }
-    const base = name.replace(/\.(ai|pdf)$/i, ''), ext = (name.match(/\.(ai|pdf)$/i) || ['.pdf'])[0];
-    for (let p = 0; p < n; p++) {
-      const nm = n > 1 ? `${base} หน้า ${p + 1}${ext}` : name;
-      const rec = { id: ++seq, name: nm, sample, bytes: bytes.slice(0), page: p, src: name, srcBytes: bytes };
-      try { rec.job = await C.analyze(bytes, nm, p); } catch (e) { rec.error = fail(e); }
-      jobs.push(rec);
-    }
-  }
-
-  /* ---------- job cards ---------- */
-  const f1 = (v) => v.toFixed(1);
-  function colourGroups(cols) {
-    const m = new Map();
-    for (const c of cols) { const g = m.get(c.label); if (g) { g.keys.push(c.key); g.art = g.art || c.art; } else m.set(c.label, { ...c, keys: [c.key] }); }
-    return [...m.values()];
-  }
-  const hands = () => jobs.filter(r => !r.screen);
-  function compLine(set, um) { return set.mode === 'none' ? 'ไม่ชดเชยขอบ' : `ชดเชย ${um} µm${set.mode === 'manual' ? ' (ระบุเอง)' : ''}`; }
-  // files dropped here by hand: rows in the same list as the job screens (ticked = on the sheet), settings fold open under the row
-  function renderJobs() {
-    syncKeep();
-    const box = $('jobs'); box.textContent = '';
-    const hs = hands(); $('handBox').hidden = !hs.length;
-    for (const rec of hs) {
-      const lab = document.createElement('label'); lab.className = 'qrow' + (rec.off ? ' off' : '');
-      const cb = document.createElement('input'); cb.type = 'checkbox'; cb.checked = !rec.off && !rec.error; cb.disabled = !!rec.error;
-      cb.setAttribute('aria-label', 'ใส่ลงแผ่นฟิล์ม: ' + rec.name);
-      cb.addEventListener('change', () => { rec.off = !cb.checked; renderJobs(); schedule(0); });
-      const th = document.createElement('span'); th.className = 'qthumb';
-      const t = document.createElement('span'); t.className = 'qt'; t.textContent = rec.name;
-      const acts = document.createElement('span'); acts.className = 'qacts';
-      const x = document.createElement('button'); x.className = 'x'; x.type = 'button'; x.textContent = '✕'; x.title = 'เอาไฟล์นี้ออก'; x.setAttribute('aria-label', 'เอา ' + rec.name + ' ออก');
-      x.addEventListener('click', (e) => { e.preventDefault(); jobs.splice(jobs.indexOf(rec), 1); renderJobs(); schedule(0); });
-      lab.append(cb, th, t, acts); box.appendChild(lab);
-      const small = (txt, cls) => { const m = document.createElement('small'); if (cls) m.className = cls; m.textContent = txt; t.appendChild(m); };
-      if (rec.error) { small(rec.error, 'bad'); acts.appendChild(x); continue; }
-      const j = rec.job; const d = C.describe(j, st);
-      const on = d.designs.filter(ds => !ds.off);
-      on.forEach(ds => { const set = dsFor(j, ds.index, rec.name);
-        small(`${d.designs.length > 1 ? `ลาย ${ds.index + 1} · ` : ''}${set.customer || 'ไม่ระบุลูกค้า'} · ${set.thick != null ? set.thick : '-'} µm · ${compLine(set, C.compensation(set, st))}${j.notArt.size ? ` · ตัดสีออก ${j.notArt.size} สี` : ''}`); });
-      if (!on.length) small(d.designs.length ? 'ปิดทุกลายในไฟล์นี้ไว้' : 'ไม่พบลายในไฟล์นี้');
-      if (on.some(ds => !(dsFor(j, ds.index, rec.name).customer))) small('ยังไม่ได้เลือกลูกค้าและความหนา', 'warnline');
-      const ed = document.createElement('button'); ed.type = 'button'; ed.className = 'qedit linkbtn'; ed.textContent = rec.open ? 'ย่อ' : 'ตั้งค่า';
-      ed.setAttribute('aria-expanded', String(!!rec.open));
-      ed.addEventListener('click', (e) => { e.preventDefault(); rec.open = !rec.open; renderJobs(); });
-      acts.append(ed, x);
-      thumb(rec, th);
-      if (!rec.open) continue;
-      const body = document.createElement('div'); body.className = 'hpanel';
-      const sum = document.createElement('div'); sum.className = 'meta';
-      sum.textContent = d.designs.length ? `พบ ${d.designs.length} ลาย` + (d.framed ? ' จากกรอบแป้นในไฟล์' : '') : 'ไม่พบลายในไฟล์นี้';
-      body.appendChild(sum);
-
-      const list = document.createElement('div'); list.className = 'designs';
-      d.designs.forEach((ds) => {
-        const set = dsFor(j, ds.index, rec.name);
-        const box2 = document.createElement('div'); box2.className = 'dbox' + (ds.off ? ' off' : '');
-        const row = document.createElement('label'); row.className = 'design' + (ds.off ? ' off' : '');
-        const cb = document.createElement('input'); cb.type = 'checkbox'; cb.checked = !ds.off; cb.id = `d-${rec.id}-${ds.index}`;
-        cb.addEventListener('change', () => { if (cb.checked) j.excluded.delete(ds.index); else j.excluded.add(ds.index); renderJobs(); schedule(0); });
-        const num = document.createElement('span'); num.className = 'dnum'; num.textContent = ds.index + 1;
-        const txt = document.createElement('span'); txt.className = 'mono';
-        const fr = ds.frames[0];
-        txt.textContent = (ds.frames.length === 2 ? `ซ้าย-ขวา · แป้นละ ${f1(fr.w)} × ${f1(fr.h)} mm · กึ่งกลางห่าง ${f1(ds.centreDistance)} mm` : `แป้นเดียว ไม่มีคู่ · ${f1(fr.w)} × ${f1(fr.h)} mm`);
-        const sw = document.createElement('span'); sw.className = 'swatches';
-        ds.colours.forEach(c => { const i = document.createElement('i'); i.style.background = c.css; i.title = c.label; sw.appendChild(i); });
-        row.append(cb, num, txt, sw); box2.appendChild(row);
-
-        // customer / stencil thickness / edge compensation for this design
-        const spec = document.createElement('div'); spec.className = 'spec';
-        const mk = (labelText, el) => { const l = document.createElement('label'); const t = document.createElement('span'); t.textContent = labelText; l.append(t, el); spec.appendChild(l); return l; };
-        const selC = document.createElement('select'); selC.id = `cu-${rec.id}-${ds.index}`;
-        const names = cfg.customers.map(c => c.name); if (set.customer && !names.includes(set.customer)) names.push(set.customer);
-        [['', 'ไม่ระบุลูกค้า'], ...names.map(n => [n, n])].forEach(([v, t]) => { const o = document.createElement('option'); o.value = v; o.textContent = t; selC.appendChild(o); });
-        selC.value = set.customer;
-        selC.addEventListener('change', () => { set.customer = selC.value; set.thick = thickFor(selC.value); set.thickSet = false; renderJobs(); schedule(0); });
-        mk('ลูกค้า', selC);
-        const selT = document.createElement('select'); selT.id = `th-${rec.id}-${ds.index}`;
-        const ths = cfg.thicknesses.slice(); if (set.thick != null && !ths.includes(set.thick)) ths.push(set.thick); ths.sort((a, b) => a - b);
-        ths.forEach(v => { const o = document.createElement('option'); o.value = v; o.textContent = `${v} µm`; selT.appendChild(o); });
-        selT.value = set.thick;
-        selT.addEventListener('change', () => { set.thick = +selT.value; set.thickSet = true; renderJobs(); schedule(0); });
-        mk('ความหนาบล็อก', selT);
-        const selM = document.createElement('select'); selM.id = `cm-${rec.id}-${ds.index}`;
-        [['auto', 'อัตโนมัติ'], ['manual', 'ระบุค่า'], ['none', 'ไม่ชดเชย']].forEach(([v, t]) => { const o = document.createElement('option'); o.value = v; o.textContent = t; selM.appendChild(o); });
-        selM.value = set.mode;
-        selM.addEventListener('change', () => { if (selM.value === 'manual' && set.mode === 'auto') set.manualUm = C.compensation(set, st); set.mode = selM.value; renderJobs(); schedule(0); });
-        mk('ชดเชยขอบ', selM);
-        // value box: editable when "ระบุค่า", otherwise shows the computed value and cannot be edited
-        const um = C.compensation(set, st);
-        const inp = document.createElement('input'); inp.type = 'number'; inp.min = 0; inp.max = 2000; inp.step = 10; inp.id = `mu-${rec.id}-${ds.index}`;
-        inp.value = set.mode === 'manual' ? set.manualUm : um;
-        inp.disabled = set.mode !== 'manual';
-        inp.title = set.mode === 'auto' ? `คำนวณอัตโนมัติ: ${set.thick} × ${st.autoFactor}` : set.mode === 'none' ? 'ไม่ชดเชยขอบ' : 'ระบุค่าชดเชยขอบต่อด้าน';
-        inp.addEventListener('change', () => { const v = +inp.value; if (isFinite(v) && v >= 0) { set.manualUm = v; renderJobs(); schedule(0); } });
-        mk('ค่า µm', inp);
-        box2.appendChild(spec);
-        list.appendChild(box2);
-      });
-      body.appendChild(list);
-
-      // colours found in the artwork: all become black; tap one to leave it out
-      if (d.colours.length) {
-        const chips = document.createElement('div'); chips.className = 'chips';
-        for (const c of colourGroups(d.colours)) {   // colours that differ by less than 1% show as one chip
-          const b = document.createElement('button'); b.type = 'button'; b.className = 'chip';
-          const s = document.createElement('i'); s.style.background = c.css; b.appendChild(s);
-          b.appendChild(document.createTextNode(c.label));
-          b.setAttribute('aria-pressed', String(c.art));
-          b.title = c.art ? 'สีนี้เป็นส่วนของลาย จะกลายเป็นสีดำ แตะเพื่อตัดสีนี้ออกจากลาย' : 'สีนี้ถูกตัดออกจากลาย แตะเพื่อนับกลับเป็นลาย';
-          b.addEventListener('click', () => { c.keys.forEach(k => { if (c.art) j.notArt.add(k); else j.notArt.delete(k); }); renderJobs(); schedule(0); });
-          chips.appendChild(b);
-        }
-        body.appendChild(chips);
-      }
-
-      const notes = [];
-      const nCol = colourGroups(d.colours).filter(c => c.art).length;
-      if (nCol > 1) notes.push(`ลายใช้ ${nCol} สีในไฟล์ ทุกสีกลายเป็นสีดำในฟิล์มเดียว`);
-      if (d.ignored) notes.push(`ไม่นำมาทำฟิล์ม ${d.ignored} ชิ้นที่อยู่นอกกรอบ (คำอธิบาย ขนาด ตัวอย่างสี)`);
-      if (d.specks) notes.push(`ตัดเศษชิ้นเล็ก (เล็กกว่า ${st.speckMm} mm) ออก ${d.specks} ชิ้น`);
-      if (d.nearWhite) notes.push(`พบวัตถุสีเกือบขาว ${d.nearWhite} ชิ้นในกรอบ ถือเป็นสีขาว (ไม่พิมพ์)`);
-      if (d.guides) notes.push(`ตัดเส้นกรอบ เส้นร่าง และเส้นประในแป้นออก ${d.guides} เส้น`);
-      if (notes.length) { const m = document.createElement('div'); m.className = 'meta'; m.textContent = notes.join(' · '); body.appendChild(m); }
-      const warns = j.warnings.slice();
-      if (d.designs.length && !d.framed) warns.unshift('ไม่พบกรอบแป้นในไฟล์ จึงแยกลายจากกลุ่มชิ้นงานแทน ตรวจภาพย่อว่ากรอบตรงกับลายจริง');
-      if (warns.length) { const ul = document.createElement('ul'); ul.className = 'warns'; warns.forEach(w => { const li = document.createElement('li'); li.textContent = w; ul.appendChild(li); }); body.appendChild(ul); }
-      { const b = document.createElement('button'); b.type = 'button'; b.className = 'editlink linkbtn'; b.textContent = 'เสร็จแล้ว ย่อการตั้งค่า';
-        b.addEventListener('click', () => { rec.open = false; renderJobs(); }); body.appendChild(b); }
-      box.appendChild(body);
-    }
-    updateCount();
-  }
-  const pageCache = new Map();
-  async function thumb(rec, el) {
-    if (!window.pdfjsLib || rec.error) return;
-    try {
-      let pc = pageCache.get(rec.id);
-      if (!pc) {
-        const doc = await pdfjsLib.getDocument({ data: rec.bytes.slice(0), isEvalSupported: false, verbosity: 0 }).promise;
-        const pg = await doc.getPage((rec.page || 0) + 1); const v1 = pg.getViewport({ scale: 1 });
-        const px = 240 * Math.min(2, window.devicePixelRatio || 1);
-        const vp = pg.getViewport({ scale: px / Math.max(v1.width, v1.height) });
-        const cv = document.createElement('canvas'); cv.width = vp.width; cv.height = vp.height;
-        await pg.render({ canvasContext: cv.getContext('2d'), viewport: vp }).promise;
-        pc = { cv, vp }; pageCache.set(rec.id, pc); doc.destroy();
-      }
-      const out = document.createElement('canvas'); out.width = pc.cv.width; out.height = pc.cv.height;
-      const g = out.getContext('2d'); g.drawImage(pc.cv, 0, 0);
-      const d = C.describe(rec.job, st); const k = out.width / 240;
-      const rect = (bb) => { const a = pc.vp.convertToViewportPoint(bb[0], bb[1]), b = pc.vp.convertToViewportPoint(bb[2], bb[3]);
-        return [Math.min(a[0], b[0]), Math.min(a[1], b[1]), Math.abs(b[0] - a[0]), Math.abs(b[1] - a[1])]; };
-      // wash out everything that is not inside a used frame
-      g.save(); g.beginPath(); g.rect(0, 0, out.width, out.height);
-      d.designs.filter(ds => !ds.off).forEach(ds => ds.boxes.forEach(f => { const [x, y, w, h] = rect(f); g.rect(x, y, w, h); }));
-      g.fillStyle = 'rgba(255,255,255,.72)'; g.fill('evenodd'); g.restore();
-      g.font = `600 ${12 * k}px sans-serif`;
-      d.designs.forEach(ds => {
-        const col = ds.off ? '#8a8f99' : '#4a3fb0';
-        g.strokeStyle = col; g.lineWidth = 1.5 * k; g.setLineDash(ds.off ? [4 * k, 3 * k] : []);
-        ds.boxes.forEach(f => { const [x, y, w, h] = rect(f); g.strokeRect(x, y, w, h); });
-        const [x, y] = rect(ds.boxes[0]);
-        g.setLineDash([]); g.fillStyle = col; g.fillRect(x, y, 16 * k, 15 * k);
-        g.fillStyle = '#fff'; g.fillText(String(ds.index + 1), x + 4 * k, y + 11.5 * k);
-      });
-      el.textContent = ''; el.appendChild(out);
-    } catch (e) {}
-  }
+  /* every design on a film comes from a job: files are added to a job (or its screen page) first */
+  function renderJobs() { syncKeep(); updateCount(); }
 
   /* ---------- build + preview ---------- */
   function schedule(ms) { clearTimeout(buildTimer); buildTimer = setTimeout(build, ms == null ? 300 : ms); }
@@ -816,7 +610,7 @@ details.settings summary { cursor: pointer; font-weight: 600; font-size: .9rem }
     const ready = jobs.filter(r => r.job && !r.off);
     let blocks = []; ready.forEach(r => { C.describe(r.job, st).designs.forEach(ds => dsFor(r.job, ds.index, r.name)); blocks = blocks.concat(C.blocksFor(r.job, st)); });
     const stats = $('stats'); stats.textContent = '';
-    if (!blocks.length) { lastPdf = null; $('save').disabled = true; showMsg('<div class="empty"><b>ยังไม่มีงานบนฟิล์ม</b><br>เลือกบล็อคจาก "บล็อครอทำฟิล์ม" ทางซ้าย หรือลากไฟล์ลูกค้า (.ai / .pdf / .zip) มาวาง แอปจะตัดส่วนที่ไม่ใช่ลาย ทำเป็นสีดำ และเรียงลงฟิล์ม ' + `${st.sheetW}×${st.sheetH}″` + ' ให้ที่นี่</div>'); return; }
+    if (!blocks.length) { lastPdf = null; $('save').disabled = true; showMsg('<div class="empty"><b>ยังไม่มีงานบนฟิล์ม</b><br>ติ๊กบล็อคใน "บล็อคที่รอลงแผ่นฟิล์ม" ทางซ้าย แอปจะตัดส่วนที่ไม่ใช่ลาย ทำเป็นสีดำ และเรียงลงฟิล์ม ' + `${st.sheetW}×${st.sheetH}″` + ' ให้ที่นี่</div>'); return; }
     let res;
     try { res = await C.render(blocks, st); } catch (e) { setStatus('สร้างฟิล์มไม่สำเร็จ: ' + e.message, true); return; }
     if (id !== buildId) return;
@@ -837,11 +631,6 @@ details.settings summary { cursor: pointer; font-weight: 600; font-size: .9rem }
   function historyOn() { return remote.ok && remote.history; }
   function syncKeep() {
     $('keepWrap').hidden = true; $('keepCopy').checked = true;   // always kept: screens are linked to the saved copy
-    // originals of job screens are already in the artwork library: the box only matters for files dropped here by hand
-    const handFiles = jobs.some(r => r.job && !r.screen && !r.sample && !r.off);
-    $('origWrap').hidden = !(historyOn() && remote.originals && handFiles);
-    $('origWrap').title = 'เก็บไฟล์ต้นฉบับที่ลากมาวางเองในหน้านี้ (ไฟล์ของบล็อคจากใบงานอยู่ในคลังลายแล้ว)';
-    $('keepOrig').disabled = !$('keepCopy').checked;
   }
   $('keepCopy').addEventListener('change', syncKeep);
   async function archive(filename, bytes, plan, blocks) {
@@ -867,10 +656,6 @@ details.settings summary { cursor: pointer; font-weight: 600; font-size: .9rem }
       if (!r.ok) throw new Error(saved.error || r.status);
       hist.items = null;   // refresh next time the tab opens
       const link = await linkScreens(saved.id, order);
-      if (remote.originals && $('keepOrig').checked) {
-        const o = await backupOriginals(saved.id, order);
-        return { text: 'เก็บสำเนาในประวัติแล้ว' + link.text + (o.text ? ' · ' + o.text : ''), bad: o.bad || link.bad };
-      }
       return { text: 'เก็บสำเนาในประวัติแล้ว' + link.text, bad: link.bad };
     } catch (e) { return { text: 'เก็บสำเนาในประวัติไม่สำเร็จ (' + e.message + ')', bad: true }; }
   }
@@ -894,28 +679,6 @@ details.settings summary { cursor: pointer; font-weight: 600; font-size: .9rem }
       setTimeout(() => { renderJobs(); schedule(0); loadQueue(); }, 0);
       return { text: ` · บันทึกลงใบงานแล้ว ${n}/${list.length} บล็อค`, bad: n < list.length };
     } catch (e) { return { text: ' · บันทึกลงใบงานไม่สำเร็จ (' + e.message + ')', bad: true }; }
-  }
-  // customer original files -> server (R2), stored once per distinct file content
-  async function sha256hex(u8) { const h = new Uint8Array(await crypto.subtle.digest('SHA-256', u8)); return [...h].map(x => x.toString(16).padStart(2, '0')).join(''); }
-  async function backupOriginals(filmId, order) {
-    const srcs = new Map();
-    order.forEach(({ it }) => { const rec = jobs.find(r => r.job === it.b.job); if (rec && rec.srcBytes && !rec.sample && !rec.screen && !srcs.has(rec.src)) srcs.set(rec.src, rec); });
-    const list = [...srcs.values()]; let ok = 0; const fails = [];
-    const head = 'เก็บสำเนาในประวัติแล้ว';
-    for (let i = 0; i < list.length; i++) {
-      const rec = list[i];
-      setStatus(`${head} · กำลังเก็บไฟล์ต้นฉบับ ${i + 1}/${list.length}… อย่าเพิ่งปิดหน้านี้`);
-      try {
-        const sha = await sha256hex(rec.srcBytes);
-        const r = await apiFetch('/api/originals?' + new URLSearchParams({ film: filmId, name: rec.src, sha }), { method: 'POST', headers: { 'content-type': 'application/octet-stream' }, body: new Blob([rec.srcBytes]) });
-        const d = await r.json().catch(() => ({}));
-        if (!r.ok) throw new Error(d.error || r.status);
-        ok++;
-      } catch (e) { fails.push(rec.src + ': ' + e.message); }
-    }
-    if (!list.length) return { text: '', bad: false };   // job screens: originals are already in the artwork library
-    const msg = `เก็บไฟล์ต้นฉบับ ${ok}/${list.length} ไฟล์`;
-    return { text: fails.length ? msg + ' · ไม่สำเร็จ: ' + fails.join(', ') : msg, bad: !!fails.length };
   }
   // one small picture per design, cut out of the finished film so it shows exactly what was saved
   async function makeThumbs(bytes, plan, order) {
@@ -1344,7 +1107,6 @@ details.settings summary { cursor: pointer; font-weight: 600; font-size: .9rem }
     await loadQueue(want ? want.split(',').filter(Boolean) : null);
     try { await Promise.race([document.fonts.load('10px "IBM Plex Sans Thai"', 'ก'), new Promise(r => setTimeout(r, 2500))]); } catch (e) {}
     build();
-    takeShared();
   })();
 
   /* ---------- screens from the job app that still need a film: one list, ticked = on the sheet ---------- */
@@ -1388,7 +1150,7 @@ details.settings summary { cursor: pointer; font-weight: 600; font-size: .9rem }
     const box = $('queueList'); box.textContent = '';
     const list = listed();
     updateCount();
-    if (!list.length) { const m = document.createElement('div'); m.className = 'qempty'; m.textContent = Q.data ? 'ไม่มีบล็อคจากใบงานที่รอทำฟิล์ม' : ''; box.appendChild(m); return; }
+    if (!list.length) { const m = document.createElement('div'); m.className = 'qempty'; m.textContent = Q.data ? 'ไม่มีบล็อคที่รอทำฟิล์ม · ลายใหม่ต้องเพิ่มในใบงานก่อน (สร้างใบงาน หรือเพิ่มไฟล์ลายที่หน้าบล็อค)' : ''; box.appendChild(m); return; }
     const byJob = new Map(); list.forEach(x => { if (!byJob.has(x.j.id)) byJob.set(x.j.id, []); byJob.get(x.j.id).push(x); });
     for (const xs of byJob.values()) {
       const g = document.createElement('div'); g.className = 'qjob';
@@ -1415,13 +1177,12 @@ details.settings summary { cursor: pointer; font-weight: 600; font-size: .9rem }
     }
   }
   function updateCount() {
-    const list = listed(), hs = hands().filter(r => !r.error);
-    const on = list.filter(x => Q.sel.has(x.s.id)).length + hs.filter(r => !r.off).length, all = list.length + hs.length;
+    const list = listed(), on = list.filter(x => Q.sel.has(x.s.id)).length, all = list.length;
     $('queueCount').textContent = all ? `บนแผ่น ${on}/${all}` : '';
     $('queueBar').hidden = !all;
   }
-  $('queueAll').addEventListener('click', () => { listed().forEach(x => { Q.sel.add(x.s.id); Q.err.delete(x.s.id); }); hands().forEach(r => { r.off = false; }); renderQueue(); renderJobs(); syncSheet(); schedule(0); });
-  $('queueNone').addEventListener('click', () => { Q.sel.clear(); hands().forEach(r => { r.off = true; }); renderQueue(); renderJobs(); syncSheet(); schedule(0); });
+  $('queueAll').addEventListener('click', () => { listed().forEach(x => { Q.sel.add(x.s.id); Q.err.delete(x.s.id); }); renderQueue(); renderJobs(); syncSheet(); schedule(0); });
+  $('queueNone').addEventListener('click', () => { Q.sel.clear(); renderQueue(); renderJobs(); syncSheet(); schedule(0); });
   // bring the sheet in line with the ticks: unticked screens come off, ticked ones are loaded and laid out
   let sheetSync = null;
   async function syncSheet() {
@@ -1485,27 +1246,6 @@ details.settings summary { cursor: pointer; font-weight: 600; font-size: .9rem }
     installEvt.prompt(); try { await installEvt.userChoice; } catch (e) {}
     installEvt = null; $('installBtn').hidden = true;
   });
-  // the service worker (sw.js) keeps shared files in a cache and opens ./?share=…
-  async function takeShared() {
-    const q = new URLSearchParams(location.search); if (!q.has('share')) return;
-    history.replaceState(null, '', location.pathname);
-    if (!window.caches) return;
-    try {
-      const cache = await caches.open('film-share'), keys = await cache.keys(), files = [];
-      for (const k of keys) {
-        const r = await cache.match(k); if (!r) continue;
-        const buf = new Uint8Array(await r.arrayBuffer());
-        let name = decodeURIComponent(r.headers.get('x-name') || '') || 'shared';
-        if (!/\.(ai|pdf|zip)$/i.test(name)) {   // some apps share without a usable extension: look at the bytes
-          const head = String.fromCharCode.apply(null, buf.subarray(0, 1024));
-          if (head.indexOf('%PDF') >= 0) name += '.pdf'; else if (head.slice(0, 2) === 'PK') name += '.zip';
-        }
-        files.push(new File([buf], name)); await cache.delete(k);
-      }
-      if (files.length) { setStatus(`รับไฟล์ที่แชร์มา ${files.length} ไฟล์`); await addFiles(files); }
-      else if (q.get('share') === 'none') setStatus('ไม่ได้รับไฟล์จากการแชร์ ลองแชร์ไฟล์ .ai / .pdf / .zip อีกครั้ง', true);
-    } catch (e) { setStatus('รับไฟล์ที่แชร์มาไม่สำเร็จ: ' + e.message, true); }
-  }
 })();
 </script>
 
