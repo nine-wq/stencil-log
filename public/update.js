@@ -2,7 +2,7 @@
 // the old version. When the app comes back to the screen it checks whether the page or its code changed on the
 // server, and shows a bar "มีเวอร์ชันใหม่ แตะเพื่ออัปเดต" (no automatic reload: unsaved work stays until the user taps).
 // The app version shown in ⚙ ตั้งค่า. Bump it with every change that is pushed, and tell Nine the new number.
-window.APP_VERSION = '1.9';
+window.APP_VERSION = '1.10';
 (function () {
   const files = location.pathname.startsWith('/film') ? ['/film/', '/film/js/film-core.js'] : ['/', '/app.js', '/style.css'];
   const hash = (s) => { let h = 5381; for (let i = 0; i < s.length; i++) h = (h * 33 + s.charCodeAt(i)) | 0; return h; };

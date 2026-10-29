@@ -419,6 +419,22 @@ async function api(req, env, url) {
   }
 
   // ---------- AI ตั้งชื่อลายจากรูปตัวอย่าง ----------
+  // stencil-label pictures: small PNGs kept in R2 under the sha256 of what they show (made in the browser once,
+  // then every later print loads them instead of downloading and processing the customer's original again)
+  if ((mm = p.match(/^\/labelpic\/([a-f0-9]{64})$/))) {
+    if (!env.FILES) return err(404, 'ไม่มีที่เก็บไฟล์');
+    const key = 'lab/' + mm[1] + '.png';
+    if (m === 'HEAD') { const o = await env.FILES.head(key); return new Response(null, { status: o ? 200 : 404 }); }
+    if (m === 'GET') { const o = await env.FILES.get(key); if (!o) return err(404, 'ไม่พบรูป');
+      return new Response(o.body, { headers: { 'content-type': 'image/png', 'cache-control': 'private, max-age=31536000, immutable' } }); }
+    if (m === 'PUT') {
+      const buf = await req.arrayBuffer();
+      if (!buf.byteLength || buf.byteLength > 3e6) return err(400, 'รูปไม่ถูกต้อง');
+      await env.FILES.put(key, buf, { httpMetadata: { contentType: 'image/png' } });
+      return json({ ok: true });
+    }
+  }
+
   if (m === 'POST' && p === '/ai/name') {
     if (!env.AI) return err(500, 'ยังไม่ได้เปิดใช้ Workers AI');
     if (!env.FILES) return err(500, 'ยังไม่ได้เปิดใช้ R2');

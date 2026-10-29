@@ -789,6 +789,7 @@ async function addArtworkFiles(customer, files) {
       say('กำลังอัปโหลด…');
       const same = db.artworks.find(a => a.sha === sha && a.file);
       const orig = same ? { id: same.file } : await uploadFile(file, 'original');
+      if (orig.id && !fileBytes.has(orig.id)) fileBytes.set(orig.id, bytes);   // label pictures right after the job is saved
       for (const it of items) { if (it.blob) { try { it.preview = (await uploadFile(it.blob, 'preview', 'preview.jpg')).id; } catch (e) {} } delete it.blob; }
       const r = await api('POST', '/artworks', { customer, items: items.map(it => ({ ...it, name: '', file: orig.id, fileName: file.name, sha })) });
       db.artworks.unshift(...r.items); made.push(...r.items);
@@ -889,6 +890,7 @@ function getPreview(s, a, customer) {
       if (!it) throw new Error('ลายใหญ่เกินแผ่นฟิล์ม');
       const lib = window.pdfjsLib, doc = await lib.getDocument({ data: res.bytes, isEvalSupported: false, verbosity: 0 }).promise;
       out.film = { page: await doc.getPage(1), box: [it.x, it.y, it.x + it.W, it.y + it.H] };
+      if (s.id) labelFromFilm(s, out.film.page, out.film.box);   // the stencil label picture, for free
       // the original, same area (not for a block turned sideways on the sheet)
       if (!it.rot) {
         try {
@@ -1341,11 +1343,62 @@ async function addCoat(s, named) {
 }
 /* ---------- stencil labels: 200 × 22 mm, stacked with no gap on A4 sticker paper (13 per sheet), cut along the lines ---------- */
 // the label picture = the design as it goes on the film (black, compensation applied), without the crosses or the
-// text under it; cropped to the ink and turned sideways when it is taller than wide, so it fills the 22 mm strip
-function labelPic(s) {
-  const a = s.artworkId && artOf(s.artworkId);
-  const fallback = s.preview ? location.origin + fileUrl(s.preview, true) : '';
-  if (!a || !a.filmable || !a.file) return Promise.resolve(fallback);
+// text under it; cropped to the ink and turned sideways when it is taller than wide, so it fills the 22 mm strip.
+// Made once and kept in R2 (/api/labelpic/<sha256 of what it shows>): printing again, on any device, just loads it.
+// It is made ahead whenever this browser already has the film at hand: after saving a new job (the uploaded files
+// are still in memory) and when a block's viewer has drawn its film.
+async function labelKey(s) {
+  const a = s.artworkId && artOf(s.artworkId); if (!a || !a.filmable || !a.file) return null;
+  const p = prepOf(s), f = filmSetCache || FILM_DEF;
+  const what = ['lab1', a.file, a.page || 0, a.design, a.box, +s.target || 0, p.mode, +p.manualUm || 0, [...(p.notArt || [])].sort(), f.factor, f.nearWhite, f.speckMm];
+  return sha256hex(new TextEncoder().encode(JSON.stringify(what)));
+}
+const labelKnown = new Map();   // key -> true (stored on the server) | Promise (being made)
+// draw the film page's block area, keep only black (faint crosses and text drop out), crop to the ink, turn sideways
+async function pagePic(pg, box) {
+  const v1 = pg.getViewport({ scale: 1 });
+  const p1 = v1.convertToViewportPoint(box[0], box[1]), p2 = v1.convertToViewportPoint(box[2], box[3]);
+  const bx = Math.min(p1[0], p2[0]), by = Math.min(p1[1], p2[1]), bw = Math.abs(p2[0] - p1[0]), bh = Math.abs(p2[1] - p1[1]);
+  const k = 900 / Math.max(bw, bh), c = document.createElement('canvas');
+  c.width = Math.ceil(bw * k); c.height = Math.ceil(bh * k);
+  const g = c.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, c.width, c.height);
+  await pg.render({ canvasContext: g, viewport: pg.getViewport({ scale: k }), transform: [1, 0, 0, 1, -bx * k, -by * k] }).promise;
+  const im = g.getImageData(0, 0, c.width, c.height), d = im.data; let x0 = c.width, y0 = c.height, x1 = -1, y1 = -1;
+  for (let y = 0; y < c.height; y++) for (let x = 0; x < c.width; x++) {
+    const o = (y * c.width + x) * 4, ink = d[o] < 128;
+    d[o] = d[o + 1] = d[o + 2] = ink ? 0 : 255; d[o + 3] = 255;
+    if (ink) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
+  }
+  if (x1 < 0) return null;
+  g.putImageData(im, 0, 0);
+  const pad = 6, w = x1 - x0 + 1 + 2 * pad, h = y1 - y0 + 1 + 2 * pad, turn = h > w;
+  const o = document.createElement('canvas'); o.width = turn ? h : w; o.height = turn ? w : h;
+  const og = o.getContext('2d'); og.fillStyle = '#fff'; og.fillRect(0, 0, o.width, o.height);
+  if (turn) { og.translate(0, o.height); og.rotate(-Math.PI / 2); }
+  og.drawImage(c, x0 - pad, y0 - pad, w, h, 0, 0, w, h);
+  return new Promise(r => o.toBlob(r, 'image/png'));
+}
+const labelUrl = key => location.origin + `/api/labelpic/${key}?t=${encodeURIComponent(token)}`;
+async function storeLabelPic(key, blob) {
+  try { const r = await fetch('/api/labelpic/' + key, { method: 'PUT', headers: { Authorization: 'Bearer ' + token, 'content-type': 'image/png' }, body: blob }); if (r.ok) labelKnown.set(key, true); } catch (e) {}
+}
+async function labelStored(key) {
+  if (labelKnown.get(key) === true) return true;
+  try { const r = await fetch('/api/labelpic/' + key, { method: 'HEAD', headers: { Authorization: 'Bearer ' + token } }); if (r.ok) { labelKnown.set(key, true); return true; } } catch (e) {}
+  return false;
+}
+// a film page is already drawn (block viewer): keep its label picture if the server has none yet
+async function labelFromFilm(s, pg, box) {
+  try {
+    const key = await labelKey(s); if (!key || labelKnown.has(key)) return;
+    labelKnown.set(key, 'busy');
+    if (await labelStored(key)) return;
+    const blob = await pagePic(pg, box); if (blob) await storeLabelPic(key, blob); else labelKnown.delete(key);
+  } catch (e) {}
+}
+// make the picture from the customer's original (slow: download + analyse + film) and keep it
+function makeLabelPic(s, key) {
+  const a = artOf(s.artworkId);
   return (fpBusy = fpBusy.then(async () => {   // one film job at a time (shares the analysed file with the viewers)
     let doc = null;
     try {
@@ -1355,40 +1408,43 @@ function labelPic(s) {
       if (!jobCache.has(jk)) jobCache.set(jk, await C.analyze(bytes, a.customerRef || 'artwork', a.page || 0));
       const job = jobCache.get(jk), p = prepOf(s);
       job.notArt = new Set(p.notArt); job.excluded = new Set();
-      const pick = pickDesign(C, job, a, st); if (!pick) return fallback;
+      const pick = pickDesign(C, job, a, st); if (!pick) return null;
       C.describe(job, st).designs.forEach(d => { if (d.index !== pick.index) job.excluded.add(d.index); });
       job.dset = { [pick.index]: { thick: +s.target || 0, thickSet: true, mode: p.mode, manualUm: +p.manualUm || 0 } };
       const res = await C.render(C.blocksFor(job, st), st), it = res.plan.sheets[0] && res.plan.sheets[0][0];
-      if (!it) return fallback;
+      if (!it) return null;
       doc = await window.pdfjsLib.getDocument({ data: res.bytes, isEvalSupported: false, verbosity: 0 }).promise;
-      const pg = await doc.getPage(1), v1 = pg.getViewport({ scale: 1 });
-      const p1 = v1.convertToViewportPoint(it.x, it.y), p2 = v1.convertToViewportPoint(it.x + it.W, it.y + it.H);
-      const bx = Math.min(p1[0], p2[0]), by = Math.min(p1[1], p2[1]), bw = Math.abs(p2[0] - p1[0]), bh = Math.abs(p2[1] - p1[1]);
-      const k = 900 / Math.max(bw, bh), c = document.createElement('canvas');
-      c.width = Math.ceil(bw * k); c.height = Math.ceil(bh * k);
-      const g = c.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, c.width, c.height);
-      await pg.render({ canvasContext: g, viewport: pg.getViewport({ scale: k }), transform: [1, 0, 0, 1, -bx * k, -by * k] }).promise;
-      // crop to the ink
-      const d = g.getImageData(0, 0, c.width, c.height).data; let x0 = c.width, y0 = c.height, x1 = -1, y1 = -1;
-      for (let y = 0; y < c.height; y++) for (let x = 0; x < c.width; x++) if (d[(y * c.width + x) * 4] < 160) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
-      if (x1 < 0) return fallback;
-      const pad = 6, w = x1 - x0 + 1 + 2 * pad, h = y1 - y0 + 1 + 2 * pad, turn = h > w;
-      const o = document.createElement('canvas'); o.width = turn ? h : w; o.height = turn ? w : h;
-      const og = o.getContext('2d'); og.fillStyle = '#fff'; og.fillRect(0, 0, o.width, o.height);
-      if (turn) { og.translate(0, o.height); og.rotate(-Math.PI / 2); }
-      og.drawImage(c, x0 - pad, y0 - pad, w, h, 0, 0, w, h);
-      return o.toDataURL('image/png');
-    } catch (e) { return fallback; }
+      const blob = await pagePic(await doc.getPage(1), [it.x, it.y, it.x + it.W, it.y + it.H]);
+      if (blob && key) storeLabelPic(key, blob);
+      return blob;
+    } catch (e) { return null; }
     finally { if (doc) doc.destroy(); }
   }));
+}
+// the picture for one label: the stored one, or made now; the artwork's preview when it cannot be filmed
+async function labelPic(s) {
+  const fallback = s.preview ? location.origin + fileUrl(s.preview, true) : '';
+  const key = await labelKey(s).catch(() => null);
+  if (!key) return fallback;
+  if (await labelStored(key)) return labelUrl(key);
+  const blob = await makeLabelPic(s, key);
+  if (!blob) return fallback;
+  return new Promise(r => { const fr = new FileReader(); fr.onload = () => r(fr.result); fr.onerror = () => r(fallback); fr.readAsDataURL(blob); });
+}
+// after a new job is saved: make its label pictures while the uploaded files are still in this browser
+function labelsAhead(j) {
+  j.screens.forEach(async s => {
+    const a = s.artworkId && artOf(s.artworkId); if (!a || !a.file || !fileBytes.has(a.file)) return;
+    const key = await labelKey(s).catch(() => null); if (!key || labelKnown.has(key)) return;
+    labelKnown.set(key, 'busy'); if (!(await labelStored(key))) await makeLabelPic(s, key);
+  });
 }
 async function printLabels(j, screens) {
   // the window opens at once (pop-up blockers allow it only straight from the tap), the pictures are made meanwhile
   const w = window.open('', '_blank');
   if (!w) { toast('เบราว์เซอร์บล็อกหน้าต่างใหม่ อนุญาตป๊อปอัปให้เว็บนี้แล้วกดอีกครั้ง'); return; }
   w.document.write(`<!doctype html><meta charset="utf-8"><title>ลาเบล ${esc(j.no)}</title><p style="font:16px sans-serif;padding:24px">กำลังเตรียมลาเบล ${screens.length} ชิ้น…</p>`);
-  const pics = [];
-  for (const s of screens) pics.push(await labelPic(s));
+  const pics = await Promise.all(screens.map(s => labelPic(s)));
   const due = j.due ? (() => { const d = new Date(j.due + 'T00:00:00'); return `${pad2(d.getDate())}/${pad2(d.getMonth() + 1)}/${d.getFullYear()}`; })() : '-';
   const one = (s, n) => {
     const cell = (k, v, cls = '') => `<div class="c ${cls}"><span class="k">${k}</span><span class="v">${v}</span></div>`;
@@ -1561,7 +1617,7 @@ document.addEventListener('click', async e => {
       ui.busy = true; render();
       try {
         const r = await api('POST', '/jobs', { customer: d.customer.trim(), date: d.date, due: d.due, note: d.note.trim(), screens: d.screens.map(({ key, ...s }) => s) });
-        ui.busy = false; await loadData(); toast(`สร้าง ${r.no} แล้ว`); showNewJob(r.id);
+        ui.busy = false; await loadData(); toast(`สร้าง ${r.no} แล้ว`); showNewJob(r.id); { const nj = db.jobs.find(x => x.id === r.id); if (nj) labelsAhead(nj); }
       } catch (x) { ui.busy = false; render(); toast('สร้างใบงานไม่สำเร็จ: ' + x.message); }
       break;
     }
