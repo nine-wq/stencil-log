@@ -829,18 +829,18 @@ function screenFromArt(a) { return { ...blankScreen(), artworkId: a.id, design: 
 const prepOf = s => ({ mode: 'auto', manualUm: 200, notArt: [], ...(s.filmPrep || {}) });
 const pkOf = (t, s) => s.id || s.key || t;
 const filmFactor = () => { const f = ui.filmSet || filmSetCache || FILM_DEF; return f.factor != null ? f.factor : 0.5; };
-function filmGroup(t, s, a, customer) {
+function filmGroup(t, s, a, customer, locked) {
   const pk = pkOf(t, s), p = prepOf(s), pv = previewNow(s, a, customer);
   const auto = Math.round((+s.target || 0) * filmFactor());
   const cols = pv && pv.colours;
   return `<fieldset class="grp"><legend>ฟิล์ม</legend>
     <div class="grid2">
-      <div class="field"><label for="fp-m-${pk}">ชดเชยขอบ</label><select id="fp-m-${pk}" data-fp="${t}" data-k="mode">${[['auto', `อัตโนมัติ (ความหนา × ${filmFactor()})`], ['manual', 'ระบุค่าเอง'], ['none', 'ไม่ชดเชย']].map(([v, l]) => `<option value="${v}" ${p.mode === v ? 'selected' : ''}>${l}</option>`).join('')}</select></div>
-      <div class="field"><label for="fp-u-${pk}">ค่าชดเชย (ต่อด้าน)</label><div class="unit"><input id="fp-u-${pk}" type="number" min="0" max="2000" step="10" data-fp="${t}" data-k="manualUm" value="${p.mode === 'manual' ? esc(p.manualUm) : p.mode === 'none' ? 0 : auto}" ${p.mode === 'manual' ? '' : 'disabled'}><span>µm</span></div></div>
+      <div class="field"><label for="fp-m-${pk}">ชดเชยขอบ</label><select id="fp-m-${pk}" data-fp="${t}" data-k="mode" ${locked ? 'disabled' : ''}>${[['auto', `อัตโนมัติ (ความหนา × ${filmFactor()})`], ['manual', 'ระบุค่าเอง'], ['none', 'ไม่ชดเชย']].map(([v, l]) => `<option value="${v}" ${p.mode === v ? 'selected' : ''}>${l}</option>`).join('')}</select></div>
+      <div class="field"><label for="fp-u-${pk}">ค่าชดเชย (ต่อด้าน)</label><div class="unit"><input id="fp-u-${pk}" type="number" min="0" max="2000" step="10" data-fp="${t}" data-k="manualUm" ${locked ? 'disabled' : ''} value="${p.mode === 'manual' ? esc(p.manualUm) : p.mode === 'none' ? 0 : auto}" ${p.mode === 'manual' ? '' : 'disabled'}><span>µm</span></div></div>
     </div>
-    <div><span class="label">สีในลาย</span> <span class="muted small">ทุกสีเป็นสีดำในฟิล์ม แตะสีที่ไม่ใช่ลายเพื่อตัดออก</span>
+    <div><span class="label">สีในลาย</span> <span class="muted small">${locked ? 'ทุกสีเป็นสีดำในฟิล์ม · ล็อคอยู่' : 'ทุกสีเป็นสีดำในฟิล์ม แตะสีที่ไม่ใช่ลายเพื่อตัดออก'}</span>
       <div class="fpcols">${cols ? cols.map(c => { const on = !p.notArt.includes(c.key);
-        return `<button class="fpcol ${on ? '' : 'off'}" data-a="fpcol" data-v="${t}" data-k="${esc(c.key)}" aria-pressed="${on}"><i style="background:${esc(c.css)}"></i>${esc(c.label)}</button>`; }).join('')
+        return `<button class="fpcol ${on ? '' : 'off'}" data-a="fpcol" data-v="${t}" data-k="${esc(c.key)}" aria-pressed="${on}" ${locked ? 'disabled' : ''}><i style="background:${esc(c.css)}"></i>${esc(c.label)}</button>`; }).join('')
         : `<span class="muted small">${pv && pv.err ? esc(pv.err) : 'กำลังอ่านสีจากไฟล์…'}</span>`}</div></div>
     ${pv && pv.notes ? `<div class="muted small">${esc(pv.notes)}</div>` : ''}
   </fieldset>`;
@@ -1110,6 +1110,15 @@ function filmSettingsCard() {
   </div>`;
 }
 
+// work already done on a job (coat rounds, film, QC, photos): deleting it then needs the job number typed in
+const jobStarted = j => j.screens.some(s => s.coats.length || s.film || s.photos.length || s.status !== 'ordered');
+function jobStartedText(j) {
+  const ss = j.screens, n = f => ss.filter(f).length, out = [];
+  if (n(s => s.coats.length)) out.push(`ขึ้นกาวแล้ว ${n(s => s.coats.length)} บล็อค`);
+  if (n(s => s.film)) out.push(`ทำฟิล์มแล้ว ${n(s => s.film)} บล็อค`);
+  if (n(isDone)) out.push(`ตรวจผ่านแล้ว ${n(isDone)} บล็อค`);
+  return out.join(' · ') || 'มีการบันทึกงานแล้ว';
+}
 function jobView() {
   const { j } = find(ui.jobId); if (!j) { ui.view = 'list'; return body(); }
   const waitFilm = j.screens.filter(needsFilm);
@@ -1130,7 +1139,9 @@ function jobView() {
   ${waitFilm.length ? `<div class="card spread"><span><b>ยังไม่ทำฟิล์ม ${waitFilm.length} บล็อค</b><br><span class="muted small">เปิดหน้าทำฟิล์มพร้อมบล็อคเหล่านี้ เรียงลงแผ่นได้ร่วมกับงานอื่น</span></span>
     <a class="btn primary" href="/film/?add=${waitFilm.map(s => s.id).join(',')}">ทำฟิล์ม</a></div>` : ''}
   <div class="jobcard">${j.screens.slice().sort(bySid).map(s => jobBlockRow(j, s)).join('')}</div>
-  <div class="row"><button class="btn bad" data-a="deljob" data-v="${j.id}">${ui.arm === 'deljob' ? 'กดอีกครั้งเพื่อลบใบงานนี้' : 'ลบใบงาน'}</button></div>`;
+  ${ui.arm === 'deljob' && jobStarted(j) ? `<div class="card delbox"><b>ใบงานนี้เริ่มงานไปแล้ว</b> <span class="muted small">(${esc(jobStartedText(j))}) ลบแล้วข้อมูลขึ้นกาว รูปตรวจ และการเชื่อมกับฟิล์มจะหายทั้งหมด</span>
+    <div class="row"><input id="delconf" autocomplete="off" placeholder="พิมพ์ ${esc(j.no)} เพื่อยืนยัน" aria-label="พิมพ์เลขใบงานเพื่อยืนยันการลบ"><button class="btn bad" data-a="deljob" data-v="${j.id}">ลบใบงาน</button></div></div>`
+  : `<div class="row"><button class="btn bad" data-a="deljob" data-v="${j.id}">${ui.arm === 'deljob' ? 'กดอีกครั้งเพื่อลบใบงานนี้' : 'ลบใบงาน'}</button></div>`}`;
 }
 
 /* --- screen detail --- */
@@ -1141,6 +1152,9 @@ function screenView() {
   const canQC = s.status === 'qc';
   const nextSide = s.coats.length && s.coats[s.coats.length - 1].side === 'ด้านพิมพ์' ? 'ด้านปาด' : 'ด้านพิมพ์';
   const m = db.master, a = s.artworkId ? artOf(s.artworkId) : null, edit = canCoat;
+  // locks: a finished block is read-only; once a film is made, what the film was made from (thickness,
+  // compensation, colours, artwork file) is locked until someone unlocks it on purpose (the film is then dropped)
+  const done = isDone(s), filmLock = !!s.film || done;
   const filmTag = waitingFile(s) ? '<span class="chip fl-wait">รอไฟล์จากลูกค้า</span>' : needsFilm(s) ? '<span class="chip fl-need">ยังไม่ทำฟิล์ม</span>' : s.film ? '<span class="chip fl-ok">ทำฟิล์มแล้ว</span>' : '';
   let h = `<button class="btn ghost back" data-a="back">← กลับ</button>
   <div class="spread shead"><div><h2>${esc(s.design || '(ยังไม่ตั้งชื่อ)')}</h2>
@@ -1161,23 +1175,26 @@ function screenView() {
     <div class="srfields">
       <fieldset class="grp"><legend>ลาย</legend>
         <div class="stack">
-          ${db.features.ai ? nameField('s', s, 'e-name', 'data-f="design"') : `<div class="field"><label for="e-name">ชื่อลาย</label><input id="e-name" data-f="design" value="${esc(s.design)}"></div>`}
-          <div class="field"><label for="e-cref">Customer REF</label><input id="e-cref" data-f="customerRef" value="${esc(s.customerRef || '')}"></div>
+          ${done ? `<div class="field"><span class="flabel">ชื่อลาย</span><div class="ro-v">${esc(s.design || '-')}</div></div>`
+            : db.features.ai ? nameField('s', s, 'e-name', 'data-f="design"') : `<div class="field"><label for="e-name">ชื่อลาย</label><input id="e-name" data-f="design" value="${esc(s.design)}"></div>`}
+          <div class="field">${done ? `<span class="flabel">Customer REF</span><div class="ro-v">${esc(s.customerRef || '-')}</div>` : `<label for="e-cref">Customer REF</label><input id="e-cref" data-f="customerRef" value="${esc(s.customerRef || '')}">`}</div>
         </div>
-        <div class="field"><span class="flabel">ไซส์</span>${sizeChips('s', s, true)}</div>
+        <div class="field"><span class="flabel">ไซส์</span>${sizeChips('s', s, !done)}</div>
         ${db.features.files ? `<div class="field"><span class="flabel">ไฟล์ต้นฉบับจากลูกค้า</span>
           <div class="fileline"><div class="flist">${fileIds.map(id => fileChip(id, false)).join('') || '<span class="muted small">ยังไม่มีไฟล์</span>'}</div>
-          ${s.artworkId && ui.replaceArt !== s.id ? '<button class="btn sm" data-a="replaceart">เปลี่ยนไฟล์ลาย</button>' : ''}</div></div>` : ''}
+          ${s.artworkId && ui.replaceArt !== s.id && !filmLock ? '<button class="btn sm" data-a="replaceart">เปลี่ยนไฟล์ลาย</button>' : ''}</div></div>` : ''}
         ${a && !a.filmable ? '<span class="fstate">ไฟล์นี้ทำฟิล์มในแอปไม่ได้</span>' : ''}
       </fieldset>
       <fieldset class="grp"><legend>สเปคบล็อค</legend>
-        ${frameSrcPicker('s', s)}
+        ${edit ? frameSrcPicker('s', s) : `<div class="ro-v">${s.frameSource === 'customer' ? '<span class="fsrc">บล็อคเดิมลูกค้า</span>' : '<span class="fnew">บล็อคใหม่</span>'}</div>`}
         <div class="grid4">
           ${sel('mesh', m.mesh, 'เบอร์ผ้าสกรีน')}${sel('frame', m.frames, 'ขนาดเฟรม')}${sel('emulsion', m.emulsions, 'ชนิดกาว')}
-          <div class="field"><label for="e-target">ความหนาที่ต้องการ</label>${edit ? `<div class="unit"><input id="e-target" type="number" inputmode="numeric" data-f="target" value="${esc(s.target)}"><span>µm</span></div>` : `<div class="ro-v num">${esc(s.target)} µm</div>`}<span class="muted small">±${T} µm</span></div>
+          <div class="field"><label for="e-target">ความหนาที่ต้องการ</label>${edit && !filmLock ? `<div class="unit"><input id="e-target" type="number" inputmode="numeric" data-f="target" value="${esc(s.target)}"><span>µm</span></div>` : `<div class="ro-v num">${s.film && !done ? '🔒 ' : ''}${esc(s.target)} µm</div>`}<span class="muted small">±${T} µm</span></div>
         </div>
       </fieldset>
-      ${a && a.filmable ? filmGroup('s', s, a, j.customer) : ''}
+      ${s.film && !done ? `<div class="lockbar"><span>🔒 <b>ทำฟิล์มแล้ว</b> ${esc(s.film.name.replace(/\.pdf$/i, ''))} · ความหนา ชดเชยขอบ สีในลาย และไฟล์ลาย ถูกล็อคไว้ให้ตรงกับฟิล์ม</span>
+        <button class="btn sm ${ui.arm === 'unlockfilm' ? 'bad' : 'ghost'}" data-a="unlockfilm">${ui.arm === 'unlockfilm' ? 'ยืนยัน: ฟิล์มนี้จะไม่ใช้แล้ว ต้องทำฟิล์มใหม่' : 'ปลดล็อคเพื่อแก้ไข'}</button></div>` : ''}
+      ${a && a.filmable ? filmGroup('s', s, a, j.customer, filmLock) : ''}
       ${f || (a && a.filmable) ? `<div class="filmline small">${f ? `<span><span class="fstate ok">ทำฟิล์มแล้ว</span> <b>${esc(f.name.replace(/\.pdf$/i, ''))}</b> · ${fmtT(f.at)} โดย ${esc(f.by)}${f.compUm != null ? ` · ชดเชย <span class="num">${f.compUm} µm</span>` : ''}</span>
           <span class="row"><a class="btn sm" href="/api/films/${f.id}?dl=1&t=${t}" download="${esc(f.name || 'film.pdf')}">ดาวน์โหลด</a><a class="btn sm ghost" href="/film/?view=${f.id}">ดูฟิล์ม</a>${a && a.filmable ? `<a class="btn sm ghost" href="/film/?add=${s.id}">ลงแผ่นใหม่</a>` : ''}</span>`
         : '<span class="muted">ยังไม่ได้ลงแผ่นฟิล์ม · รอรวมลงแผ่นที่เมนู ฟิล์ม → + สร้างฟิล์ม</span>'}</div>` : ''}
@@ -1553,7 +1570,7 @@ try { history.scrollRestoration = 'manual'; if (!history.state || !history.state
 document.addEventListener('click', async e => {
   const el = e.target.closest('[data-a]'); if (!el || el.disabled) return;
   const a = el.dataset.a, v = el.dataset.v;
-  if (a !== 'deljob' && a !== 'delfile' && a !== 'rmart' && a !== 'artdel') ui.arm = null;
+  if (a !== 'deljob' && a !== 'unlockfilm' && a !== 'delfile' && a !== 'rmart' && a !== 'artdel') ui.arm = null;
   const cur = () => find(ui.jobId, ui.screenId);
   switch (a) {
     case 'pick': ui.pickUser = v; ui.pin = ''; ui.pinErr = ''; render(); break;
@@ -1653,10 +1670,23 @@ document.addEventListener('click', async e => {
       } catch (x) { ui.busy = false; render(); toast('สร้างใบงานไม่สำเร็จ: ' + x.message); }
       break;
     }
-    case 'deljob':
-      if (ui.arm !== 'deljob') { ui.arm = 'deljob'; render(); break; }
+    case 'unlockfilm': {
+      if (ui.arm !== 'unlockfilm') { ui.arm = 'unlockfilm'; render(); break; }
+      ui.arm = null;
+      const { s } = cur(); if (!s || !s.film) break;
+      const was = s.film.name.replace(/\.pdf$/i, ''); delete s.film;
+      logEv(s, `ปลดล็อคเพื่อแก้ไข · ฟิล์ม ${was} ไม่ใช้แล้ว ต้องทำฟิล์มใหม่`);
+      if (await saveScreen(s)) toast('ปลดล็อคแล้ว บล็อคนี้กลับไปรอทำฟิล์ม');
+      render(); break;
+    }
+    case 'deljob': {
+      const { j } = find(v); if (!j) break;
+      if (ui.arm !== 'deljob') { ui.arm = 'deljob'; render(); if (jobStarted(j)) { const i = $('#delconf'); if (i) i.focus(); } break; }
+      // a job with work already done needs its number typed in
+      if (jobStarted(j)) { const typed = (($('#delconf') || {}).value || '').trim().toUpperCase(); if (typed !== String(j.no).toUpperCase()) { ui.arm = 'deljob'; toast('พิมพ์เลขใบงาน ' + j.no + ' ให้ตรงก่อนลบ'); break; } }
       try { await api('DELETE', '/jobs/' + v); await loadData(); toast('ลบใบงานแล้ว'); go('list'); } catch (x) { toast(x.message); }
       break;
+    }
     case 'install': {
       if (!installEvt) break;
       const ev = installEvt; installEvt = null; el.hidden = true;

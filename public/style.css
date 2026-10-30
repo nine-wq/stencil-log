@@ -517,3 +517,12 @@ html.big{font-size:18px}
 html.big body{font-size:17px}
 body:has(.nextbar) .toast{bottom:calc(86px + env(safe-area-inset-bottom,0px))}
 #qccard{scroll-margin-top:72px}
+
+/* film made: the film-related fields are locked */
+.lockbar{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px 12px;padding:10px 12px;border-radius:8px;background:var(--ok-soft);border:1px solid color-mix(in srgb,var(--ok) 35%,transparent);font-size:.85rem}
+.fpcol:disabled{cursor:default;opacity:.75}
+/* deleting a job with work done: type the job number */
+.delbox{display:flex;flex-direction:column;gap:10px;border-color:var(--bad)}
+.delbox .row{display:flex;gap:8px;flex-wrap:wrap}
+.delbox input{flex:1;min-width:180px}
+.grp select:disabled,.grp input:disabled{opacity:.6;cursor:default}
