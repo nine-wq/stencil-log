@@ -2,7 +2,7 @@
 // the old version. When the app comes back to the screen it checks whether the page or its code changed on the
 // server, and shows a bar "มีเวอร์ชันใหม่ แตะเพื่ออัปเดต" (no automatic reload: unsaved work stays until the user taps).
 // The app version shown in ⚙ ตั้งค่า. Bump it with every change that is pushed, and tell Nine the new number.
-window.APP_VERSION = '1.11';
+window.APP_VERSION = '1.12';
 (function () {
   const files = location.pathname.startsWith('/film') ? ['/film/', '/film/js/film-core.js'] : ['/', '/app.js', '/style.css'];
   const hash = (s) => { let h = 5381; for (let i = 0; i < s.length; i++) h = (h * 33 + s.charCodeAt(i)) | 0; return h; };
@@ -30,6 +30,19 @@ window.APP_VERSION = '1.11';
     b.addEventListener('click', () => location.reload());
     document.body.appendChild(b);
   }
+  // no signal: a bar at the top, so nobody thinks a tap was saved when it could not reach the server
+  function net() {
+    let bar = document.getElementById('offbar');
+    if (navigator.onLine) { if (bar) bar.remove(); return; }
+    if (bar) return;
+    bar = document.createElement('div'); bar.id = 'offbar'; bar.setAttribute('role', 'status');
+    bar.textContent = 'ไม่มีสัญญาณอินเทอร์เน็ต · สิ่งที่กดตอนนี้ยังไม่ถูกบันทึก รอสัญญาณกลับมาแล้วทำอีกครั้ง';
+    bar.setAttribute('style', 'position:fixed;left:0;right:0;top:env(safe-area-inset-top,0px);z-index:9998;background:#B54708;color:#fff;font:600 14px system-ui,sans-serif;padding:8px 14px;text-align:center;box-shadow:0 2px 10px rgba(0,0,0,.3)');
+    document.body.appendChild(bar);
+  }
+  window.addEventListener('online', () => { net(); });
+  window.addEventListener('offline', net);
+  window.addEventListener('load', net);
   // the page as loaded = the base; then check when the app comes back to the screen
   window.addEventListener('load', () => setTimeout(() => check(true), 1500));
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') check(false); });

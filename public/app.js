@@ -340,6 +340,15 @@ function showNewJob(id) {
 let installEvt = null;
 window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); installEvt = e; document.querySelectorAll('[data-a=install]').forEach(b => { b.hidden = false; }); });
 window.addEventListener('appinstalled', () => { installEvt = null; document.querySelectorAll('[data-a=install]').forEach(b => { b.hidden = true; }); });
+// date boxes: the browser shows type=date in its own language order (10/30/2026 on an English Chrome), so the
+// box shows day/month/year text on top and the calendar opens on tap (showPicker)
+const dmy = v => { const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(v || ''); return m ? `${m[3]}/${m[2]}/${m[1]}` : ''; };
+function dateInput(id, value, attrs) {
+  return `<span class="dfield"><input id="${id}" type="date" value="${esc(value || '')}" ${attrs}><span class="dshow${value ? '' : ' empty'}" aria-hidden="true">${value ? dmy(value) : 'วว/ดด/ปปปป'}</span></span>`;
+}
+document.addEventListener('click', e => { const i = e.target.closest('.dfield input'); if (i && i.showPicker) { try { i.showPicker(); } catch (x) {} } });
+document.addEventListener('input', e => { const i = e.target.closest('.dfield input'); if (!i) return; const sh = i.parentNode.querySelector('.dshow'); sh.textContent = i.value ? dmy(i.value) : 'วว/ดด/ปปปป'; sh.classList.toggle('empty', !i.value); });
+const bigText = () => document.documentElement.classList.contains('big');
 function homeView() {
   return `<div class="toprow"><div class="search"><input id="q" type="search" data-search="1" value="${esc(ui.q || '')}" placeholder="ค้นหา ลูกค้า เลขใบงาน ชื่อลาย Customer REF เบอร์ผ้า ชื่อคน…" autocomplete="off" enterkeyhint="search">
     <button class="btn sm ghost" data-a="clearq" aria-label="ล้างคำค้น" ${ui.q ? '' : 'hidden'}>✕</button></div>
@@ -516,8 +525,8 @@ function newJobView() {
   <div class="card" style="display:flex;flex-direction:column;gap:12px">
     <div class="grid2">
       <div class="field"><label for="f-cust">ลูกค้า</label><input id="f-cust" list="custs" value="${esc(d.customer)}" data-d="customer" placeholder="พิมพ์หรือเลือก" autocomplete="off"><datalist id="custs">${allCustomers().map(c => `<option value="${esc(c)}">`).join('')}</datalist></div>
-      <div class="field"><label for="f-date">วันที่รับงาน</label><input id="f-date" type="date" value="${esc(d.date)}" data-d="date"></div>
-      <div class="field"><label for="f-due">กำหนดส่ง</label><input id="f-due" type="date" value="${esc(d.due)}" data-d="due"></div>
+      <div class="field"><label for="f-date">วันที่รับงาน</label>${dateInput('f-date', d.date, 'data-d="date"')}</div>
+      <div class="field"><label for="f-due">กำหนดส่ง</label>${dateInput('f-due', d.due, 'data-d="due"')}</div>
     </div>
     <div class="field"><label for="f-note">รายละเอียด / ข้อควรระวัง</label><textarea id="f-note" data-d="note" placeholder="เช่น ชนิดหมึก งานเส้นเล็ก">${esc(d.note)}</textarea></div>
   </div>
@@ -1110,8 +1119,8 @@ function jobView() {
   <div class="card" style="display:flex;flex-direction:column;gap:12px">
     <div class="grid2">
       <div class="field"><label for="j-cust">ลูกค้า</label><input id="j-cust" value="${esc(j.customer)}" readonly title="เปลี่ยนลูกค้าไม่ได้หลังบันทึกใบงาน"></div>
-      <div class="field"><label for="j-date">วันที่รับงาน</label><input id="j-date" type="date" value="${esc(jobDate(j))}" data-jf="date" data-v="${j.id}"></div>
-      <div class="field"><label for="j-due">กำหนดส่ง</label><input id="j-due" type="date" value="${esc(j.due || '')}" data-jf="due" data-v="${j.id}"></div>
+      <div class="field"><label for="j-date">วันที่รับงาน</label>${dateInput('j-date', jobDate(j), `data-jf="date" data-v="${j.id}"`)}</div>
+      <div class="field"><label for="j-due">กำหนดส่ง</label>${dateInput('j-due', j.due || '', `data-jf="due" data-v="${j.id}"`)}</div>
     </div>
     <div class="field"><label for="j-note">รายละเอียด / ข้อควรระวัง</label><textarea id="j-note" data-jf="note" data-v="${j.id}" placeholder="เช่น ชนิดหมึก งานเส้นเล็ก">${esc(j.note || '')}</textarea></div>
     <span class="muted small">สั่งโดย ${esc(j.createdBy)} · ${fmtT(j.createdAt)}${j.sentAt ? ` · ส่งลูกค้า ${fmtT(j.sentAt)}` : ''}</span>
@@ -1137,6 +1146,7 @@ function screenView() {
   <div class="spread shead"><div><h2>${esc(s.design || '(ยังไม่ตั้งชื่อ)')}</h2>
     <div class="small muted">${s.stencilId ? `<span class="sidtxt">${esc(s.stencilId)}</span> · ` : ''}${esc(j.no)} · ${esc(j.customer)} · <span class="${dueCls(j)}">${dueText(j)}</span></div></div>
     <span class="bstate">${filmTag}${chip(s.status)}<button class="btn sm ghost" data-a="labels" data-v="${j.id}" data-s="${s.id}">พิมพ์ลาเบล</button></span></div>
+  ${statusSteps(s)}
   ${j.note ? `<div class="card small"><span class="label">หมายเหตุจากอาร์ทเวิร์ค</span><br>${esc(j.note)}</div>` : ''}
   ${s.status === 'rework' && s.qc.note ? `<div class="card" style="border-color:var(--bad)"><span class="label" style="color:var(--bad)">เหตุผลที่ตีกลับ</span><br>${esc(s.qc.note)} <span class="muted small">— ${esc(s.qc.by)} ${fmtT(s.qc.at)}</span></div>` : ''}`;
 
@@ -1196,7 +1206,7 @@ function screenView() {
     const add = (k, label, sub) => ro ? '' : `<label class="addph" for="phin-${k}">+ ${label}${sub ? `<br><span class="small">${sub}</span>` : ''}</label><input id="phin-${k}" type="file" accept="image/*" ${k === 'other' ? 'multiple' : 'capture="environment"'} hidden data-phk="${k}">`;
     const others = s.photos.filter(p => photoKindOf(s, p) === 'other');
     const pend = k => (ui.phPending || []).filter(x => x.sid === s.id && x.kind === k).map(x => `<div class="ph pending"><img src="${x.url}" alt=""><span class="cap">กำลังอัปโหลด…</span></div>`).join('');
-    h += `<div class="card" style="display:flex;flex-direction:column;gap:12px">
+    h += `<div class="card" id="qccard" style="display:flex;flex-direction:column;gap:12px">
       <div class="spread"><h3>ตรวจงานก่อนส่ง</h3><span class="muted small">${s.photos.length} รูป</span></div>
       <div class="thick">${thickField('thAfter', 'ความหนาจริง (วัดตอนตรวจ)', s, canQC)}</div>
       <div class="qcphotos">${QC_PHOTOS.map(([k, label, sub]) => { const p = s.photos.find(x => photoKindOf(s, x) === k);
@@ -1208,7 +1218,27 @@ function screenView() {
     </div>`;
   }
   if (s.log.length) h += `<div class="timeline"><span class="label">ประวัติ</span>${s.log.map(l => `<span><span class="num">${fmtT(l[0])}</span> · ${esc(l[1])} · ${esc(l[2])}</span>`).join('')}</div>`;
+  const nb = nextStep(s);
+  if (nb) h += `<div class="nextpad" aria-hidden="true"></div><div class="nextbar" role="region" aria-label="ขั้นต่อไป"><div class="wrap">${nb}</div></div>`;
   return h;
+}
+// where the block is: รอขึ้นบล็อค → กำลังขึ้นกาว → รอตรวจ → เสร็จแล้ว (ตีกลับ sits on the coating step, in red)
+function statusSteps(s) {
+  const at = { ordered: 0, coating: 1, rework: 1, qc: 2, ready: 3, sent: 3 }[s.status] ?? 0;
+  const names = ['รอขึ้นบล็อค', s.status === 'rework' ? 'ตีกลับ ขึ้นใหม่' : 'กำลังขึ้นกาว', 'รอตรวจ', 'เสร็จแล้ว'];
+  return `<ol class="steps" aria-label="ขั้นตอนของบล็อคนี้">${names.map((n, i) => `<li class="${i < at || at === 3 ? 'done' : ''}${i === at ? ' cur' : ''}${i === at && s.status === 'rework' ? ' bad' : ''}"${i === at ? ' aria-current="step"' : ''}><span class="dot" aria-hidden="true"></span><span>${n}</span></li>`).join('')}</ol>`;
+}
+// the one action that moves the block on, fixed at the bottom of the block page
+function nextStep(s) {
+  if (['ordered', 'coating', 'rework'].includes(s.status)) {
+    const n = s.coats.length, miss = qcMissing(s);
+    if (!n) return `<button class="btn primary" data-a="coat">+ ขึ้นกาว รอบแรก</button>`;
+    return `<button class="btn" data-a="coat">+ ขึ้นกาว รอบที่ ${n + 1}</button>
+      <button class="btn primary" data-a="toqc" ${miss.length ? 'disabled' : ''} title="${esc(miss.join(' · '))}">ส่งตรวจ</button>
+      ${miss.length ? `<span class="why">ส่งตรวจไม่ได้: ${esc(miss.join(' · '))}</span>` : ''}`;
+  }
+  if (s.status === 'qc') return '<button class="btn primary" data-a="goqc">ไปตรวจงาน ↓</button>';
+  return '';
 }
 function thickField(k, label, s, edit) {
   const v = s[k];
@@ -1260,6 +1290,8 @@ function settingsView() {
       return `<div class="csrow"><b>${esc(c)}</b><div class="csgrid">${sel(m.frames, cs.frame, 'frame')}${sel(m.mesh, cs.mesh, 'mesh')}${sel(m.emulsions, cs.emulsion, 'emulsion')}<div class="unit"><input type="number" data-cs="${i}" data-k="target" value="${esc(cs.target || '')}" placeholder="ความหนา" aria-label="ความหนา"><span>µm</span></div></div></div>`; }).join('') : '<div class="muted small">ยังไม่มีลูกค้า</div>'}
   </div>
   ${filmSettingsCard()}
+  <div class="card spread"><div><h3>ขนาดตัวหนังสือ</h3><div class="muted small">ตั้งเฉพาะเครื่องนี้ ไม่ต้องกดบันทึก</div></div>
+    <div class="seg" role="group" aria-label="ขนาดตัวหนังสือ">${[['0', 'ปกติ'], ['1', 'ใหญ่']].map(([v, l]) => `<button class="${bigText() === (v === '1') ? 'on' : ''}" data-a="bigtext" data-v="${v}" aria-pressed="${bigText() === (v === '1')}">${l}</button>`).join('')}</div></div>
   <div class="card spread"><div><h3>สำรองข้อมูล</h3><div class="muted small">ไฟล์ CSV เปิดด้วย Excel ได้ ทุกบล็อคทุกใบงาน</div></div>
     <a class="btn" href="/api/export.csv?t=${encodeURIComponent(token)}">ดาวน์โหลด CSV</a></div>
   <div class="savebar"><span class="err" id="serr"></span><button class="btn primary" data-a="settingssave" ${ui.busy ? 'disabled' : ''}>บันทึกการตั้งค่า</button></div>`;
@@ -1634,6 +1666,8 @@ document.addEventListener('click', async e => {
     case 'openjob': go('job', { jobId: v }); break;
     case 'openscreen': { ui.attachChoice = null; ui.attachOpen = false; ui.attachQ = ''; ui.replaceArt = null; const back = ui.view === 'job' ? 'job' : 'list'; go('screen', { jobId: el.dataset.j, screenId: v, backTo: back }); break; }
     case 'coat': { const { s } = cur(); await addCoat(s); break; }
+    case 'bigtext': { try { localStorage.setItem('stencil-big', v); } catch (x) {} document.documentElement.classList.toggle('big', v === '1'); render(); break; }
+    case 'goqc': { const c = document.getElementById('qccard'); if (c) c.scrollIntoView({ behavior: 'smooth', block: 'start' }); break; }
     case 'labels': { const { j } = find(v); if (j) printLabels(j, el.dataset.s ? j.screens.filter(x => x.id === el.dataset.s) : j.screens); break; }
     case 'quickcoat': {   // the same as "+ ขึ้นกาว" on the block page, straight from the job list
       const { s } = find(el.dataset.j, v); if (!s) break;
@@ -1644,7 +1678,7 @@ document.addEventListener('click', async e => {
     case 'undocoat': { const { s } = cur(); s.coats.pop(); if (!s.coats.length && s.status === 'coating') s.status = 'ordered'; render(); saveScreen(s); break; }
     case 'toqc': {
       const { s } = cur();
-      const miss = qcMissing(s); if (miss.length) return $('#cerr').textContent = 'ยังส่งตรวจไม่ได้: ' + miss.join(' · ');
+      const miss = qcMissing(s); if (miss.length) { const e2 = $('#cerr'); if (e2) e2.textContent = 'ยังส่งตรวจไม่ได้: ' + miss.join(' · '); toast('ยังส่งตรวจไม่ได้: ' + miss.join(' · ')); return; }
       s.status = 'qc'; logEv(s, 'ส่งตรวจ');
       if (await saveScreen(s)) { toast('ส่งให้ฝ่ายตรวจแล้ว'); go('list'); }
       break;
