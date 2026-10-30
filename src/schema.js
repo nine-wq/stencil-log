@@ -22,5 +22,10 @@ export const SCHEMA = [
   // เลขบล็อค (Stencil ID) ST-ปปดด-NNNN: ตัวนับต่อเนื่อง ออกให้ทุกบล็อคใหม่ตอนบันทึกใบงาน
   "INSERT OR IGNORE INTO settings (key, value) VALUES ('sseq', '1')",
   // เลขฟิล์ม FM-ปปดด-NNN: ตัวนับต่อเนื่อง ออกให้ตอนบันทึกฟิล์มแต่ละแผ่น
-  "INSERT OR IGNORE INTO settings (key, value) VALUES ('fseq', '1')"
+  "INSERT OR IGNORE INTO settings (key, value) VALUES ('fseq', '1')",
+  // พนักงานเพิ่ม 2 คน (Nine ขอ 2026-10-30): นุก และ เล่ PIN เริ่มต้น 1234 = sha256('<id>:1234')
+  // ใส่ครั้งเดียว (แถว settings 'seed-users-2026-10-30') และข้ามถ้ามีชื่อนั้นอยู่แล้ว จะได้ไม่กลับมาใหม่หลังแก้ชื่อหรือปิดใช้งาน
+  "INSERT INTO users (id, name, role, pin_hash, active) SELECT 'u-nook', 'นุก', 'artwork', '232af356a602667557fa53bbd441ca643ece128acb9fe6785cac05c91a84b173', 1 WHERE NOT EXISTS (SELECT 1 FROM settings WHERE key = 'seed-users-2026-10-30') AND NOT EXISTS (SELECT 1 FROM users WHERE id = 'u-nook' OR name = 'นุก')",
+  "INSERT INTO users (id, name, role, pin_hash, active) SELECT 'u-le', 'เล่', 'artwork', '3509b958400263a11e10e6daf658b976ab33ecb5291d504a33dedbc5615d2f28', 1 WHERE NOT EXISTS (SELECT 1 FROM settings WHERE key = 'seed-users-2026-10-30') AND NOT EXISTS (SELECT 1 FROM users WHERE id = 'u-le' OR name = 'เล่')",
+  "INSERT OR IGNORE INTO settings (key, value) VALUES ('seed-users-2026-10-30', '1')"
 ];
