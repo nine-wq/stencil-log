@@ -1392,19 +1392,31 @@ async function addCoat(s, named) {
 }
 /* ---------- stencil labels: 200 × 22 mm, stacked with no gap on A4 sticker paper (13 per sheet), cut along the lines ---------- */
 // the label picture = the design as it goes on the film (black, compensation applied), without the crosses or the
-// text under it; cropped to the ink and turned sideways when it is taller than wide, so it fills the 22 mm strip.
+// text under it; never turned. The ink sits at the true centre of an imaginary canvas 70 % of the stencil (frame)
+// size, so every label shows the design at the same scale against its stencil; the label then fits that canvas.
 // Made once and kept in R2 (/api/labelpic/<sha256 of what it shows>): printing again, on any device, just loads it.
 // It is made ahead whenever this browser already has the film at hand: after saving a new job (the uploaded files
 // are still in memory) and when a block's viewer has drawn its film.
 async function labelKey(s) {
   const a = s.artworkId && artOf(s.artworkId); if (!a || !a.filmable || !a.file) return null;
   const p = prepOf(s), f = filmSetCache || FILM_DEF;
-  const what = ['lab1', a.file, a.page || 0, a.design, a.box, +s.target || 0, p.mode, +p.manualUm || 0, [...(p.notArt || [])].sort(), f.factor, f.nearWhite, f.speckMm];
+  const what = ['lab2', a.file, a.page || 0, a.design, a.box, +s.target || 0, p.mode, +p.manualUm || 0, [...(p.notArt || [])].sort(), f.factor, f.nearWhite, f.speckMm, s.frame || ''];
   return sha256hex(new TextEncoder().encode(JSON.stringify(what)));
 }
 const labelKnown = new Map();   // key -> true (stored on the server) | Promise (being made)
-// draw the film page's block area, keep only black (faint crosses and text drop out), crop to the ink, turn sideways
-async function pagePic(pg, box) {
+// stencil (frame) size in mm from its name: "40×50 ซม.", "50x60cm", "500×600 mm", "20×24 นิ้ว"; no unit = ซม.
+function frameMm(t) {
+  const m = String(t || '').replace(/,/g, '.').match(/(\d+(?:\.\d+)?)\s*[x×X*]\s*(\d+(?:\.\d+)?)\s*(mm|มม|cm|ซม|in|นิ้ว|"|″)?/i);
+  if (!m) return null;
+  const u = (m[3] || 'cm').toLowerCase(), f = /mm|มม/.test(u) ? 1 : /in|นิ้ว|"|″/.test(u) ? 25.4 : 10;
+  const w = +m[1] * f, h = +m[2] * f;
+  return w > 0 && h > 0 ? [w, h] : null;
+}
+const LABEL_AREA = 0.7;   // the imaginary canvas = 70 % of the stencil's width and height
+// draw the film page's block area, keep only black (faint crosses and text drop out), find the ink, then put it at the
+// true centre of a canvas 70 % of the stencil size (never turned). The film page is true size (1 pt = 1/72 in).
+// Ink bigger than that canvas widens it so nothing is cut; an unknown frame size = the ink alone.
+async function pagePic(pg, box, frame) {
   const v1 = pg.getViewport({ scale: 1 });
   const p1 = v1.convertToViewportPoint(box[0], box[1]), p2 = v1.convertToViewportPoint(box[2], box[3]);
   const bx = Math.min(p1[0], p2[0]), by = Math.min(p1[1], p2[1]), bw = Math.abs(p2[0] - p1[0]), bh = Math.abs(p2[1] - p1[1]);
@@ -1420,11 +1432,16 @@ async function pagePic(pg, box) {
   }
   if (x1 < 0) return null;
   g.putImageData(im, 0, 0);
-  const pad = 6, w = x1 - x0 + 1 + 2 * pad, h = y1 - y0 + 1 + 2 * pad, turn = h > w;
-  const o = document.createElement('canvas'); o.width = turn ? h : w; o.height = turn ? w : h;
+  const iw = x1 - x0 + 1, ih = y1 - y0 + 1, pxMm = k * 72 / 25.4;   // rendered pixels per mm
+  const fr = frameMm(frame), pad = 6 / pxMm;
+  const cw = fr ? Math.max(fr[0] * LABEL_AREA, iw / pxMm) : iw / pxMm + 2 * pad;   // canvas size in mm
+  const ch = fr ? Math.max(fr[1] * LABEL_AREA, ih / pxMm) : ih / pxMm + 2 * pad;
+  const S = Math.min(pxMm, 1200 / Math.max(cw, ch));   // output pixels per mm (sharp enough for a 20 mm label)
+  const o = document.createElement('canvas'); o.width = Math.max(1, Math.round(cw * S)); o.height = Math.max(1, Math.round(ch * S));
   const og = o.getContext('2d'); og.fillStyle = '#fff'; og.fillRect(0, 0, o.width, o.height);
-  if (turn) { og.translate(0, o.height); og.rotate(-Math.PI / 2); }
-  og.drawImage(c, x0 - pad, y0 - pad, w, h, 0, 0, w, h);
+  og.imageSmoothingEnabled = true; og.imageSmoothingQuality = 'high';
+  const dw = iw / pxMm * S, dh = ih / pxMm * S;
+  og.drawImage(c, x0, y0, iw, ih, (o.width - dw) / 2, (o.height - dh) / 2, dw, dh);
   return new Promise(r => o.toBlob(r, 'image/png'));
 }
 const labelUrl = key => location.origin + `/api/labelpic/${key}?t=${encodeURIComponent(token)}`;
@@ -1442,7 +1459,7 @@ async function labelFromFilm(s, pg, box) {
     const key = await labelKey(s); if (!key || labelKnown.has(key)) return;
     labelKnown.set(key, 'busy');
     if (await labelStored(key)) return;
-    const blob = await pagePic(pg, box); if (blob) await storeLabelPic(key, blob); else labelKnown.delete(key);
+    const blob = await pagePic(pg, box, s.frame); if (blob) await storeLabelPic(key, blob); else labelKnown.delete(key);
   } catch (e) {}
 }
 // make the picture from the customer's original (slow: download + analyse + film) and keep it
@@ -1463,7 +1480,7 @@ function makeLabelPic(s, key) {
       const res = await C.render(C.blocksFor(job, st), st), it = res.plan.sheets[0] && res.plan.sheets[0][0];
       if (!it) return null;
       doc = await window.pdfjsLib.getDocument({ data: res.bytes, isEvalSupported: false, verbosity: 0 }).promise;
-      const blob = await pagePic(await doc.getPage(1), [it.x, it.y, it.x + it.W, it.y + it.H]);
+      const blob = await pagePic(await doc.getPage(1), [it.x, it.y, it.x + it.W, it.y + it.H], s.frame);
       if (blob && key) storeLabelPic(key, blob);
       return blob;
     } catch (e) { return null; }
@@ -1518,7 +1535,7 @@ body { font-family: "IBM Plex Sans Thai", sans-serif; color: #000; background: #
   border: .3mm solid #000; margin-top: -.3mm; overflow: hidden }
 .lb:first-child { margin-top: 0 }
 .pic { grid-row: span 2; border-right: .3mm solid #000; display: grid; place-items: center; padding: .8mm; overflow: hidden }
-.pic img { max-width: 100%; max-height: 20mm; object-fit: contain; display: block }
+.pic img { width: 38mm; height: 20mm; object-fit: contain; object-position: center; display: block }
 .c { display: flex; flex-direction: column; justify-content: center; padding: 0 2mm; border-right: .2mm solid #000; border-bottom: .2mm solid #000; min-width: 0; overflow: hidden }
 .c.sid { grid-column: span 2 }
 .c.end { border-right: 0 }
