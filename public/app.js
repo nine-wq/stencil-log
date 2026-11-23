@@ -1392,31 +1392,23 @@ async function addCoat(s, named) {
 }
 /* ---------- stencil labels: 200 × 22 mm, stacked with no gap on A4 sticker paper (13 per sheet), cut along the lines ---------- */
 // the label picture = the design as it goes on the film (black, compensation applied), without the crosses or the
-// text under it; never turned. The ink sits at the true centre of an imaginary canvas 70 % of the stencil (frame)
-// size, so every label shows the design at the same scale against its stencil; the label then fits that canvas.
+// text under it; never turned. The ink sits at the true centre of a fixed imaginary canvas 24 × 28 cm, so every
+// label shows its design at the same scale; the label then fits that canvas.
 // Made once and kept in R2 (/api/labelpic/<sha256 of what it shows>): printing again, on any device, just loads it.
 // It is made ahead whenever this browser already has the film at hand: after saving a new job (the uploaded files
 // are still in memory) and when a block's viewer has drawn its film.
 async function labelKey(s) {
   const a = s.artworkId && artOf(s.artworkId); if (!a || !a.filmable || !a.file) return null;
   const p = prepOf(s), f = filmSetCache || FILM_DEF;
-  const what = ['lab2', a.file, a.page || 0, a.design, a.box, +s.target || 0, p.mode, +p.manualUm || 0, [...(p.notArt || [])].sort(), f.factor, f.nearWhite, f.speckMm, s.frame || ''];
+  const what = ['lab2', a.file, a.page || 0, a.design, a.box, +s.target || 0, p.mode, +p.manualUm || 0, [...(p.notArt || [])].sort(), f.factor, f.nearWhite, f.speckMm, LABEL_CANVAS];
   return sha256hex(new TextEncoder().encode(JSON.stringify(what)));
 }
 const labelKnown = new Map();   // key -> true (stored on the server) | Promise (being made)
-// stencil (frame) size in mm from its name: "40×50 ซม.", "50x60cm", "500×600 mm", "20×24 นิ้ว"; no unit = ซม.
-function frameMm(t) {
-  const m = String(t || '').replace(/,/g, '.').match(/(\d+(?:\.\d+)?)\s*[x×X*]\s*(\d+(?:\.\d+)?)\s*(mm|มม|cm|ซม|in|นิ้ว|"|″)?/i);
-  if (!m) return null;
-  const u = (m[3] || 'cm').toLowerCase(), f = /mm|มม/.test(u) ? 1 : /in|นิ้ว|"|″/.test(u) ? 25.4 : 10;
-  const w = +m[1] * f, h = +m[2] * f;
-  return w > 0 && h > 0 ? [w, h] : null;
-}
-const LABEL_AREA = 0.7;   // the imaginary canvas = 70 % of the stencil's width and height
+const LABEL_CANVAS = [240, 280];   // the imaginary canvas the design is centred on: 24 cm wide × 28 cm tall
 // draw the film page's block area, keep only black (faint crosses and text drop out), find the ink, then put it at the
-// true centre of a canvas 70 % of the stencil size (never turned). The film page is true size (1 pt = 1/72 in).
-// Ink bigger than that canvas widens it so nothing is cut; an unknown frame size = the ink alone.
-async function pagePic(pg, box, frame) {
+// true centre of the fixed 24 × 28 cm canvas (never turned). The film page is true size (1 pt = 1/72 in).
+// Ink bigger than that canvas widens it so nothing is cut.
+async function pagePic(pg, box) {
   const v1 = pg.getViewport({ scale: 1 });
   const p1 = v1.convertToViewportPoint(box[0], box[1]), p2 = v1.convertToViewportPoint(box[2], box[3]);
   const bx = Math.min(p1[0], p2[0]), by = Math.min(p1[1], p2[1]), bw = Math.abs(p2[0] - p1[0]), bh = Math.abs(p2[1] - p1[1]);
@@ -1433,9 +1425,7 @@ async function pagePic(pg, box, frame) {
   if (x1 < 0) return null;
   g.putImageData(im, 0, 0);
   const iw = x1 - x0 + 1, ih = y1 - y0 + 1, pxMm = k * 72 / 25.4;   // rendered pixels per mm
-  const fr = frameMm(frame), pad = 6 / pxMm;
-  const cw = fr ? Math.max(fr[0] * LABEL_AREA, iw / pxMm) : iw / pxMm + 2 * pad;   // canvas size in mm
-  const ch = fr ? Math.max(fr[1] * LABEL_AREA, ih / pxMm) : ih / pxMm + 2 * pad;
+  const cw = Math.max(LABEL_CANVAS[0], iw / pxMm), ch = Math.max(LABEL_CANVAS[1], ih / pxMm);   // canvas size in mm
   const S = Math.min(pxMm, 1200 / Math.max(cw, ch));   // output pixels per mm (sharp enough for a 20 mm label)
   const o = document.createElement('canvas'); o.width = Math.max(1, Math.round(cw * S)); o.height = Math.max(1, Math.round(ch * S));
   const og = o.getContext('2d'); og.fillStyle = '#fff'; og.fillRect(0, 0, o.width, o.height);
@@ -1459,7 +1449,7 @@ async function labelFromFilm(s, pg, box) {
     const key = await labelKey(s); if (!key || labelKnown.has(key)) return;
     labelKnown.set(key, 'busy');
     if (await labelStored(key)) return;
-    const blob = await pagePic(pg, box, s.frame); if (blob) await storeLabelPic(key, blob); else labelKnown.delete(key);
+    const blob = await pagePic(pg, box); if (blob) await storeLabelPic(key, blob); else labelKnown.delete(key);
   } catch (e) {}
 }
 // make the picture from the customer's original (slow: download + analyse + film) and keep it
@@ -1480,7 +1470,7 @@ function makeLabelPic(s, key) {
       const res = await C.render(C.blocksFor(job, st), st), it = res.plan.sheets[0] && res.plan.sheets[0][0];
       if (!it) return null;
       doc = await window.pdfjsLib.getDocument({ data: res.bytes, isEvalSupported: false, verbosity: 0 }).promise;
-      const blob = await pagePic(await doc.getPage(1), [it.x, it.y, it.x + it.W, it.y + it.H], s.frame);
+      const blob = await pagePic(await doc.getPage(1), [it.x, it.y, it.x + it.W, it.y + it.H]);
       if (blob && key) storeLabelPic(key, blob);
       return blob;
     } catch (e) { return null; }
